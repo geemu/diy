@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import SceneManager from './SceneManager.js';
+import {profileQuaternion} from '../geometry/ProfileOrientation.js';
 import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
 import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import {getDesignProfileDefinition,profileDisplayName,profileNominal} from '../model/DesignProfileCatalog.js';
@@ -309,7 +310,7 @@ export default class Editor {
       this.sceneManager.hideTransformFeedback?.();
       const snapshot=this.transformSelectionSnapshot;
       const beforeSnap = this.selected.position.clone();
-      const snap = this.snapManager.snap(this.selected);
+      const snap = this.quickRotationActive ? null : this.snapManager.snap(this.selected);
       const snapDelta = this.selected.position.clone().sub(beforeSnap);
       if (snapDelta.lengthSq() > 0) {
         for (const mesh of this.currentTransformMeshes()) {
@@ -325,6 +326,7 @@ export default class Editor {
 
       const collisionState=this.interferenceFeedbackManager.refresh({focusIds:new Set(changedIds),live:false});
       if(collisionState.active && snapshot){
+        this.quickRotationBlocked=true;
         this.restoreTransformSnapshot(snapshot);
         this.transformSelectionSnapshot=null;
         this.snapManager.clearLock();
@@ -381,6 +383,29 @@ export default class Editor {
     mesh.position.copy(snapshot.primaryPosition).add(this.constraintManager.mobility.projectTranslation(partId,delta));
     mesh.quaternion.copy(this.constraintManager.mobility.projectRotation(partId,snapshot.primaryQuaternion,mesh.quaternion));
     mesh.updateMatrixWorld(true);
+  }
+
+  /** 90°按钮复用 Gizmo 完整事务，包含作用域、约束、安装随动、干涉回滚和撤销。 */
+  rotateSelectionQuarterTurn(axis) {
+    if(!this.selected||!this.isMeshTransformable(this.selected))throw new Error('先选择可旋转的构件；已安装配件需先解除安装');
+    if(this.selectedMeshes.some(mesh=>!this.isMeshTransformable(mesh)))throw new Error('所选构件包含锁定或已安装的配件，请调整选择后再旋转');
+    const vectors={X:new THREE.Vector3(1,0,0),Y:new THREE.Vector3(0,1,0),Z:new THREE.Vector3(0,0,1)};
+    const vector=vectors[String(axis).toUpperCase()];
+    if(!vector)throw new Error('旋转轴必须为 X、Y 或 Z');
+    if(this.profileDrawTool.isActive())this.profileDrawTool.stop();
+    this.quickRotationActive=true;this.quickRotationBlocked=false;
+    const controls=this.sceneManager.transformControls;
+    try {
+      controls.dispatchEvent({type:'mouseDown'});
+      const rotation=new THREE.Quaternion().setFromAxisAngle(vector,Math.PI/2);
+      if(this.transformSpace==='local')this.selected.quaternion.multiply(rotation);
+      else this.selected.quaternion.premultiply(rotation);
+      this.selected.updateMatrixWorld(true);
+      controls.dispatchEvent({type:'objectChange'});
+      controls.dispatchEvent({type:'mouseUp'});
+      this.onSelectionChanged?.(this.selected,[...this.selectedMeshes]);
+      return !this.quickRotationBlocked;
+    } finally {this.quickRotationActive=false;}
   }
 
   applyMultiSelectionTransform() {
@@ -521,7 +546,7 @@ export default class Editor {
     const length=delta.length();
     if(length<1) throw new Error('型材起点和终点距离过小');
     const direction=delta.clone().normalize();
-    const quaternion=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction);
+    const quaternion=profileQuaternion(direction,options.crossSectionUp);
     const euler=new THREE.Euler().setFromQuaternion(quaternion,'XYZ');
     const midpoint=start.clone().add(end).multiplyScalar(0.5);
     return this.addProfile(catalogId,length,{
@@ -1076,11 +1101,11 @@ export default class Editor {
       schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,
       coordinateSystem:createProjectCoordinateDescriptor(),
       manufacturing:structuredClone(this.projectSettings),
-      editorState:{autosaveEnabled:true,annotations:{...this.annotationManager.options},profileDrawToolVersion:4,featureSnapVersion:3,assemblySystemVersion:2,assemblyExplodedViewVersion:1,assemblyDiagnosticsVersion:1,connectorSystemVersion:3,slotCatalogVersion:1,hardwareBomVersion:2,bomReportVersion:1,profileCollisionCheckVersion:2,profileCatalogVersion:1,accessoryCatalogVersion:2,accessoryMountingVersion:2,placementSystemVersion:1,manufacturingIdentityVersion:1,assemblyInstructionVersion:2,taggedDrawingVersion:1,connectionInstallationDiagramVersion:4,contourFrameVersion:5,assemblyPlaybackVersion:2,interactionPolishVersion:5,contourRelationVisualizationVersion:2,assemblyGuideDocumentVersion:2,cadInteractionVersion:3,cadInteraction:{transformSpace:this.transformSpace,workPlane:this.workPlaneVisualizer.plane,workPlaneVisible:this.workPlaneVisualizer.visible,movementStepMm:this.movementStepMm,rotationStepDeg:this.rotationStepDeg,moveScope:this.transformMoveScope},autoConnectorRecommendation:true,autoConnectionSystemVersion:1,connectionQuickChangeVersion:1,panelDoorConfiguratorVersion:1,profileReplacementVersion:1,designModelVersion:1,manufacturingConfigurationVersion:1,connectionAnchorVersion:1,connectionPlacementVersion:2,machiningPlacementVersion:1,workbenchMode:this.workbenchMode,autoConnectionEnabled:this.autoConnectionEnabled,machiningFeatureSystemVersion:1,machiningReferenceVersion:1,machiningCollisionCheckVersion:1,machiningRectangularPatternVersion:1,dimensionSystemVersion:2,engineeringDrawingSystemVersion:2,engineeringDrawingDxfVersion:1,profileGripEditingVersion:1,profileGripDefaults:{...this.profileGripEditor.options},engineeringDrawing:{...this.drawingSettings},drawingDefaults:{...this.profileDrawTool.options}},
+      editorState:{autosaveEnabled:true,annotations:{...this.annotationManager.options},profileDrawToolVersion:4,featureSnapVersion:3,assemblySystemVersion:2,assemblyExplodedViewVersion:1,assemblyDiagnosticsVersion:1,connectorSystemVersion:3,slotCatalogVersion:1,hardwareBomVersion:2,bomReportVersion:1,profileCollisionCheckVersion:2,profileCatalogVersion:1,accessoryCatalogVersion:2,accessoryMountingVersion:2,placementSystemVersion:1,manufacturingIdentityVersion:1,assemblyInstructionVersion:2,taggedDrawingVersion:1,connectionInstallationDiagramVersion:4,contourFrameVersion:5,assemblyPlaybackVersion:2,interactionPolishVersion:5,contourRelationVisualizationVersion:2,assemblyGuideDocumentVersion:2,cadInteractionVersion:3,cadInteraction:{transformSpace:this.transformSpace,workPlane:this.workPlaneVisualizer.plane,workPlaneVisible:this.workPlaneVisualizer.visible,movementStepMm:this.movementStepMm,rotationStepDeg:this.rotationStepDeg,moveScope:this.transformMoveScope},autoConnectorRecommendation:true,autoConnectionSystemVersion:2,connectionQuickChangeVersion:1,panelDoorConfiguratorVersion:1,profileReplacementVersion:1,designModelVersion:1,manufacturingConfigurationVersion:1,connectionAnchorVersion:1,connectionPlacementVersion:2,machiningPlacementVersion:1,workbenchMode:this.workbenchMode,autoConnectionEnabled:this.autoConnectionEnabled,machiningFeatureSystemVersion:1,machiningReferenceVersion:1,machiningCollisionCheckVersion:1,machiningRectangularPatternVersion:1,dimensionSystemVersion:2,engineeringDrawingSystemVersion:2,engineeringDrawingDxfVersion:1,profileGripEditingVersion:1,profileGripDefaults:{...this.profileGripEditor.options},engineeringDrawing:{...this.drawingSettings},drawingDefaults:{...this.profileDrawTool.options}},
       metadata:{
         version:CURRENT_APP_VERSION,
         schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,
-        generator:'Aluminum CAD Web'
+        generator:'DIY Web'
       },
       parts:structuredClone(this.parts.filter(part => !part.generatedByConnectionId)),
       connections:this.connectionManager.export(),
@@ -2702,6 +2727,7 @@ export default class Editor {
     this.sceneManager.setView('iso', center, max * 1.65);
   }
 
+  viewDirection(direction) { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView(direction,center,max*1.65); }
   viewIso() { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView('iso',center,max*1.65); }
   viewFront() { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView('front',center,max*1.65); }
   viewBack() { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView('back',center,max*1.65); }
@@ -2711,7 +2737,7 @@ export default class Editor {
   viewBottom() { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView('bottom',center,max*1.65); }
 
   capturePng() {
-    this.sceneManager.capturePng('铝型材设计.png');
+    this.sceneManager.capturePng('DIY-铝型材设计.png');
   }
 
   setAutoConnectionEnabled(enabled) {
@@ -2727,6 +2753,45 @@ export default class Editor {
       this.emitProjectChanged();
     }
     return result;
+  }
+
+  /**
+   * 扫描已有型材并补全当前几何上能够明确判断的设计连接。
+   *
+   * 这是用户主动执行的一次性命令，因此不受“新建构件自动连接”开关影响；
+   * 命令只读取现有接触关系，不移动型材，也不会覆盖已存在的手工连接。
+   */
+  completeProfileConnections(options = {}) {
+    const requestedIds = Array.isArray(options.profileIds) && options.profileIds.length
+      ? new Set(options.profileIds)
+      : null;
+    const profileIds = this.parts
+      .filter(part => part.type === 'PROFILE' && (!requestedIds || requestedIds.has(part.id)))
+      .map(part => part.id);
+    const result = this.autoConnectProfiles(profileIds,{
+      ...options,
+      force:true,
+      source:options.source || 'MANUAL_SCAN'
+    });
+    if (result.createdCount > 0 && options.captureHistory !== false) this.historyManager.capture();
+    return {...result,profileCount:profileIds.length,overview:this.getConnectionOverview()};
+  }
+
+  /**
+   * 清除纯自动连接，保留手工创建或已经人工切换过方案的连接。
+   */
+  clearAutoGeneratedConnections(options = {}) {
+    const result = this.autoConnectionResolver.clearGeneratedConnections();
+    if (result.removedCount > 0) {
+      this.emitStats();
+      if (options.captureHistory !== false) this.historyManager.capture();
+      this.emitProjectChanged();
+    }
+    return result;
+  }
+
+  getConnectionOverview() {
+    return this.autoConnectionResolver.connectionOverview();
   }
 
   createConnectionFromLastSnap(source, options = {}) {

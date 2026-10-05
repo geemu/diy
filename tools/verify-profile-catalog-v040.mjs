@@ -34,4 +34,4 @@ for(const token of ['profile-section-thumb','modal-in','toast-in'])assert.ok(css
 for(const token of ['setHover(','updateCameraTween(','cameraTween'])assert.ok(scene.includes(token),token);
 assert.ok(controller.includes('/api/profile-catalog'));
 assert.ok(schemaSql.includes('profile_catalog'));
-console.log(JSON.stringify({ok:true,version:'0.59.0',schema:59,profileThumbnailSvg:true,databaseCatalog:true,customProfileCrud:true,hoverPrehighlight:true,smoothCamera:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.65.0',schema:62,profileThumbnailSvg:true,databaseCatalog:true,customProfileCrud:true,hoverPrehighlight:true,smoothCamera:true},null,2));

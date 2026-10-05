@@ -62,6 +62,7 @@ export function buildConnectionInstallationDiagram(connection={}){
     <line x1="290" y1="58" x2="290" y2="316" class="guide"/>
     <text x="302" y="66" class="subTitle">安装步骤</text>
     ${stepText}
+    <text x="302" y="200" class="meta">拆卸顺序：3 → 2 → 1</text>
     <line x1="302" y1="215" x2="512" y2="215" class="guide"/>
     <text x="302" y="232" class="subTitle">本接头五金</text>
     ${hardwareText}

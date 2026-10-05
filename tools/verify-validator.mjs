@@ -9,7 +9,7 @@ const {default: FactoryValidator} = await import(moduleUrl('validation/FactoryVa
 const {normalizeProfilePath} = await import(moduleUrl('model/ProfilePath.js'));
 
 const raw = {
-  metadata:{name:'验证工程'},schemaVersion:59,
+  metadata:{name:'验证工程'},schemaVersion:62,
   parts:[{
     id:'P1',displayId:'P001',name:'30×30 槽型材',type:'PROFILE',
     position:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},
@@ -63,7 +63,7 @@ if (!invalidResult.errors.some(item => item.code === 'HOLE_EXCEEDS_PROFILE_FACE'
 
 console.log(JSON.stringify({
   ok:true,
-  schema:59,
+  schema:62,
   manufacturingGate:true,
   designReferenceIsInfo:true,
   designOnlyErrors:designOnlyResult.errors.map(item => item.code),

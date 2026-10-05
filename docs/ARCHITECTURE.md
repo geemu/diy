@@ -1,4 +1,11 @@
-# Architecture · v0.63
+# Architecture · v0.65
+
+## 工作台交互
+
+- 左侧快捷搭建/绘制/批量表单复用现有 Editor 领域入口；右侧组件库与属性通过创建/修改模式共用停靠轨道。
+- ViewCube 独立渲染相机方向，26 个区域只触发 Editor.viewDirection；Cube Mesh 不进入 Project。
+- 90°旋转复用 TransformControls 事务，保留作用域、约束、安装随动、连接刷新、干涉回滚和 History；离散旋转不触发平移 Snap。
+- ProfileOrientation 统一绘制截面朝向：local Y 对齐工作面法向；空白工作面落点使用截面半高偏移。世界坐标与旋转仍保存在标准 Part 中。
 
 ## 1. 总体数据流
 
@@ -207,7 +214,7 @@ ConnectionManager.createConnection
           BOM / Drawing / Factory Package
 ```
 
-边界：`AutoConnectionResolver` 不维护第二份 Connection 数据、不直接创建 Mesh/五金/加工，也不绕开几何校验。`editorState.autoConnectionSystemVersion=1`，开关保存为 `autoConnectionEnabled`。
+边界：`AutoConnectionResolver` 不维护第二份 Connection 数据、不直接创建 Mesh/五金/加工，也不绕开几何校验。`editorState.autoConnectionSystemVersion=2`；`autoConnectionEnabled` 只控制后续新建构件，玩家主动扫描现有结构使用显式 force 命令。
 
 ## 8. Machining Feature
 

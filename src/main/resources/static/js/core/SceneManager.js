@@ -602,7 +602,14 @@ export default class SceneManager {
 
   setView(direction, center = new THREE.Vector3(), distance = 2500, options={}) {
     const c=center.clone();const d=Math.max(200,distance);const targetPosition=new THREE.Vector3();
-    if(direction==='front')targetPosition.set(c.x,c.y,c.z+d);
+    if(direction?.isVector3){
+      const vector=direction.clone().normalize();
+      if(vector.lengthSq()<1e-8)throw new Error('视角方向不能为空');
+      targetPosition.copy(c).addScaledVector(vector,d);
+      // 纯上下视角增加微小 Z 分量，保持 OrbitControls 的 Y-up 方位稳定。
+      if(Math.abs(vector.y)>.9999)targetPosition.z+=.001;
+    }
+    else if(direction==='front')targetPosition.set(c.x,c.y,c.z+d);
     else if(direction==='back')targetPosition.set(c.x,c.y,c.z-d);
     else if(direction==='left')targetPosition.set(c.x-d,c.y,c.z);
     else if(direction==='right')targetPosition.set(c.x+d,c.y,c.z);

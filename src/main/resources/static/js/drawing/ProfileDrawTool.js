@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {profileQuaternion,workPlaneNormal} from '../geometry/ProfileOrientation.js';
 import {featureLabel} from '../model/ProfileFeatureCatalog.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
@@ -177,7 +178,7 @@ export default class ProfileDrawTool {
     if(this.mode==='POLYLINE'&&this.polylinePreviousMesh)physicalStart=continuationButtStart(this.polylinePreviousMesh,logicalStart,logicalEnd);
     if(physicalStart.distanceTo(logicalEnd)<1)return true;
     const startCandidate=cloneCandidate(this.start);
-    const mesh=this.editor.addProfileBetweenPoints(this.options.catalogId,physicalStart,logicalEnd,{captureHistory:false});
+    const mesh=this.editor.addProfileBetweenPoints(this.options.catalogId,physicalStart,logicalEnd,{captureHistory:false,crossSectionUp:workPlaneNormal(this.options.plane)});
     const collision=this.editor.interferenceFeedbackManager.refresh({focusIds:new Set([mesh.userData.part.id]),live:false});
     if(collision.active){
       this.editor.removePartByIdSilently(mesh.userData.part.id);
@@ -270,9 +271,9 @@ export default class ProfileDrawTool {
     const assemblyId=crypto.randomUUID();
     const created=[];
     const catalogId=options.catalogId||this.options.catalogId;
-    const segments=closedButtJointSegments(points,catalogId);
+    const segments=closedButtJointSegments(points,catalogId,plane);
     for(const segment of segments){
-      created.push(this.editor.addProfileBetweenPoints(catalogId,segment.start,segment.end,{select:false,captureHistory:false,assemblyId,name:options.edgeName||'轮廓框架边'}));
+      created.push(this.editor.addProfileBetweenPoints(catalogId,segment.start,segment.end,{select:false,captureHistory:false,assemblyId,crossSectionUp:workPlaneNormal(plane),name:options.edgeName||'轮廓框架边'}));
     }
     this.editor.assemblyManager.reconcile();
     const assembly=this.editor.assemblyManager.get(assemblyId);
@@ -314,7 +315,9 @@ export default class ProfileDrawTool {
       const feature=this.editor.snapManager.resolveFeatureAtPoint(hit.object,hit.point,{endToleranceMm:32});
       if(feature)return {point:feature.worldPoint.clone(),feature,snapLabel:`${feature.displayId} ${featureLabel(feature)}`,shiftKey:event?.shiftKey===true};
     }
-    const planePoint=this.start?.point||new THREE.Vector3(0,0,0);
+    // 空白工作平面代表型材外表面；中心线抬高半个截面厚度。已有接头优先保持实际坐标。
+    const halfHeight=Number(getDesignProfileDefinition(this.options.catalogId)?.sectionSize?.[1]||30)/2;
+    const planePoint=this.start?.point||workPlaneNormal(this.options.plane).multiplyScalar(this.mode==='BOX'?0:halfHeight);
     const normal=planeNormal(this.options.plane);
     let point=this.editor.sceneManager.worldPointOnPlane(event,normal,planePoint);
     if(!point)return null;
@@ -342,8 +345,8 @@ export default class ProfileDrawTool {
     if(!corners||corners.some((p,index)=>p.distanceTo(corners[(index+1)%corners.length])<1))return [];
     const assemblyId=crypto.randomUUID();
     const created=[];
-    const segments=closedButtJointSegments(corners,this.options.catalogId);
-    for(const segment of segments)created.push(this.editor.addProfileBetweenPoints(this.options.catalogId,segment.start,segment.end,{select:false,captureHistory:false,assemblyId,name:'绘制矩形框架'}));
+    const segments=closedButtJointSegments(corners,this.options.catalogId,this.options.plane);
+    for(const segment of segments)created.push(this.editor.addProfileBetweenPoints(this.options.catalogId,segment.start,segment.end,{select:false,captureHistory:false,assemblyId,crossSectionUp:workPlaneNormal(this.options.plane),name:'绘制矩形框架'}));
     if(created.length){
       const ids=created.map(mesh=>mesh.userData.part.id);
       const collision=this.editor.interferenceFeedbackManager.refresh({focusIds:new Set(ids),live:false});
@@ -395,7 +398,7 @@ export default class ProfileDrawTool {
     if(this.mode==='RECTANGLE'){
       const corners=rectangleCorners(this.start.point,candidate.point,this.options.plane);
       if(!corners)return null;
-      segments.push(...closedButtJointSegments(corners,this.options.catalogId));
+      segments.push(...closedButtJointSegments(corners,this.options.catalogId,this.options.plane));
     }else{
       const end=this.applyDraftRules(candidate);
       let start=this.start.point.clone();
@@ -406,7 +409,7 @@ export default class ProfileDrawTool {
     const existing=(this.editor.parts||[]).filter(part=>part?.type==='PROFILE');
     let best=null;
     for(const segment of segments){
-      const draft=draftProfilePart(this.options.catalogId,segment.start,segment.end);
+      const draft=draftProfilePart(this.options.catalogId,segment.start,segment.end,this.options.plane);
       const draftObb=profileObb(draft);
       if(!draftObb)continue;
       for(const target of existing){
@@ -541,7 +544,7 @@ function continuationButtStart(previousMesh,logicalStart,logicalEnd){
  * 闭合框使用“当前边从逻辑角点起步、在下一根型材侧面结束”的搭接规则。
  * points 始终保留为设计轮廓事实；这里只派生真实切料段，避免把轮廓参数和物理搭接混在一起。
  */
-function closedButtJointSegments(points,catalogId){
+function closedButtJointSegments(points,catalogId,plane='XZ'){
   const definition=getDesignProfileDefinition(catalogId);
   const section=definition?.sectionSize||[30,30];
   const result=[];
@@ -558,7 +561,7 @@ function closedButtJointSegments(points,catalogId){
     nextDirection.normalize();
     const angleDot=Math.abs(currentDirection.dot(nextDirection));
     let trim=0;
-    if(angleDot<0.25)trim=profileCrossHalfExtent(section,nextDirection,currentDirection);
+    if(angleDot<0.25)trim=profileCrossHalfExtent(section,nextDirection,currentDirection,plane);
     trim=Math.min(Math.max(0,trim),Math.max(0,currentLength-1));
     const end=logicalEnd.clone().addScaledVector(currentDirection,-trim);
     result.push({start,end,logicalStart:start.clone(),logicalEnd});
@@ -566,19 +569,19 @@ function closedButtJointSegments(points,catalogId){
   return result;
 }
 
-function profileCrossHalfExtent(section,profileDirection,probeDirection){
-  const quaternion=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),profileDirection.clone().normalize());
+function profileCrossHalfExtent(section,profileDirection,probeDirection,plane){
+  const quaternion=profileQuaternion(profileDirection,workPlaneNormal(plane));
   const xAxis=new THREE.Vector3(1,0,0).applyQuaternion(quaternion).normalize();
   const yAxis=new THREE.Vector3(0,1,0).applyQuaternion(quaternion).normalize();
   return Math.abs(probeDirection.dot(xAxis))*Number(section[0]||30)/2+Math.abs(probeDirection.dot(yAxis))*Number(section[1]||30)/2;
 }
 
-function draftProfilePart(catalogId,start,end){
+function draftProfilePart(catalogId,start,end,plane){
   const definition=getDesignProfileDefinition(catalogId);
   const delta=end.clone().sub(start);
   const length=delta.length();
   const direction=delta.clone().normalize();
-  const quaternion=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction);
+  const quaternion=profileQuaternion(direction,workPlaneNormal(plane));
   const euler=new THREE.Euler().setFromQuaternion(quaternion,'XYZ');
   const midpoint=start.clone().add(end).multiplyScalar(0.5);
   const section=definition?.sectionSize||[30,30];

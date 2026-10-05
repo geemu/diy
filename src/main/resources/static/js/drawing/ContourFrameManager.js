@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {profileQuaternion,workPlaneNormal} from '../geometry/ProfileOrientation.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 
 /**
@@ -426,10 +427,10 @@ export default class ContourFrameManager {
     }
     for(const id of partIds){this.editor.constraintManager.removeForPart(id);this.editor.removePartByIdSilently(id);}
     const created=[];
-    const segments=closedButtJointSegments(points,assembly.parameters.catalogId);
+    const segments=closedButtJointSegments(points,assembly.parameters.catalogId,assembly.parameters.plane);
     for(let i=0;i<segments.length;i++){
       created.push(this.editor.addProfileBetweenPoints(assembly.parameters.catalogId,segments[i].start,segments[i].end,{
-        select:false,captureHistory:false,assemblyId:assembly.id,name:`轮廓边 ${i+1}`
+        select:false,captureHistory:false,assemblyId:assembly.id,crossSectionUp:workPlaneNormal(assembly.parameters.plane),name:`轮廓边 ${i+1}`
       }));
     }
     assembly.parameters.points=points.map(clonePoint);
@@ -611,7 +612,7 @@ function intersects(a,b,c,d){
 }
 
 
-function closedButtJointSegments(points,catalogId){
+function closedButtJointSegments(points,catalogId,plane='XZ'){
   const definition=getDesignProfileDefinition(catalogId);
   const section=definition?.sectionSize||[30,30];
   const result=[];
@@ -627,14 +628,14 @@ function closedButtJointSegments(points,catalogId){
     if(nextDirection.lengthSq()<1e-9){result.push({start,end:logicalEnd});continue;}
     nextDirection.normalize();
     let trim=0;
-    if(Math.abs(currentDirection.dot(nextDirection))<0.25)trim=profileCrossHalfExtent(section,nextDirection,currentDirection);
+    if(Math.abs(currentDirection.dot(nextDirection))<0.25)trim=profileCrossHalfExtent(section,nextDirection,currentDirection,plane);
     trim=Math.min(Math.max(0,trim),Math.max(0,currentLength-1));
     result.push({start,end:logicalEnd.clone().addScaledVector(currentDirection,-trim)});
   }
   return result;
 }
-function profileCrossHalfExtent(section,profileDirection,probeDirection){
-  const quaternion=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),profileDirection.clone().normalize());
+function profileCrossHalfExtent(section,profileDirection,probeDirection,plane){
+  const quaternion=profileQuaternion(profileDirection,workPlaneNormal(plane));
   const xAxis=new THREE.Vector3(1,0,0).applyQuaternion(quaternion).normalize();
   const yAxis=new THREE.Vector3(0,1,0).applyQuaternion(quaternion).normalize();
   return Math.abs(probeDirection.dot(xAxis))*Number(section[0]||30)/2+Math.abs(probeDirection.dot(yAxis))*Number(section[1]||30)/2;

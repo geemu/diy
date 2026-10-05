@@ -28,7 +28,7 @@ const machiningPlacement=read('js/machining/MachiningPlacementManager.js');
 const app=read('js/app.js');
 const html=read('index.html');
 
-assert.ok(schema.includes('CURRENT_PROJECT_SCHEMA_VERSION = 59'));
+assert.ok(schema.includes('CURRENT_PROJECT_SCHEMA_VERSION = 62'));
 assert.ok(schema.includes("workbenchMode:'BEGINNER'"));
 assert.ok(schema.includes('项目当前不维护历史 Schema 兼容'));
 assert.ok(editor.includes('manufacturingProfile:null'),'新建设计型材必须保持 manufacturingProfile=null');
@@ -62,8 +62,8 @@ for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.59.0',
-  schema:59,
+  version:'0.65.0',
+  schema:62,
   currentOnly:true,
   designManufacturingSeparated:true,
   designProfiles:DesignProfileList.length,

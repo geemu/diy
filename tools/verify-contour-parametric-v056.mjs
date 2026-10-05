@@ -15,8 +15,8 @@ const app=read('src/main/resources/static/js/app.js');
 const html=read('src/main/resources/static/index.html');
 const css=read('src/main/resources/static/css/app.css');
 
-assert.equal(CURRENT_APP_VERSION,'0.59.0');
-assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,59);
+assert.equal(CURRENT_APP_VERSION,'0.65.0');
+assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 for(const token of ['CONTOUR_FRAME','parameters={','edgeLengths','orthogonal:options.orthogonal ??']) assert.ok(draw.includes(token),`轮廓元数据缺少 ${token}`);
 for(const token of ['class ContourFrameManager','setEdgeLength','updatePoint','rebuild(points','pointerdown','pointermove','validateContour']) assert.ok(manager.includes(token),`参数化轮廓缺少 ${token}`);
 for(const token of ['beginContourFrameEdit','setContourFrameEdgeLength','focusAssemblyConnection','contourFrameVersion:5','assemblyPlaybackVersion:2']) assert.ok(editor.includes(token),`Editor 缺少 ${token}`);

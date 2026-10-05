@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Editor from './core/Editor.js';
 import ProjectIO from './io/ProjectIO.js';
+import {CURRENT_APP_VERSION} from './io/ProjectSchema.js';
 import DxfSectionParser from './io/DxfSectionParser.js';
 import {
   ProfileCatalogList,
@@ -29,6 +30,7 @@ import {HardwareCatalogList} from './model/HardwareCatalog.js';
 import DiyGenerator from './diy/DiyGenerator.js';
 import {DiyTemplateList, getDiyTemplate} from './diy/DiyTemplateCatalog.js';
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
+import ViewCube,{VIEW_DIRECTIONS} from './ui/ViewCube.js';
 import {buildContourPreset} from './drawing/ContourPresetFactory.js';
 import {buildConnectionInstallationDiagram} from './manufacturing/ConnectionInstallationDiagram.js';
 import {buildAssemblyGuidePrintHtml} from './manufacturing/AssemblyGuideDocument.js';
@@ -51,6 +53,21 @@ createApp({
     const connectionSource = ref(null);
     const sectionRevision = ref(0);
     const activeLibrary = ref('profile');
+    const quickPanel = ref('');
+    const rightPanelMode = ref('create');
+    const viewCubeViewport = ref(null);
+    const viewDirections = VIEW_DIRECTIONS;
+    const resourceCategories = [{id:'profile',label:'型材',icon:'▤'},{id:'connection',label:'连接',icon:'∟'},{id:'shaft',label:'光轴',icon:'◯'},{id:'panel',label:'板材',icon:'▣'},{id:'accessory',label:'配件',icon:'◆'},{id:'machining',label:'加工',icon:'⊙'}];
+    let viewCube = null;
+    watch(activeLibrary,()=>{rightPanelMode.value='create';});
+    watch([quickPanel,rightPanelMode],()=>nextTick(()=>window.dispatchEvent(new Event('resize'))));
+    function openQuickPanel(mode) { quickPanel.value=quickPanel.value===mode?'':mode; }
+    function openResource(id) { rightPanelMode.value='create';activeLibrary.value=id; }
+    function viewDirection(item) { editor?.viewDirection(new THREE.Vector3(item.x,item.y,item.z)); }
+    function quickRotate(axis) {
+      try { setMode('rotate');if(editor?.rotateSelectionQuarterTurn(axis))notify(`已绕 ${axis} 轴旋转 +90°`); }
+      catch(error){notify(error.message||'旋转失败','warning');}
+    }
     const workbenchMode = ref('BEGINNER');
     const connectionPlacementState = reactive({active:false,mode:null,step:1,message:''});
     const machiningPlacementState = reactive({active:false,mode:null,message:''});
@@ -218,6 +235,10 @@ createApp({
       if (!selectedIsProfile.value || !editor) return [];
       const id = selectedPart.value.id;
       return editor.connectionManager.connections.filter(connection => connection.sourceProfileId === id || connection.targetProfileId === id);
+    });
+    const connectionOverview = computed(() => {
+      projectRevision.value;
+      return editor?.getConnectionOverview?.() || {total:0,automatic:0,manual:0,invalid:0};
     });
     const relatedConstraints = computed(() => {
       projectRevision.value;
@@ -718,6 +739,7 @@ createApp({
       editor = new Editor(viewport.value);
       diyGenerator = new DiyGenerator(editor);
       layoutManager = new WorkbenchLayoutManager().init();
+      viewCube = new ViewCube(viewCubeViewport.value,editor.sceneManager,direction=>editor.viewDirection(direction));
       editor.onSelectionChanged = (object,selection = []) => {
         selected.value = object;
         selectedMeshes.value = selection;
@@ -916,6 +938,7 @@ createApp({
       profileSectionPreview3d=null;
       layoutManager?.destroy();
       layoutManager=null;
+      viewCube?.dispose();viewCube=null;
     });
 
     function handleKeyboard(event) {
@@ -923,6 +946,9 @@ createApp({
       if (event.defaultPrevented || gripState.active) return;
       const target = event.target;
       if (target && ['INPUT','SELECT','TEXTAREA'].includes(target.tagName)) return;
+      if(event.altKey&&!event.ctrlKey&&!event.metaKey&&['x','y','z'].includes(event.key.toLowerCase())) {
+        event.preventDefault();if(!event.repeat)quickRotate(event.key.toUpperCase());return;
+      }
       if (drawState.active && !event.ctrlKey && !event.metaKey) {
         const handled=editor?.profileDrawTool.handleKeyDown?.(event)===true;
         if(handled){event.preventDefault();return;}
@@ -1083,7 +1109,7 @@ createApp({
       if (boxSelectMode.value) toggleBoxSelect();
       if (lassoSelectMode.value) toggleLassoSelect();
       if (featureSelectMode.value) toggleFeatureSelectMode();
-      activeLibrary.value='profile';
+      quickPanel.value='draw';
       editor.profileDrawTool.begin(mode,{...drawForm});
       notify(mode==='POLYLINE'?'连续绘制：点击起点后可直接输入长度并回车；退格撤回上一段，Esc 结束':'绘制模式已开启；绘制后可直接输入长度并回车','warning');
     }
@@ -1351,7 +1377,7 @@ createApp({
       editor.machiningPlacementManager.cancel();
       editor.accessoryPlacementManager.cancel();
       editor.profileDrawTool.stop();
-      activeLibrary.value='connection';
+      openResource('connection');
       const installed=partId&&worldPoint?editor.connectionPlacementManager.installAtContext(item.type,partId,worldPoint):null;
       if(installed)return;
       const seeded=partId&&worldPoint?editor.connectionPlacementManager.beginFromContext(item.type,partId,worldPoint):false;
@@ -1388,7 +1414,7 @@ createApp({
       editor.connectionPlacementManager.cancel();
       editor.machiningPlacementManager.cancel();
       editor.profileDrawTool.stop();
-      activeLibrary.value='accessory';
+      openResource('accessory');
       try{
         editor.accessoryPlacementManager.begin(definition,{seed});
         notify(`已预览 ${definition.label||'端盖'}，单击确认安装`,'success');
@@ -1405,13 +1431,13 @@ createApp({
         end:contextMenu.end || null
       } : null;
       contextMenu.visible=false;
-      activeLibrary.value='accessory';
+      openResource('accessory');
       notify(accessoryPlacementSeed.value ? '已记住右键位置；选择配件后会在该位置预览，单击确认安装' : '已打开配件库；选择配件后移动到安装位置并单击确认','success');
     }
 
     function contextOpenMachining(mode = null) {
       contextMenu.visible=false;
-      activeLibrary.value='machining';
+      openResource('machining');
       inspectorTab.value='machining';
       if (mode) startMachiningPlacement(mode);
       else notify('已打开加工工具，可选择打孔、攻丝、开槽等','success');
@@ -1511,6 +1537,10 @@ createApp({
       try {
         editor.connectionPlacementManager.cancel();editor.machiningPlacementManager.cancel();editor.accessoryPlacementManager.cancel();editor.profileDrawTool.stop();
         const center=editor.sceneManager.orbitControls?.target?.clone?.() || {x:0,y:0,z:0};
+        const halfHeight=Number(getDesignProfileDefinition(drawForm.catalogId)?.sectionSize?.[1]||30)/2;
+        if(drawForm.plane==='XY')center.z=halfHeight;
+        else if(drawForm.plane==='YZ')center.x=halfHeight;
+        else center.y=halfHeight;
         const points=buildContourPreset(type,{...contourPresetForm,plane:drawForm.plane,center});
         const label=type==='U'?'U 型':type==='STAIR'?'阶梯型':'L 型';
         const result=editor.createContourFrameFromPoints(points,{catalogId:drawForm.catalogId,plane:drawForm.plane,orthogonal:true,gridSnap:drawForm.gridSnap,gridStepMm:drawForm.gridStepMm,presetType:type,name:`${label}轮廓框`,source:'CONTOUR_PRESET'});
@@ -1538,7 +1568,7 @@ createApp({
 
     function contextOpenPanelTools() {
       contextMenu.visible=false;
-      activeLibrary.value='panel';
+      openResource('panel');
       notify('已打开板材与门工具','success');
     }
 
@@ -1547,7 +1577,7 @@ createApp({
       editor.machiningPlacementManager.cancel();
       editor.accessoryPlacementManager.cancel();
       editor.profileDrawTool.stop();
-      activeLibrary.value='connection';
+      openResource('connection');
       editor.connectionPlacementManager.begin(mode);
     }
 
@@ -1560,7 +1590,7 @@ createApp({
       editor.connectionPlacementManager.cancel();
       editor.accessoryPlacementManager.cancel();
       editor.profileDrawTool.stop();
-      activeLibrary.value='machining';
+      openResource('machining');
       inspectorTab.value='machining';
       editor.machiningPlacementManager.begin(mode);
     }
@@ -2130,7 +2160,40 @@ createApp({
     function toggleAutoConnection() {
       autoConnectionEnabled.value = !autoConnectionEnabled.value;
       editor?.setAutoConnectionEnabled(autoConnectionEnabled.value);
-      notify(`自动连接已${autoConnectionEnabled.value ? '开启' : '关闭'}`,'warning');
+      notify(`新建构件自动连接已${autoConnectionEnabled.value ? '开启' : '关闭'}`,'warning');
+    }
+
+    function completeExistingConnections() {
+      if (!editor) return;
+      try {
+        const result = editor.completeProfileConnections();
+        if (result.profileCount < 2) {
+          notify('至少需要两根型材才能扫描接头','warning');
+          return;
+        }
+        if (result.createdCount > 0) {
+          const failed = result.failureCount > 0 ? ` · ${result.failureCount} 处需手工处理` : '';
+          notify(`已扫描 ${result.profileCount} 根型材，补全 ${result.createdCount} 个设计连接${failed}`,result.failureCount > 0 ? 'warning' : 'success');
+          return;
+        }
+        notify('没有发现可自动补全的接头；已有连接保持不变','warning');
+      } catch (error) {
+        notify(error.message || '扫描连接失败','error');
+      }
+    }
+
+    function clearAutoConnections() {
+      if (!editor) return;
+      try {
+        const result = editor.clearAutoGeneratedConnections();
+        if (!result.removedCount) {
+          notify('当前没有可清除的纯自动连接','warning');
+          return;
+        }
+        notify(`已清除 ${result.removedCount} 个纯自动连接；手工及已修改连接已保留，可撤销恢复`,'success');
+      } catch (error) {
+        notify(error.message || '清除自动连接失败','error');
+      }
     }
 
     function toggleGrid() {
@@ -2622,7 +2685,7 @@ createApp({
           revision:engineeringDrawingForm.revision,
           paper:engineeringDrawingForm.paper,
           sideView:engineeringDrawingForm.sideView,
-          appVersion:'0.63.0',
+          appVersion:CURRENT_APP_VERSION,
           fileName:`${engineeringDrawingForm.projectName || '总装'}_工程图_${engineeringDrawingForm.paper}.svg`
         });
         notify('二维总装工程图已导出');
@@ -2638,7 +2701,7 @@ createApp({
           revision:engineeringDrawingForm.revision,
           paper:engineeringDrawingForm.paper,
           sideView:engineeringDrawingForm.sideView,
-          appVersion:'0.63.0',
+          appVersion:CURRENT_APP_VERSION,
           fileName:`${engineeringDrawingForm.projectName || '总装'}_工程图_${engineeringDrawingForm.paper}.dxf`
         });
         notify('二维总装工程图 DXF 已导出');
@@ -2865,7 +2928,7 @@ createApp({
       if(!steps.length)return notify('当前工程暂无可打印的装配步骤','warning');
       const popup=window.open('','_blank','width=980,height=760');
       if(!popup)return notify('浏览器阻止了打印窗口，请允许弹出窗口后重试','warning');
-      const html=buildAssemblyGuidePrintHtml(steps,{projectName:engineeringDrawingForm.projectName||'未命名工程',appVersion:'0.63.0'});
+      const html=buildAssemblyGuidePrintHtml(steps,{projectName:engineeringDrawingForm.projectName||'未命名工程',appVersion:CURRENT_APP_VERSION});
       popup.document.open();popup.document.write(html);popup.document.close();
       window.setTimeout(()=>{try{popup.focus();popup.print();}catch{}},260);
     }
@@ -2888,8 +2951,9 @@ createApp({
     }
 
     return {
+      quickPanel,rightPanelMode,resourceCategories,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
-      relatedConnections,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
+      relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
       activeLibrary,workbenchMode,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
       designProfiles,profileCatalog,profileSystems,nominalOptions,newVariants,selectedVariants,visibleProfileVariants,frameProfileOptions,connectionRules,connectionRuleId,hardwareCatalog,databaseAccessories,databaseAccessoryRows,visibleAccessories,accessoryManagerRows,accessoryCategoryOptions,
       newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyTemplates,diyTemplateId,diyForm,selectedDiyTemplate,frameForm,drawForm,drawerForm,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,
@@ -2898,7 +2962,7 @@ createApp({
       addShaft,addPanel,applyPanelPreset,createPanelFromOpening,refitSelectedPanel,createDoorFromOpening,refitSelectedDoor,replaceSelectedProfiles,selectDiyTemplate,generateDiyTemplate,generateFrame,generateDrawers,duplicateArray,mirrorSelection,circularArray,addHardware,
       selectedNominalChanged,selectedProfileModelChanged,profileMetaChanged,toggleSelectedFaceClosure,selectedPathChanged,primitiveChanged,
       importSectionDxf,handleSectionDxf,restoreReferenceSection,
-      setWorkbenchMode,startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
+      setWorkbenchMode,startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
       propertyChanged,applyTransformFromFields,setRotationField,radToDeg,
       importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
       addThroughHole,addCountersink,addStartTap,addEndTap,addSlot,addObroundSlot,addMillingRegion,addStartEndHole,addEndEndHole,machiningChanged,deleteMachining,machiningTypeName,machiningLinearPattern,machiningRectangularPattern,machiningEditPattern,machiningDissolvePattern,machiningCopy,machiningPaste,machiningMirrorOffset,machiningMirrorFace,machiningMirrorEnd,toggleMachiningSelection,applyMachiningBatchFace,clearMachiningSelection,

@@ -211,7 +211,7 @@ Feature Snap / DIY generated profiles
 
 批量模式会折叠 A→B/B→A 的同一物理接头，并保证一个 source end 不自动绑定多个目标。当前仍按“一对型材一个自动物理接头”处理；复杂的同一对型材多接头留给后续专业能力。
 
-自动连接系统版本为 `editorState.autoConnectionSystemVersion = 1`；默认开启，可在 UI 中关闭，状态持久化到 `editorState.autoConnectionEnabled`。推荐只是排序，不绕过 `ConnectionManager.evaluateConnectionGeometry()` 校验。
+自动连接系统版本为 `editorState.autoConnectionSystemVersion = 2`；`editorState.autoConnectionEnabled` 默认开启，只控制后续绘制、拖放和模板生成。玩家主动“扫描整个结构并补全连接”使用显式 force 命令，但仍不绕过 `ConnectionManager.evaluateConnectionGeometry()` 校验。纯自动连接可批量清除，手工和已人工切换方案的连接保留。
 
 ## 9. 五金 BOM
 

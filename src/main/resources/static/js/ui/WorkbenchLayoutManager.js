@@ -24,7 +24,7 @@ export default class WorkbenchLayoutManager {
 
   init() {
     if (!this.workspace || !this.canvas) return this;
-    this.bindPanel('library','.library-panel','left',286);
+    this.bindPanel('library','.library-panel','right',318);
     this.bindPanel('inspector','.inspector-panel','right',318);
     this.bindFloater('toolbar','.canvas-transform-bar');
     this.bindFloater('viewCube','.view-cube');

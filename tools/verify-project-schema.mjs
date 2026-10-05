@@ -9,12 +9,12 @@ const staticRoot = path.join(root,'src/main/resources/static');
 const schemaModule = await import(pathToFileURL(path.join(staticRoot,'js/io/ProjectSchema.js')).href);
 const {default:ProjectSchema,CURRENT_PROJECT_SCHEMA_VERSION,CURRENT_APP_VERSION} = schemaModule;
 
-assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,59);
-assert.equal(CURRENT_APP_VERSION,'0.59.0');
+assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
+assert.equal(CURRENT_APP_VERSION,'0.65.0');
 
 const sample = {
-  metadata:{name:'Schema 59 验证工程'},
-  schemaVersion:59,
+  metadata:{name:'Schema 62 验证工程'},
+  schemaVersion:62,
   parts:[
     {
       id:'P1',displayId:'P001',name:'30×30 槽型材',type:'PROFILE',
@@ -44,12 +44,12 @@ const sample = {
 
 const shippedSample=JSON.parse(fs.readFileSync(path.join(staticRoot,'samples/型材架子_610x670_H2050.json'),'utf8'));
 const loadedShippedSample=ProjectSchema.load(shippedSample);
-assert.equal(loadedShippedSample.project.schemaVersion,59);
+assert.equal(loadedShippedSample.project.schemaVersion,62);
 assert.ok(loadedShippedSample.project.parts.every(part=>part.type!=='PROFILE'||(part.designProfile?.profileId&&part.manufacturingProfile===null)),'内置示例必须从设计模型开始，真实制造规格留空');
 
 const loaded = ProjectSchema.load(sample);
-assert.equal(loaded.project.schemaVersion,59);
-assert.equal(loaded.project.metadata.version,'0.59.0');
+assert.equal(loaded.project.schemaVersion,62);
+assert.equal(loaded.project.metadata.version,'0.65.0');
 assert.equal(loaded.project.parts[0].designProfile.profileId,'DESIGN-3030');
 assert.equal(loaded.project.parts[0].manufacturingProfile,null);
 assert.equal(loaded.project.connections[0].designType,'ANGLE_BRACKET');
@@ -57,20 +57,20 @@ assert.equal(loaded.project.connections[0].manufacturingRuleId,null);
 assert.equal(loaded.project.editorState.designModelVersion,1);
 assert.equal(loaded.project.editorState.manufacturingConfigurationVersion,1);
 assert.equal(loaded.project.editorState.connectionAnchorVersion,1);
-assert.equal(loaded.project.editorState.connectionPlacementVersion,1);
+assert.equal(loaded.project.editorState.connectionPlacementVersion,2);
 assert.equal(loaded.project.editorState.machiningPlacementVersion,1);
 assert.equal(loaded.project.editorState.workbenchMode,'BEGINNER');
-assert.equal(loaded.project.editorState.autoConnectionSystemVersion,1);
+assert.equal(loaded.project.editorState.autoConnectionSystemVersion,2);
 assert.equal(loaded.project.editorState.autoConnectionEnabled,true);
 assert.equal(loaded.project.editorState.dimensionSystemVersion,2);
 assert.equal(loaded.project.editorState.engineeringDrawingSystemVersion,2);
 assert.equal(loaded.project.editorState.profileGripEditingVersion,1);
 assert.equal(loaded.project.editorState.profileGripDefaults.gridStepMm,10);
 
-for (const unsupported of [49,48,41,1]) {
+for (const unsupported of [59,49,48,41,1]) {
   const old = structuredClone(sample);
   old.schemaVersion = unsupported;
-  assert.throws(() => ProjectSchema.load(old), /仅支持 schema v59/);
+  assert.throws(() => ProjectSchema.load(old), /仅支持 schema v62/);
 }
 
 const malformed = structuredClone(sample);
@@ -97,9 +97,9 @@ for (const forbidden of ['stockLengthMm','sawKerfMm','endTrimMm','minReusableOff
 
 console.log(JSON.stringify({
   ok:true,
-  schema:59,
+  schema:62,
   currentOnly:true,
-  version:'0.59.0',
+  version:'0.65.0',
   designManufacturingSeparated:true,
   abstractDesignConnections:true,
   legacyProjectCompatibility:false,

@@ -18,9 +18,9 @@ const workPlane = read('js/interaction/WorkPlaneVisualizer.js');
 const cycle = read('js/interaction/SelectionCycleManager.js');
 
 for (const token of ['setLassoMode','pickInScreenPolygon','pickRoots','setTransformSpace']) assert.ok(scene.includes(token),`SceneManager missing ${token}`);
-for (const token of ['FeatureHoverManager','WorkPlaneVisualizer','SelectionCycleManager','cadInteractionVersion:2']) assert.ok(editor.includes(token),`Editor missing ${token}`);
+for (const token of ['FeatureHoverManager','WorkPlaneVisualizer','SelectionCycleManager','cadInteractionVersion:3']) assert.ok(editor.includes(token),`Editor missing ${token}`);
 for (const token of ['toggleLassoSelect','toggleTransformSpace','toggleWorkPlane','promptProfileLength']) assert.ok(app.includes(token),`app missing ${token}`);
-for (const token of ['自由选择','Alt+点击 穿透选择','工作面','A端精确拉伸','B端精确拉伸']) assert.ok(html.includes(token),`UI missing ${token}`);
+for (const token of ['自由选择','Alt+点击 穿透选择','工作面','A固定','调整B端','B固定','调整A端']) assert.ok(html.includes(token),`UI missing ${token}`);
 for (const token of ['scene-lasso','feature-hover-hud','space-tool']) assert.ok(css.includes(token),`CSS missing ${token}`);
 assert.ok(feature.includes('型材 Feature 级预高亮'));
 assert.ok(feature.includes('ProfileFeatureCatalog'));
@@ -30,8 +30,8 @@ assert.ok(!html.includes('供应商、料号或截面说明'),'供应商相关 U
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.59.0',
-  schema:59,
+  version:'0.65.0',
+  schema:62,
   lasso:true,
   penetrationCycle:true,
   featureHover:true,

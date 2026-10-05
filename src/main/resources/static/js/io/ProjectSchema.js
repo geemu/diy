@@ -2,7 +2,7 @@ import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSyste
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.63.0';
+export const CURRENT_APP_VERSION = '0.65.0';
 
 /**
  * Current-only project schema gate.
@@ -59,7 +59,7 @@ export default class ProjectSchema {
       ...(project.metadata || {}),
       version:CURRENT_APP_VERSION,
       schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,
-      generator:project.metadata?.generator || 'Aluminum CAD Web'
+      generator:project.metadata?.generator || 'DIY Web'
     };
     project.coordinateSystem = {...createProjectCoordinateDescriptor(),...(project.coordinateSystem || {})};
     const manufacturing = project.manufacturing || {};
@@ -101,7 +101,7 @@ export default class ProjectSchema {
       cadInteractionVersion:3,
       cadInteraction:{transformSpace:'world',workPlane:'XZ',workPlaneVisible:true,movementStepMm:5,rotationStepDeg:15,moveScope:'SINGLE'},
       autoConnectorRecommendation:true,
-      autoConnectionSystemVersion:1,
+      autoConnectionSystemVersion:2,
       connectionQuickChangeVersion:1,
       panelDoorConfiguratorVersion:1,
       profileReplacementVersion:1,
@@ -148,7 +148,7 @@ export default class ProjectSchema {
     project.editorState.assemblyGuideDocumentVersion = 2;
     project.editorState.cadInteractionVersion = 3;
     project.editorState.cadInteraction = {transformSpace:'world',workPlane:'XZ',workPlaneVisible:true,movementStepMm:5,rotationStepDeg:15,moveScope:'SINGLE',...(project.editorState.cadInteraction || {})};
-    project.editorState.autoConnectionSystemVersion = 1;
+    project.editorState.autoConnectionSystemVersion = 2;
     project.editorState.connectionQuickChangeVersion = 1;
     project.editorState.panelDoorConfiguratorVersion = 1;
     project.editorState.profileReplacementVersion = 1;

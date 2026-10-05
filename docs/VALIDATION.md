@@ -1,9 +1,9 @@
-# Validation / Regression — v0.42
+# Validation / Regression — v0.65
 
 ## 1. 原则
 
 不维护旧 Schema 兼容。当前回归重点：
-- Schema 59 严格性。
+- Schema 62 严格性。
 - Profile Grip A/B 固定对端语义。
 - A_END/B_END 加工基准联动。
 - Engineering Drawing SVG 与 DXF 共享 Drawing Model/Layout。
@@ -14,15 +14,19 @@
 
 ## 2. 自动脚本
 
+首次运行 v0.65 几何回归前先执行 `mvn process-resources`（或 `mvn clean test`），将构建期 Three.js WebJar 解包到 target；几何回归使用这个实际版本，不安装另一份 npm 依赖。
+
 ```bash
 for f in $(find src/main/resources/static/js tools -type f \( -name '*.js' -o -name '*.mjs' \)); do node --check "$f"; done
 for f in tools/verify-*.mjs; do node "$f"; done
 ```
 
 当前脚本：
+- `verify-player-workbench-v065.mjs`：26 方向唯一性/反向完整性；3 工作面 × 5 方向的非方形截面贴面几何，使用项目实际 Three.js。
 - `verify-engineering-dxf.mjs`：DXF header/layers/entities/Unicode/UI/Factory Package contract。
 - `verify-profile-grip.mjs`：A/B 固定语义、精确输入合同、Feature Snap、约束保护、加工基准重映射。
-- `verify-project-schema.mjs`：Schema 57 current-only + Production Inspection/Profile Catalog settings。
+- `verify-project-schema.mjs`：Schema 62 current-only + Production Inspection/Profile Catalog settings。
+- `verify-builder-connection-v064.mjs`：现有结构强制扫描、纯自动连接安全清理、状态总览和 DIY 品牌。
 - `verify-engineering-drawing.mjs`：Drawing Model / views / A3 layout / SVG / Factory Package contract。
 - `verify-validator.mjs`：黄金 sample + 非法加工。
 - `verify-fish-rack.mjs`：W/D/H = 610/670/2050。
@@ -36,10 +40,17 @@ mvn clean test
 ```
 
 `StaticResourceSmokeTest` 已检查：
-- ProjectSchema / schema 55。
+- ProjectSchema / schema 62。
 - ProfileGripEditor / ProfileGripMath。
 - EngineeringDrawingModel/Layout/Service/SVG + DXF Exporter。
 - 其他关键静态资源。
+- 使用 Spring MockMvc 进程内请求静态资源和 Catalog API，不依赖本机端口或 loopback 网络。
+
+v0.64.0 本次实测：
+- JS/MJS `node --check`：118/118 通过。
+- `tools/verify-*.mjs`：31/31 通过。
+- `mvn clean test`：1/1 通过，JDK 21 / Spring Boot 4.1.1 / SQLite 上下文成功启动。
+- Chrome 浏览器生成基础框架后得到 40 个纯自动连接；清除后为 0；再次扫描恢复到 40，几何失效始终为 0。
 
 ## 4. 浏览器手测
 
@@ -53,7 +64,7 @@ mvn clean test
 8. A/B 基准孔位分别验证。
 9. source-end 已连接/约束时 Grip 受保护。
 10. 鱼缸架、工程图、Factory Package 继续通过。
-11. 尝试打开 schema 36，应明确拒绝。
+11. 尝试打开 schema 59，应明确拒绝。
 
 ## 5. v0.37 DXF 基线实测
 

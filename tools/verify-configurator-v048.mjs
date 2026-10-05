@@ -28,7 +28,7 @@ for (const token of ['PanelDoorConfigurator','ProfileReplacementManager','create
 for (const token of ['kind:item.kind || null','configurator:item.configurator || null','parameters:item.parameters ? structuredClone(item.parameters) : null']) {
   assert.ok(assembly.includes(token),`AssemblyManager missing ${token}`);
 }
-assert.ok(schema.includes("CURRENT_APP_VERSION = '0.59.0'"));
+assert.ok(schema.includes("CURRENT_APP_VERSION = '0.65.0'"));
 assert.ok(schema.includes('panelDoorConfiguratorVersion:1'));
 assert.ok(schema.includes('profileReplacementVersion:1'));
 for (const token of ['panelFitForm','doorForm','profileReplaceForm','createPanelFromOpening','createDoorFromOpening','replaceSelectedProfiles']) {
@@ -42,12 +42,12 @@ for (const token of ["accessoryType === 'HINGE'","accessoryType === 'HANDLE'"]) 
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.59.0',
+  version:'0.65.0',
   frameOpeningResolver:true,
   panelConfigurator:true,
   doorConfigurator:true,
   panelDoorRefit:true,
   profileReplacement:true,
   connectionAutoRepair:true,
-  schemaVersion:59
+  schemaVersion:62
 },null,2));

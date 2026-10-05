@@ -1,6 +1,8 @@
 # Data Model · Schema 62
 
-## 0. v0.63.0 当前模型边界
+## 0. v0.65.0 当前模型边界
+
+本版 26 方向视角正方体、左右工作台职责和快捷旋转不增加持久化业务实体；绘制贴面使用标准 Part.position/rotation，Schema 保持 62。
 
 当前版本按全新工程维护，不兼容旧 Schema。PROFILE 必须包含 `designProfile.profileId`，设计阶段 `manufacturingProfile` 默认为 `null`；设计连接的 `manufacturingRuleId` 也默认为 `null`。设计型材只描述截面、槽、封边、长度和几何关系，设计连接只描述结构意图；真实材料、真实五金和连接派生加工后置到制造配置。
 

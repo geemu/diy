@@ -1,6 +1,6 @@
 spring:
   application:
-    name: aluminum-cad
+    name: diy
   datasource:
     url: jdbc:sqlite:./data/aluminum-cad.db
     driver-class-name: org.sqlite.JDBC
