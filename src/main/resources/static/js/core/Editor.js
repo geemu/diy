@@ -2664,12 +2664,15 @@ export default class Editor {
       return;
     }
     const part = mesh.userData.part;
+    const selectionChanged=this.selected===mesh||this.selectedMeshes.includes(mesh);
     this.parts = this.parts.filter(item => item !== part);
     this.meshes = this.meshes.filter(item => item !== mesh);
     this.selectedMeshes = this.selectedMeshes.filter(item => item !== mesh);
     if (this.selected === mesh) this.selected = this.selectedMeshes[this.selectedMeshes.length - 1] || null;
     this.sceneManager.scene.remove(mesh);
     this.disposePartMesh(mesh);
+    // 干涉回滚时同步清理属性栏与 Gizmo，不能显示已经撤回的临时构件。
+    if(selectionChanged)this.selectMany(this.selectedMeshes);
   }
 
   getMeshByPartId(id) {

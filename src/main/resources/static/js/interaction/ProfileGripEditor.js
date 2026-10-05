@@ -69,6 +69,8 @@ export default class ProfileGripEditor {
     if(part?.type!=='PROFILE'||!isLinearProfile(part))return null;
     if(!this.editor.isMeshTransformable(mesh))return null;
     if(this.editor.profileDrawTool?.isActive())return null;
+    // 放置端盖/连接/加工时，端点是安装目标，不是拉伸手柄；不能抢走确认点击。
+    if(this.editor.accessoryPlacementManager?.isActive()||this.editor.connectionPlacementManager?.isActive()||this.editor.machiningPlacementManager?.isActive())return null;
     return mesh;
   }
 
@@ -115,7 +117,7 @@ export default class ProfileGripEditor {
   }
 
   handlePointerDown(event){
-    if(event.button!==0||this.drag)return;
+    if(event.button!==0||this.drag||!this.selectedMesh())return;
     const handle=this.pickHandle(event);
     if(!handle)return;
     event.preventDefault();event.stopPropagation();

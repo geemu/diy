@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {panelContours} from '../model/PanelShapeModel.js';
+import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
+import {buildDesignProfileSection} from '../model/DesignProfileSection.js';
 
 /** 通用参数化组件几何，预览与实际构件共用。通孔使用带孔轮廓挤出，不依赖远程图片和模型。 */
 export default class ComponentGeometryFactory {
@@ -58,8 +60,13 @@ export default class ComponentGeometryFactory {
         box(4,1.5,l,[x+2,h/2,0]);box(4,1.5,l,[x+2,-h/2,0]);
       }
     } else if(kind==='END_CAP') {
-      plate(d.width,d.height,t,d.capMaterial==='PLASTIC'?[]:[circle(0,0,Math.min(d.width,d.height)*.12)]);
-      if(d.capMaterial==='PLASTIC')for(const x of [-1,1])for(const y of [-1,1])box(d.width*.16,d.height*.16,4,[x*d.width*.30,y*d.height*.30,-t/2-2]);
+      const profile=getDesignProfileDefinition(d.profileId),outline=profile?buildDesignProfileSection(profile,['FRONT','BACK','LEFT','RIGHT']).outer:rectangle(d.width,d.height);
+      const capHoles=d.capMaterial==='PLASTIC'||!pointInside(outline,0,0)?[]:[circle(0,0,Math.min(d.width,d.height)*.12)];
+      plate(d.width,d.height,t,capHoles,[0,0,0],[0,0,0],outline);
+      if(d.capMaterial==='PLASTIC')for(const x of [-1,1])for(const y of [-1,1]){
+        const cx=x*d.width*.30,cy=y*d.height*.30;
+        if(pointInside(outline,cx,cy))box(d.width*.16,d.height*.16,4,[cx,cy,-t/2-2]);
+      }
     } else if(kind==='FOOT_CUP') {
       const base=d.footDiameter,stem=d.stemDiameter,len=d.stemLength;
       cyl(base/2,8,[0,-len/2-4,0],'#272a2e');cyl(base*.37,4,[0,-len/2,0]);cyl(stem/2,len);
@@ -71,33 +78,56 @@ export default class ComponentGeometryFactory {
       const arm=s*.7,span=s*3,a=arm/2,b=span/2;let outline=rectangle(arm,span),holes=[circle(0,-s,r),circle(0,0,r),circle(0,s,r)];
       if(kind==='FLAT_PLATE'&&d.holeCount===2){outline=rectangle(arm,s*2);holes=[circle(0,-s/2,r),circle(0,s/2,r)];}
       if(kind==='T_PLATE'){outline=[point(-b,b),point(b,b),point(b,b-arm),point(a,b-arm),point(a,-b),point(-a,-b),point(-a,b-arm),point(-b,b-arm)];holes=[circle(-s,s,r),circle(0,s,r),circle(s,s,r),circle(0,0,r),circle(0,-s,r)];}
-      if(kind==='L_PLATE'){outline=[point(-b,-b),point(b,-b),point(b,-b+arm),point(-b+arm,-b+arm),point(-b+arm,b),point(-b,b)];holes=[circle(-s,-s,r),circle(0,-s,r),circle(s,-s,r),circle(-s,0,r),circle(-s,s,r)];}
+      if(kind==='L_PLATE'){
+        const angle=(d.angle||90)*Math.PI/180,c=Math.cos(angle),sn=Math.sin(angle),len=s*2,cot=1/Math.tan(angle/2);
+        // 两臂真实夹角，不能用“旋转整个直角板”伪装 45° / 135° 规格。
+        outline=[point(-a*cot,-a),point(len,-a),point(len,a),point(a*cot,a),point(len*c+a*sn,len*sn-a*c),point(len*c-a*sn,len*sn+a*c)];
+        holes=[circle(s*.55,0,r),circle(s*1.55,0,r),circle(s*.55*c,s*.55*sn,r),circle(s*1.55*c,s*1.55*sn,r)];
+      }
       if(kind==='CROSS_PLATE'){outline=[point(-a,-b),point(a,-b),point(a,-a),point(b,-a),point(b,a),point(a,a),point(a,b),point(-a,b),point(-a,a),point(-b,a),point(-b,-a),point(-a,-a)];holes=[circle(0,0,r),circle(-s,0,r),circle(s,0,r),circle(0,-s,r),circle(0,s,r)];}
-      plate(span,span,t,holes,[0,0,0],[0,0,(d.angle-90)*Math.PI/180],outline);
-    } else if(['CORNER_CUBE','THREE_WAY','TWO_WAY','THREE_D_CONNECTOR','THREE_WAY_RADIAL'].includes(kind)) {
+      plate(span,span,t,holes,[0,0,0],[0,0,0],outline);
+    } else if(kind==='THREE_D_CONNECTOR') {
+      box(s*.8,s*.8,s*.8);
+      const holes=[circle(0,s*.45,s*.09)],width=s*.48,len=s*1.6,depth=s*.42;
+      plate(width,len,depth,holes,[s*.9,0,0],[0,0,-Math.PI/2]);
+      plate(width,len,depth,holes,[0,-s*.9,0]);
+      plate(width,len,depth,holes,[0,0,s*.9],[Math.PI/2,0,0]);
+      box(len,s*.09,depth*.75,[s*.9,depth/2,0]);box(width*.75,s*.09,len,[0,depth/2,s*.9]);
+    } else if(['THREE_WAY','TWO_WAY','THREE_WAY_RADIAL'].includes(kind)) {
       if(kind==='THREE_WAY_RADIAL') {
         const outline=[point(-s/2,-s/2),point(s/2,-s/2),...Array.from({length:25},(_,i)=>{const a=i*Math.PI/48;return point(-s/2+s*Math.cos(a),-s/2+s*Math.sin(a));})];
         plate(s,s,s,[],[0,0,0],[0,0,0],outline);
       } else box(s,s,s);
-      for(const rot of [[0,0,0],[0,Math.PI/2,0],[-Math.PI/2,0,0]]){
+      const faces=kind==='THREE_WAY_RADIAL'?[]:kind==='TWO_WAY'?[[0,Math.PI,0],[0,-Math.PI/2,0]]:[[0,Math.PI,0],[0,-Math.PI/2,0],[Math.PI/2,0,0]];
+      for(const rot of faces){
         const m=add(new THREE.CircleGeometry(s*.24,48),[0,0,0],rot,'#66686b');m.position.copy(new THREE.Vector3(0,0,s/2+.025).applyEuler(m.rotation));
       }
     } else if(kind==='UNIVERSAL_JOINT') {
-      plate(s,s*1.3,t,[circle(0,s*.2,r)],[0,s*.65,0]);plate(s,s*1.3,t,[circle(0,-s*.2,r)],[0,-s*.65,t*2],[0,Math.PI/10,0]);
-      add(new THREE.CylinderGeometry(s*.28,s*.28,s*1.2,32),[0,0,t],[0,0,Math.PI/2]);
+      // 叉形座、横向销轴与顶部安装台，体现转动副而不是两片直板。
+      for(const x of [-s*.42,s*.42])plate(s,s*1.35,t,[circle(0,0,s*.2)],[x,-s*.1,0],[0,Math.PI/2,0]);
+      plate(s,s,t,[circle(0,0,r)],[0,-s*.72,0],[Math.PI/2,0,0]);
+      add(new THREE.CylinderGeometry(s*.25,s*.25,s*1.12,48),[0,0,0],[0,0,Math.PI/2]);
+      box(s*.6,s*.75,s*.6,[0,s*.38,0]);
+      plate(s*1.2,s*1.2,t,[circle(-s*.35,0,r),circle(s*.35,0,r)],[0,s*.78,0],[Math.PI/2,0,0]);
     } else if(['INNER_BRACKET','SLIDE_BLOCK'].includes(kind)) {
-      plate(s*.35,s*2,t,[circle(0,-s*.5,r),circle(0,s*.5,r)]);if(kind==='SLIDE_BLOCK')box(s*.24,s*1.5,t*1.6);
+      if(kind==='INNER_BRACKET')plate(s*.40,s*4,t,[-1.5,-.5,.5,1.5].map(y=>circle(0,y*s,s*.11)));
+      else {
+        const slot=panelContours('obround',{radius:s*.18,straightA:0,straightB:s*1.3}).outer.map(p=>point(p.x,p.y-s*.24));
+        plate(s*.65,s*3,s*.42,[slot,circle(0,s*1.08,s*.20)]);
+        add(new THREE.CircleGeometry(s*.12,32),[-s*.325-.01,-s*1.1,0],[0,-Math.PI/2,0],'#151619');
+      }
     } else if(kind==='A_PILLAR_BRACKET') {
       const len=d.length,side=d.side==='left'?-1:1;
       plate(len,30,3,[circle(-len*.4,0,3.5),circle(len*.35,0,3.5)],[len*.45,0,side*8],[Math.PI/2,0,0]);plate(15,60,4,[circle(0,-20,3),circle(0,20,3)],[0,12,0]);
       plate(len,42,3,[],[0,-1,0],[0,0,0],[point(0,0),point(len*.8,0),point(0,-42)]);
     } else {
-      const leg=kind==='SHELF_BRACKET'?d.length:s,w=kind==='L_BRACKET'?s*.45:s,depth=kind==='HEAVY_CORNER'?d.length:leg;
-      const holes=d.holeCount>=3?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const leg=kind==='SHELF_BRACKET'?d.length:s,w=kind==='L_BRACKET'?s*.45:Math.max(s,Number(d.height||s)),depth=kind==='HEAVY_CORNER'?d.length:leg;
+      const height=kind==='HEAVY_CORNER'?depth:s;
+      const holes=kind==='HEAVY_CORNER'?[circle(0,depth*.35,r)]:d.holeCount>=3?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
       plate(w,depth,t,holes,[0,t/2,depth/2],[Math.PI/2,0,0]);
-      const uprightHoles=d.holeCount===4?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
-      const angle=(d.angle||90)*Math.PI/180;plate(w,s,t,uprightHoles,[0,s*Math.sin(angle)/2,s*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
-      if(kind==='HEAVY_CORNER')for(const x of [-w*.4,w*.4])plate(s,s,t,[],[x,0,0],[0,Math.PI/2,0],[point(0,0),point(s*.8,0),point(0,s*.8)]);
+      const uprightHoles=kind==='HEAVY_CORNER'?[circle(0,height*.35,r)]:d.holeCount===4?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const angle=(d.angle||90)*Math.PI/180;plate(w,height,t,uprightHoles,[0,height*Math.sin(angle)/2,height*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
+      if(kind==='HEAVY_CORNER'||kind==='CORNER_CUBE')for(const x of [-w*.4,w*.4])plate(s,s,t,[],[x,0,0],[0,Math.PI/2,0],[point(0,0),point(-depth*.8,0),point(0,height*.8)]);
       if(kind==='PANEL_FIX_CONNECTOR'&&d.rounded)add(new THREE.CylinderGeometry(w/2,w/2,t,32),[0,s/2,0],[Math.PI/2,0,0]);
     }
     if(!group.children.length)throw new Error(`未实现组件几何：${kind||d.panelShape}`);
@@ -108,5 +138,6 @@ export default class ComponentGeometryFactory {
 const point=(x,y)=>({x,y});
 function rectangle(w,h){return [point(-w/2,-h/2),point(w/2,-h/2),point(w/2,h/2),point(-w/2,h/2)];}
 function circle(x,y,r,n=48){return Array.from({length:n},(_,i)=>point(x+Math.cos(i*Math.PI*2/n)*r,y+Math.sin(i*Math.PI*2/n)*r));}
+function pointInside(outer,x,y){let inside=false;for(let i=0,j=outer.length-1;i<outer.length;j=i++){const a=outer[i],b=outer[j];if((a.y>y)!==(b.y>y)&&x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x)inside=!inside;}return inside;}
 function shapeFrom(outer,holes=[]) {const shape=new THREE.Shape(outer.map(p=>new THREE.Vector2(p.x,p.y)));for(const ring of holes)shape.holes.push(new THREE.Path(ring.map(p=>new THREE.Vector2(p.x,p.y))));return shape;}
 function extrude(outer,holes,depth){const geometry=new THREE.ExtrudeGeometry(shapeFrom(outer,holes),{depth,bevelEnabled:false,steps:1,curveSegments:24});geometry.translate(0,0,-depth/2);return geometry;}

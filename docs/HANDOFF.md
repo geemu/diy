@@ -10,6 +10,7 @@
 - 光轴夹 mountReference 使用 SHAFT_AXIS + stationS，dimensions.axisOffsetY 与真实主轴孔中心一致；随宿主变换重算，非同径拒绝安装。自由放置最低点落工作面，Ghost 不进入业务数组。
 - 五类主目录之外，数据库配件/管理折叠保留，加工仍从顶部模型库进入。单次确认结束，Esc / 右键短单击 / 切换类别取消；右键拖动保持平移。切换规格取消旧 Ghost，释放克隆前后的材质。
 - 当前版本 0.71.0 / Schema 62 / drawToolVersion 7；不要为了参考目录引入价格、真实供应商料号或历史迁移。浏览器与回归范围见 docs/VALIDATION.md。
+- 安装到端点时 ProfileGripEditor.selectedMesh / pointerdown 必须让出连接/配件/加工放置；端盖安装不能触发拉伸。removePartByIdSilently 的干涉回滚同步选中 UI，属性变换通知 Project 变化以刷新工程摘要。
 
 ## v0.70 历史重点
 

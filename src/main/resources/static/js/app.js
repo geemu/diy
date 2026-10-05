@@ -2433,6 +2433,7 @@ createApp({
       editor.updateDimensions();
       editor.historyManager.capture();
       editor.emitStats();
+      editor.emitProjectChanged();
     }
 
     function applyTransformFromFields() {

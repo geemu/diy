@@ -76,7 +76,9 @@ export default class ProfileSectionPreview3D {
     this.clearMesh();
     this.catalogObject=true;
     this.mesh=object;
-    this.root.rotation.set(0,0,0);
+    const kind=object?.userData?.part?.dimensions?.geometryKind;
+    // 长条连接片在预览中横向呈现；这只是展示姿态，不修改构件参数或安装坐标。
+    this.root.rotation.set(['INNER_BRACKET','SLIDE_BLOCK'].includes(kind)?Math.PI/2:0,0,0);
     if(object)this.root.add(object);
     this.fitCatalogObject();
     this.render();
@@ -88,11 +90,13 @@ export default class ProfileSectionPreview3D {
     this.root.updateMatrixWorld(true);
     const box=new THREE.Box3().setFromObject(this.mesh);
     const center=box.getCenter(new THREE.Vector3());
-    this.mesh.position.sub(center);
+    this.mesh.position.sub(this.root.worldToLocal(center.clone()));
     const radius=Math.max(1,box.getSize(new THREE.Vector3()).length()/2);
     const halfFov=THREE.MathUtils.degToRad(this.camera.fov/2);
     const limitingFov=Math.min(halfFov,Math.atan(Math.tan(halfFov)*this.camera.aspect));
-    const direction=new THREE.Vector3(-5,4,-6).normalize();
+    const kind=this.mesh.userData?.part?.dimensions?.geometryKind;
+    const insideAngle=['L_BRACKET','ANGLE_BRACKET','CORNER_CUBE','HEAVY_CORNER','SHELF_BRACKET','PANEL_FIX_CONNECTOR'].includes(kind);
+    const direction=new THREE.Vector3(-5,4,insideAngle?6:-6).normalize();
     const right=new THREE.Vector3(0,1,0).cross(direction).normalize(),up=direction.clone().cross(right).normalize();
     const centered=box.clone().translate(center.clone().negate());
     // 按相机空间的八个边界点适配，长型材不再因包围球而缩成一小块。

@@ -1,6 +1,24 @@
-# Validation / Regression — v0.70
+# Validation / Regression — v0.71
 
-## v0.70 当前检查范围
+## v0.71 当前检查范围
+
+2026-10-06 本地检查：135 个 JS/MJS 语法检查通过，38/38 verify 回归通过；新增 verify-component-catalog-v071 使用实际 Maven WebJar Three.js，不伪造几何返回值。JDK 21.0.11 的 Maven clean test 成功，1 项 MockMvc 静态资源/Catalog 测试，0 失败 / 0 错误；git diff --check 通过。
+
+- 原始目录事实保存在 reference/lewan-component-options-2026-10-05-v071.json。实际浏览器比对 16 个参考型材、18 个连接主项及所有 134 个二级规格、10 类光轴对应孔径、11 种板材形状、4 类配件主项与所有螺钉头型/螺纹/长度，未发现选项不匹配。型材和杆径的独立扩展分组保留。
+- 349 个实际 Three.js 几何用例全部有非空、有限坐标的实体；包括所有连接规格、夹具孔径、42 个脚杯、滑轨长度、螺钉/端盖与截面（含 R/U 端盖）。预览与构件共用工厂；仅此检查不能证明所有形状与参考站专有网格或实际制造尺寸一致。
+- 补查复杂连接外形：角码连接件为带侧加强筋角码，滑块有长孔，三维连接件有三个方向的插接臂，万向铰链有叉形座/销轴；45° / 135° L 板改变真实两臂夹角，而非整体旋转直角板。独立模型仍没有复制参考站专有网格或制造细节。
+- 9 类光轴夹主孔站位，在任意宿主姿态下与轴中心线误差小于 1e-8 mm。实际浏览器添加 Φ8 × 200 光轴、安装限位环，再平移 / 旋转宿主；真实下载 JSON 的限位环位置与姿态随动，站位 104.7267 mm 保持，重新打开后仍有 SHAFT_AXIS 安装关系。
+- 实际添加圆环板 100/50/5，预览不创建 Part，单击后才提交；工作面最低点为 0。属性栏把外径改成 150 成功，非法内径 180 被拒绝并恢复为 50；保存 / 重新打开保留 panelShape / shapeParameters 和形状尺寸。
+- A 柱默认长度 1800，常用长度 800 的自由添加真实生成 PROFILE + U88 截面，最低点为 0；三通自由添加生成本地组件 ACCESSORY，确认后放置状态结束。
+- 空白工程从右侧选 3030、一面封边，再实际 FREE 数字输入 600 + Enter；长度和 profilePath.length 均为 600，FRONT 封边保存，最低点误差约 3e-14 mm，单次完成后 active=false。随后在真实 A 端单击安装 3030 端盖，确认新增 ACCESSORY 并退出放置；端点拉伸手柄不再抢走组件安装点击。
+- 规格框聚焦时 Esc、右键短单击、切换规格均能取消放置，不新增构件；右键拖动仍是视图平移。干涉阻止落位仍有效，回滚时同步清理已经撤回的选中对象与属性/Gizmo。
+- 真实导出五构件的 JSON，以及 SVG（27607 字节）、DXF（41462 字节）。文件和截图保存于当前 Codex visualizations 工作目录，文件名 v071-component-project / v071-component-drawing / v071-workbench；所有页面检查无 pageerror，三处 canvas 的 contextLost 均为 false。非矩形板材的内外轮廓另有结构断言，不宣称完整曲面机械制图。
+
+启动环境记录：本机默认 JDK 21 Unix-domain 临时路径发生 `Unable to establish loopback connection / Invalid argument: connect`。验证服务保持 application.yml 中的 8081 端口，仅在本次 JVM 使用 `-Djdk.net.unixdomain.tmpdir=E:/workspace/diy/target` 后成功启动；没有修改系统环境或项目默认启动配置。命令为 `mvn -o spring-boot:run "-Dspring-boot.run.jvmArguments=-Djdk.net.unixdomain.tmpdir=E:/workspace/diy/target"`。浏览器复测禁用缓存以避免同版本迭代期间的旧 ES Module；用户查看交付版时应 Ctrl+F5。
+
+边界：目录和级联选项按公开页面核对；预览为独立本地参数化设计模型，不是参考站授权网格或供应商尺寸图。复杂多通、铰链等以及 15 系列暂自由放置；正式制造仍有原有配置门禁及参考模型提示。本次未验证全部复杂组件的自动装配或正式制造包，不保存参考站账号/会话。
+
+## v0.70 历史检查范围
 
 2026-10-05 最终本地结果：129 个 JS/MJS 语法检查全部通过，37/37 回归通过，git diff --check 通过；新增 tools/verify-catalog-consistency-v070.mjs。JDK 21.0.11 Maven clean test 成功，1 项静态资源/Catalog MockMvc 检查，0 失败/0 错误。
 

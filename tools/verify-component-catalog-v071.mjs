@@ -34,7 +34,7 @@ for(const option of catalog.ConnectionComponentOptions)for(const spec of catalog
 for(const option of catalog.ShaftComponentOptions.filter(x=>x.value!=='ROD'))for(const diameter of catalog.shaftDiametersFor(option.value))checkMesh(catalog.componentPart(catalog.shaftComponent({type:option.value,diameter,mixed:false})));
 for(const foot of catalog.FootCupOptions)checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'FOOT_CUP',foot:foot.value})));
 for(const head of catalog.FastenerHeadOptions.filter(x=>x.value!=='ELASTIC_NUT'))for(const thread of catalog.fastenerThreads(head.value))checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'FASTENING',head:head.value,thread,screwLength:catalog.fastenerLengths(head.value,thread)[0]})));
-for(const cap of catalog.EndCapMaterialOptions)for(const id of ['DESIGN-2020','DESIGN-2040','DESIGN-3030R'])checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'END_CAP',capMaterial:cap.value},getDesignProfileDefinition(id))));
+for(const cap of catalog.EndCapMaterialOptions)for(const id of ['DESIGN-2020','DESIGN-2040','DESIGN-3030R','DESIGN-U88'])checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'END_CAP',capMaterial:cap.value},getDesignProfileDefinition(id))));
 for(const slideType of catalog.SlideTypeOptions)for(const length of catalog.SlideLengthOptions)checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'SLIDE_RAIL',slideType:slideType.value,slideLength:length.value})));
 for(const option of catalog.ProfileReferenceOptions){
   const definition=getDesignProfileDefinition(option.id);assert.ok(definition);
@@ -45,6 +45,13 @@ assert.equal(getDesignProfileDefinition('DESIGN-2020R').slotDefinitions.length,2
 assert.equal(getDesignProfileDefinition('DESIGN-U88').slotDefinitions.length,0);
 assert.notDeepEqual(getSectionDefinition('DESIGN-2020').outer,getSectionDefinition('DESIGN-2020',['FRONT']).outer);
 assert.deepEqual(catalog.closureFaces('A',getDesignProfileDefinition('DESIGN-2020R')),['BACK']);
+const {default:Grip}=await import(moduleUrl(path.join(js,'interaction/ProfileGripEditor.js')));
+const grip=Object.create(Grip.prototype),gripHost=new THREE.Group();gripHost.userData.part={type:'PROFILE',dimensions:{length:100},profilePath:{type:'LINE',length:100}};
+grip.options={enabled:true};grip.sceneManager={};grip.editor={selected:gripHost,selectedMeshes:[gripHost],isMeshTransformable:()=>true};
+assert.equal(grip.selectedMesh(),gripHost);
+for(const name of ['accessoryPlacementManager','connectionPlacementManager','machiningPlacementManager']){
+  grip.editor[name]={isActive:()=>true};assert.equal(grip.selectedMesh(),null,`${name} 必须禁止拉伸手柄抢安装点击`);delete grip.editor[name];
+}
 const {default:MountManager}=await import(moduleUrl(path.join(js,'model/AccessoryMountManager.js')));
 const host=new THREE.Group();host.userData.part={id:'rod',type:'SHAFT',dimensions:{diameter:8,length:100}};
 host.position.set(25,40,60);host.rotation.set(.2,.4,.1);host.updateMatrixWorld(true);
