@@ -1,6 +1,17 @@
-# 项目交接文档 — v0.69.0
+# 项目交接文档 — v0.70.0
 
-## v0.69 当前重点
+## v0.70 当前重点
+
+- 深色控件必须覆盖 hover / focus / disabled / option，不能再被 app.css 前面的浅色规则覆盖。包括侧栏、快捷面板和弹窗，原生选择器采用 color-scheme:dark，控件聚焦不叠加厚 outline。
+- rail-tool.active 清除 ::before 和 inset 双指示；菜单 active 不使用浅底，右侧 menu-state 表示勾选，aria-pressed 表示真实开关状态。View / Display / Step 共享同一行尺寸与悬停风格。
+- catalogProfileCanvas 在五个互斥类别模板中复用 ref，每次只出现一个。refreshCatalogPreview 在 nextTick 后解析当前 canvas；离开创建页或无 canvas 必须 dispose 并置空，不能持有隐藏 WebGL 上下文。
+- ProfileSectionPreview3D.setObject / fitCatalogObject 支持 PrimitiveGeometryFactory 的光轴、板材、连接和配件示意。Box3 居中、包围球适配、小视场角约束，不改变真实尺寸。所有预览与工程、历史、BOM 隔离。
+- 连接库仍使用 DesignConnectionList 五种语义，不引入参考站供应商规则；END_SCREW 预览用螺钉示意，安装继续走 ConnectionPlacementManager。制造规格仍在制造阶段绑定。
+- 配件沿用 SQLite 目录、accessoryDefinition 和 AccessoryPlacementManager；selectedCatalogAccessory 在筛选后退回首个可用规格。无匹配结果提供空状态，不能沿用旧配件误安装。
+- 板材仅开放当前真实支持的矩形，不复制参考站尚未实现的形状；框口填板和门组件仍在折叠区。新增板材和预览使用同一 panelMaterialColors，尺寸提交有有限/正数检查。
+- 浏览器现场访问 127.0.0.1:8080，真实 REST 读取配件、实际 UI 添加/取消；不是仅静态页面截图。参考站预览为 canvas 而非产品图片，不新增远程资源依赖。完整结果见 docs/VALIDATION.md。
+
+## v0.69 历史重点
 
 - 用户批准移除重复左侧自由绘制面板，右侧统一选材和使用；要求整体风格与 LewanDIY 编辑器保持一致。实际参考站在浏览器中核对，不复制品牌、账号功能或商业入口。
 - 右侧只有 design-profile-choice 截面选择器；catalogProfileCanvas 使用 ProfileSectionPreview3D，长槽与端面可同时看见。ResizeObserver 随面板尺寸刷新，dispose 清理。预览不创建 Project Part。

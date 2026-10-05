@@ -243,7 +243,7 @@
               <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
               <span class="catalog-preview-foot"><span>按实际接头自动匹配</span><strong>点击选中</strong></span>
             </button>
-            <p class="catalog-draw-hint">{{connectionPlacementState.active?connectionPlacementState.message:selectedConnectionPreview?.summary}}。点击预览后，再点型材接头安装；Esc 取消。</p>
+            <p class="catalog-draw-hint">{{connectionPlacementState.active?connectionPlacementState.message:selectedConnectionPreview?.summary}}。点击预览选择一种方式后，直接点击接头附近；Esc 取消。</p>
             <p class="catalog-draw-hint">此处选择连接方式，不指定实际料号；具体五金和加工在制造阶段配置。</p>
             <button v-if="connectionPlacementState.active" class="soft-button full" @click="cancelConnectionPlacement">退出连接放置</button>
             <details class="advanced-options"><summary>结构连接管理</summary>

@@ -188,6 +188,7 @@ createApp({
     });
     const newShaft = reactive({diameter:12,length:500,material:'45#钢'});
     const newPanel = reactive({width:500,height:400,thickness:18,material:'木饰面板'});
+    const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#c4ccd5','钢板':'#8b959f'});
     const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',normalOffsetMm:0});
     const doorForm = reactive({frameCatalogId:getDefaultDesignProfileId('2020'),gapMm:3,panelGapMm:2,panelThickness:5,panelMaterial:'亚克力',hingeSide:'LEFT',includeHinges:true,includeHandle:true});
     const profileReplaceForm = reactive({catalogId:getDefaultDesignProfileId('3030'),scope:'SELECTED',autoRepair:true});
@@ -214,7 +215,7 @@ createApp({
       } else {
         let previewSpec;
         if(activeLibrary.value==='shaft')previewSpec={type:'SHAFT',dimensions:{diameter:Number(newShaft.diameter),length:Number(newShaft.diameter)*9}};
-        if(activeLibrary.value==='panel')previewSpec={type:'PANEL',dimensions:{...newPanel},color:({'亚克力':0xb4d7e9,'铝板':0xc4ccd5,'钢板':0x8b959f})[newPanel.material]};
+        if(activeLibrary.value==='panel')previewSpec={type:'PANEL',dimensions:{...newPanel},color:panelMaterialColors[newPanel.material]};
         if(activeLibrary.value==='connection')previewSpec={type:'ACCESSORY',accessoryType:connectionRuleId.value==='END_SCREW'?'SOCKET_SCREW':connectionRuleId.value,dimensions:{size:30}};
         if(activeLibrary.value==='accessory' && selectedCatalogAccessory.value){
           const definition=accessoryDefinition(selectedCatalogAccessory.value);
@@ -327,6 +328,10 @@ createApp({
     });
     const selectedCatalogAccessory = computed(()=>visibleAccessories.value.find(item=>item.id===catalogAccessoryId.value)||visibleAccessories.value[0]||null);
     const selectedConnectionPreview = computed(()=>connectionRules.find(item=>item.id===connectionRuleId.value));
+    watch(connectionRuleId,()=>{if(connectionPlacementState.active)cancelConnectionPlacement();});
+    watch(selectedCatalogAccessory,item=>{
+      if(accessoryPlacementState.active&&(!item||accessoryPlacementState.definitionId!==accessoryDefinition(item).id))cancelAccessoryPlacement();
+    });
     // 只有可见目录和选中的规格变化才重建预览；切换分类立即释放旧 WebGL 上下文。
     watch([()=>newProfile.catalogId,activeLibrary,rightPanelMode,()=>newShaft.diameter,
       ()=>newPanel.width,()=>newPanel.height,()=>newPanel.thickness,()=>newPanel.material,
@@ -664,6 +669,7 @@ createApp({
     function addCatalogAccessory(item) {
       if(!item)return;
       try {
+        cancelPlacementTools();
         const definition=accessoryDefinition(item);
         editor?.addHardware(definition.id,{definition});
         notify(`已添加：${definition.label}`);
@@ -1221,12 +1227,14 @@ createApp({
     }
 
     function addShaft() {
+      if(![newShaft.diameter,newShaft.length].every(value=>Number.isFinite(Number(value))&&Number(value)>0))return notify('请输入大于 0 的光轴直径和长度','warning');
       editor.addShaft(Number(newShaft.diameter),Number(newShaft.length),{material:newShaft.material});
       notify(`已添加 Ø${newShaft.diameter} 光轴`);
     }
 
     function addPanel() {
-      editor.addPanel(Number(newPanel.width),Number(newPanel.height),Number(newPanel.thickness),{material:newPanel.material});
+      if(![newPanel.width,newPanel.height,newPanel.thickness].every(value=>Number.isFinite(Number(value))&&Number(value)>0))return notify('请输入大于 0 的板材宽、高和厚度','warning');
+      editor.addPanel(Number(newPanel.width),Number(newPanel.height),Number(newPanel.thickness),{material:newPanel.material,color:panelMaterialColors[newPanel.material]});
       notify(`已添加 ${newPanel.material}`);
     }
 

@@ -22,6 +22,9 @@ export default class ProfileSectionPreview3D {
     const keyLight=new THREE.DirectionalLight(0xffffff,2.1);
     keyLight.position.set(2,3,4);
     this.scene.add(keyLight);
+    const rimLight=new THREE.DirectionalLight(0xc6ddff,1.8);
+    rimLight.position.set(-4,2,-3);
+    this.scene.add(rimLight);
     this.mesh=null;
     this.resize();
     this.resizeObserver=new ResizeObserver(()=>this.resize());
@@ -47,8 +50,8 @@ export default class ProfileSectionPreview3D {
     if(options.presentation==='catalog') {
       // 目录卡须同时看到截面和长槽，避免相机沿挤出轴看成一小块端面。
       this.root.rotation.set(0,0,0);
-      const fitScale=Math.max(1,lengthRatio/3.5);
-      this.camera.position.set(span*5*fitScale,span*4*fitScale,span*3*fitScale);
+      this.catalogObject=true;
+      this.fitCatalogObject();
     } else {
       this.root.rotation.set(-0.48,0.62,-0.08);
       const fitScale=Math.max(1,lengthRatio/2.2);
@@ -90,7 +93,7 @@ export default class ProfileSectionPreview3D {
     const halfFov=THREE.MathUtils.degToRad(this.camera.fov/2);
     const limitingFov=Math.min(halfFov,Math.atan(Math.tan(halfFov)*this.camera.aspect));
     const distance=radius/Math.sin(limitingFov)*1.12;
-    this.camera.position.copy(new THREE.Vector3(5,4,3).normalize().multiplyScalar(distance));
+    this.camera.position.copy(new THREE.Vector3(5,4,6).normalize().multiplyScalar(distance));
     this.camera.near=Math.max(.1,distance-radius*2);
     this.camera.far=distance+radius*4;
     this.camera.updateProjectionMatrix();
@@ -113,6 +116,7 @@ export default class ProfileSectionPreview3D {
     this.resizeObserver.disconnect();
     this.clearMesh();
     this.renderer.dispose();
-    this.renderer.forceContextLoss();
+    // 创建/修改使用 v-show：仍在页面中的 canvas 会被复用，强制丢失会把下一次预览一并杀掉。
+    if(!this.canvas.isConnected)this.renderer.forceContextLoss();
   }
 }

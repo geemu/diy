@@ -802,6 +802,15 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .asset-presets button,.accessory-category-filter button,.accessory-catalog-actions button,.connection-tool-grid button,.machining-grid button{background:#101320;border-color:#ffffff1a;color:#9ca3af}
 .asset-presets button:hover,.accessory-category-filter button:hover,.accessory-catalog-actions button:hover,.connection-tool-grid button:hover,.machining-grid button:hover{background:#191d2b;border-color:#ffffff33;color:#e5e7eb}
 .accessory-category-filter button.active,.connection-tool-grid button.active,.machining-grid button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.draw-mode-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.draw-mode-grid button{background:#101320;border-color:#ffffff1a;color:#9ca3af}.draw-mode-grid button:hover,.draw-mode-grid button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.contour-preset-fields label,.diy-template-summary,.diy-auto-connect,.feature-mate-card,.connection-overview-card,.connection-overview-stats div,.diagnostic-row,.search-box,.search-box:focus-within{background:#101320;border-color:#ffffff1a;color:#9ca3af;box-shadow:none}
+.generator-title>span,.contour-preset-head>span{background:var(--accent-soft);color:var(--accent)}
+.connection-overview-stats .invalid{background:#351c23;border-color:#73303c}.connection-overview-stats .invalid :is(strong,span){color:#fca5a5}
+.profile-manager-toolbar,.profile-manager-row,.accessory-manager-row,.profile-manager-row.disabled{background:#101320;border-color:#ffffff1a}
+.profile-manager-thumb{background:#1a1e2b}.profile-manager-title strong{color:#e5e7eb}.profile-manager-actions button{background:#1a1e2b;border-color:#ffffff24;color:#d1d5db}
+.profile-manager-actions button:hover{background:#242a38;border-color:var(--accent);color:var(--accent)}
+.selected-title-card,.property-readonly,.connection-guide,.connection-guide.ready{background:#101320;color:#d1d5db;border-color:#ffffff1a}
+.selected-kind,.property-readonly.manufacturing-code{background:var(--accent-soft);color:var(--accent);border-color:rgba(255,138,0,.24)}
 .quick-operation-heading{background:#020617;border-color:var(--line);color:#e5e7eb}
 .quick-operation-content .panel-heading{padding:14px}
 .profile-grip-tip{background:#101320;border-color:#ffffff1a;color:#9ca3af}
@@ -810,7 +819,7 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .canvas-shell,.viewport{background:#e0f2fe}
 .canvas-transform-bar{top:auto;bottom:62px;left:50%;transform:translateX(-50%);height:48px;padding:5px;max-width:calc(100% - 24px);overflow:visible;gap:4px;background:rgba(255,255,255,.35)!important;border-color:rgba(255,255,255,.25)!important;box-shadow:0 4px 18px #26334412!important;border-radius:10px!important;backdrop-filter:blur(12px)}
 .canvas-transform-bar .transform-tool{min-width:44px;height:36px;padding:0 7px;gap:4px;border:1px solid #00000014!important;background:rgba(255,255,255,.85)!important;color:#1f2937!important;font-size:13px;border-radius:8px}
-.canvas-transform-bar .transform-tool span{font-size:11px}
+.canvas-transform-bar .transform-tool{flex-shrink:0;white-space:nowrap}.canvas-transform-bar .transform-tool span{font-size:11px;white-space:nowrap}
 .canvas-transform-bar .transform-tool:hover:not(:disabled){background:#fff!important;color:#111827!important}
 .canvas-transform-bar .transform-tool.active{background:#f59e3b!important;border-color:#fbbf24!important;color:#fff!important}
 .canvas-transform-bar .transform-tool.danger:hover{background:#fff0f0!important;color:#b91c1c!important}
@@ -855,9 +864,11 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 @media(min-width:901px) and (max-width:1100px){
   .workspace:has(.quick-operation-panel:not([style*="display: none"])){--quick-track:280px!important}
   .quick-operation-panel{position:relative;grid-column:2;grid-row:1;left:auto;top:auto;bottom:auto;width:auto;box-shadow:none}
+  .workspace:has(.quick-operation-panel:not([style*="display: none"])) .canvas-transform-bar .transform-tool{min-width:34px;padding:0 5px}
+  .workspace:has(.quick-operation-panel:not([style*="display: none"])) .canvas-transform-bar .transform-tool>span:not(.workbench-icon){display:none}
 }
 @media(max-width:900px){
   .quick-operation-panel{top:0;bottom:240px;border:1px solid var(--line);border-radius:8px}
   .draw-hud{z-index:35;left:12px;right:12px;transform:none;width:auto}
-  .canvas-transform-bar .transform-tool{min-width:36px;padding:0 5px}.canvas-transform-bar .transform-tool span{display:none}
+  .canvas-transform-bar .transform-tool{min-width:36px;padding:0 5px}.canvas-transform-bar .transform-tool>span:not(.workbench-icon){display:none}
 }
