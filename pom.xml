@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.paic.stock</groupId>
+    <artifactId>aluminum-cad</artifactId>
+    <version>0.63.0</version>
+    <name>aluminum-cad</name>
+    <description>Browser aluminum profile CAD and machining drawing tool</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <three.version>0.155.0</three.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>4.1.0</version>
+        </dependency>
+
+        <!-- 业务代码直接使用 Jackson 3 Tree/JsonMapper API，显式声明直接依赖，避免依赖传递关系不清晰。 -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Java 数据对象与构造器统一使用 Lombok，保持项目后端代码风格一致。 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.53.4.0</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Three.js 本地运行时回退资源；浏览器端不使用 CDN。 -->
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>three</artifactId>
+            <version>${three.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+              Three.js 只在 Maven 构建期解析并复制到 target/classes/static/vendor/three。
+              浏览器运行时始终访问普通 Spring Boot 静态资源，不直接访问 CDN。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>unpack-three-static-vendor</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.webjars.npm</groupId>
+                                    <artifactId>three</artifactId>
+                                    <version>${three.version}</version>
+                                    <type>jar</type>
+                                    <outputDirectory>${project.build.directory}/three-webjar</outputDirectory>
+                                    <includes>
+                                        META-INF/resources/webjars/three/${three.version}/build/three.module.min.js,
+                                        META-INF/resources/webjars/three/${three.version}/examples/jsm/controls/OrbitControls.js,
+                                        META-INF/resources/webjars/three/${three.version}/examples/jsm/controls/TransformControls.js
+                                    </includes>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-three-static-vendor</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/static/vendor/three</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}/three-webjar/META-INF/resources/webjars/three/${three.version}</directory>
+                                    <filtering>false</filtering>
+                                    <includes>
+                                        <include>build/three.module.min.js</include>
+                                        <include>examples/jsm/controls/OrbitControls.js</include>
+                                        <include>examples/jsm/controls/TransformControls.js</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

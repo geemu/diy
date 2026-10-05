@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.paic.stock.aluminumcad.mapper.AccessoryCatalogMapper">
+
+    <resultMap id="AccessoryCatalogResultMap" type="com.paic.stock.aluminumcad.domain.entity.AccessoryCatalog">
+        <id property="id" column="id"/>
+        <result property="category" column="category"/>
+        <result property="model" column="model"/>
+        <result property="name" column="name"/>
+        <result property="geometryJson" column="geometry_json"/>
+        <result property="mountRuleJson" column="mount_rule_json"/>
+        <result property="bomRuleJson" column="bom_rule_json"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="list" resultMap="AccessoryCatalogResultMap">
+        SELECT
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogColumns"/>
+        FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        <if test="!includeDisabled">
+            WHERE enabled = 1
+        </if>
+        ORDER BY
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogOrderBy"/>
+    </select>
+
+    <select id="findById" resultMap="AccessoryCatalogResultMap">
+        SELECT
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogColumns"/>
+        FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByModel" resultMap="AccessoryCatalogResultMap">
+        SELECT
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogColumns"/>
+        FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        WHERE model = #{model}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        (
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogInsertColumns"/>
+        )
+        VALUES
+        (
+            #{category},
+            #{model},
+            #{name},
+            #{geometryJson},
+            #{mountRuleJson},
+            #{bomRuleJson},
+            #{enabled}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        SET
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogUpdateAssignments"/>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.AccessoryCatalogTable"/>
+        WHERE id = #{id}
+    </delete>
+
+</mapper>

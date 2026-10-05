@@ -1,0 +1,31 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {CURRENT_APP_VERSION,CURRENT_PROJECT_SCHEMA_VERSION} from '../src/main/resources/static/js/io/ProjectSchema.js';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const read=relative=>fs.readFileSync(path.join(root,relative),'utf8');
+const manager=read('src/main/resources/static/js/drawing/ContourFrameManager.js');
+const draw=read('src/main/resources/static/js/drawing/ProfileDrawTool.js');
+const editor=read('src/main/resources/static/js/core/Editor.js');
+const playback=read('src/main/resources/static/js/manufacturing/AssemblyPlaybackManager.js');
+const instruction=read('src/main/resources/static/js/manufacturing/AssemblyInstructionGenerator.js');
+const app=read('src/main/resources/static/js/app.js');
+const html=read('src/main/resources/static/index.html');
+const css=read('src/main/resources/static/css/app.css');
+
+assert.equal(CURRENT_APP_VERSION,'0.59.0');
+assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,59);
+for(const token of ['CONTOUR_FRAME','parameters={','edgeLengths','orthogonal:options.orthogonal ??']) assert.ok(draw.includes(token),`轮廓元数据缺少 ${token}`);
+for(const token of ['class ContourFrameManager','setEdgeLength','updatePoint','rebuild(points','pointerdown','pointermove','validateContour']) assert.ok(manager.includes(token),`参数化轮廓缺少 ${token}`);
+for(const token of ['beginContourFrameEdit','setContourFrameEdgeLength','focusAssemblyConnection','contourFrameVersion:5','assemblyPlaybackVersion:2']) assert.ok(editor.includes(token),`Editor 缺少 ${token}`);
+for(const token of ['cameraTransitionMs','focusPartIds(focusIds,{durationMs:this.cameraTransitionMs']) assert.ok(playback.includes(token),`装配相机过渡缺少 ${token}`);
+for(const token of ['sourceCode','targetCode','connectionHardware']) assert.ok(instruction.includes(token),`连接局部信息缺少 ${token}`);
+for(const token of ['参数化轮廓框','编辑轮廓点','正交锁定','三维聚焦','安装示意']) assert.ok(html.includes(token),`界面缺少 ${token}`);
+for(const token of ['selectedContourAssembly','setContourEdgeLength','showAssemblyConnectionDetail','focusAssemblyConnectionDetail']) assert.ok(app.includes(token),`UI 逻辑缺少 ${token}`);
+assert.ok(css.includes('.contour-edit-card'));
+assert.ok(css.includes('.assembly-connection-detail'));
+assert.ok(!html.includes('单价'));
+assert.ok(!html.includes('总价'));
+console.log(JSON.stringify({ok:true,version:CURRENT_APP_VERSION,schema:CURRENT_PROJECT_SCHEMA_VERSION,parametricContour:true,dragPoints:true,edgeLengthInput:true,orthogonalLock:true,frameRebuild:true,cameraTransition:true,connectionDetail:true,pricing:false},null,2));

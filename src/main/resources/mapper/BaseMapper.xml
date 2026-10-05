@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.paic.stock.aluminumcad.mapper.BaseMapper">
+
+    <!-- 表名统一维护。 -->
+    <sql id="ProfileCatalogTable">profile_catalog</sql>
+    <sql id="AccessoryCatalogTable">accessory_catalog</sql>
+
+    <!-- 型材目录完整字段。 -->
+    <sql id="ProfileCatalogColumns">
+        id,
+        nominal,
+        variant,
+        name,
+        series,
+        system,
+        section_size_json,
+        slot_width_mm,
+        slot_definitions_json,
+        wall_thickness_options_json,
+        default_wall_thickness_mm,
+        alloy,
+        cross_section_style,
+        source_family,
+        note,
+        section_json,
+        enabled,
+        sort_order,
+        created_at,
+        updated_at
+    </sql>
+
+    <sql id="ProfileCatalogInsertColumns">
+        id,
+        nominal,
+        variant,
+        name,
+        series,
+        system,
+        section_size_json,
+        slot_width_mm,
+        slot_definitions_json,
+        wall_thickness_options_json,
+        default_wall_thickness_mm,
+        alloy,
+        cross_section_style,
+        source_family,
+        note,
+        section_json,
+        enabled,
+        sort_order
+    </sql>
+
+    <sql id="ProfileCatalogUpdateAssignments">
+        nominal = #{nominal},
+        variant = #{variant},
+        name = #{name},
+        series = #{series},
+        system = #{system},
+        section_size_json = #{sectionSize,typeHandler=com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler},
+        slot_width_mm = #{slotWidth},
+        slot_definitions_json = #{slotDefinitions,typeHandler=com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler},
+        wall_thickness_options_json = #{wallThicknessOptions,typeHandler=com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler},
+        default_wall_thickness_mm = #{defaultWallThickness},
+        alloy = #{alloy},
+        cross_section_style = #{crossSectionStyle},
+        source_family = #{sourceFamily},
+        note = #{note},
+        section_json = #{section,typeHandler=com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler},
+        enabled = #{enabled},
+        sort_order = #{sortOrder},
+        updated_at = CURRENT_TIMESTAMP
+    </sql>
+
+    <sql id="ProfileCatalogOrderBy">
+        sort_order ASC, nominal ASC, variant ASC
+    </sql>
+
+    <!-- 配件目录完整字段。 -->
+    <sql id="AccessoryCatalogColumns">
+        id,
+        category,
+        model,
+        name,
+        geometry_json,
+        mount_rule_json,
+        bom_rule_json,
+        enabled,
+        created_at,
+        updated_at
+    </sql>
+
+    <sql id="AccessoryCatalogInsertColumns">
+        category,
+        model,
+        name,
+        geometry_json,
+        mount_rule_json,
+        bom_rule_json,
+        enabled
+    </sql>
+
+    <sql id="AccessoryCatalogUpdateAssignments">
+        category = #{category},
+        model = #{model},
+        name = #{name},
+        geometry_json = #{geometryJson},
+        mount_rule_json = #{mountRuleJson},
+        bom_rule_json = #{bomRuleJson},
+        enabled = #{enabled},
+        updated_at = CURRENT_TIMESTAMP
+    </sql>
+
+    <sql id="AccessoryCatalogOrderBy">
+        category ASC, name ASC, id ASC
+    </sql>
+
+</mapper>

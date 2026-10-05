@@ -1,0 +1,566 @@
+import * as THREE from 'three';
+import {isLinearProfile} from '../model/ProfilePath.js';
+import {
+  buildConnectionParameters,
+  DEFAULT_END_SCREW_RULE_ID,
+  getConnectionRule,
+  normalizeConnectionRuleId,
+  recommendConnectionRules
+} from '../model/ConnectionRuleCatalog.js';
+import {getHardwareDefinition,isHardwareCompatibleWithSlot} from '../model/HardwareCatalog.js';
+import {endToLocalZ,getFaceOffset,localZToStation} from '../model/ProfileCoordinateSystem.js';
+import {matchNearestSlot,slotReference,slotWorldNormal,slotWorldPoint} from '../model/SlotMatcher.js';
+import {profileSeries as designProfileSeries,profileSlotWidth,isProfileFaceClosed} from '../model/DesignProfileCatalog.js';
+import {DesignConnectionList,DEFAULT_DESIGN_CONNECTION_TYPE,designConnectionLabel,getDesignConnectionDefinition} from '../model/DesignConnectionCatalog.js';
+
+export default class ConnectionManager {
+  constructor(editor) {
+    this.editor = editor;
+    this.connections = [];
+    this.helperMeshes = new Map();
+  }
+
+  createConnection(source,target,options={}) {
+    const rule=options.ruleId?getConnectionRule(options.ruleId):null;
+    const designType=String(options.designType || rule?.type || DEFAULT_DESIGN_CONNECTION_TYPE).toUpperCase();
+    const connection=this.createDesignConnection(source,target,{...options,designType});
+    if(rule)this.configureManufacturingRule(connection,rule.id,{userOverride:false});
+    return connection;
+  }
+
+  createDesignConnection(source,target,options={}) {
+    this.assertSupportedProfiles(source,target);
+    const designType=String(options.designType || DEFAULT_DESIGN_CONNECTION_TYPE).toUpperCase();
+    if(!getDesignConnectionDefinition(designType))throw new Error(`未知设计连接方式：${designType}`);
+    const sourceEnd=options.sourceEnd==='END'?'END':'START';
+    const targetFace=normalizeFace(options.targetFace||'FRONT');
+    const candidate=this.recommendDesignFor(source,target,{sourceEnd,targetFace}).find(item=>item.type===designType);
+    if(!candidate?.valid)throw new Error(candidate?.error || `当前位置不支持${designConnectionLabel(designType)}`);
+    const validation=candidate.geometry;
+    const connection={
+      id:crypto.randomUUID(),designType,type:designType,manufacturingRuleId:null,
+      sourceProfileId:source.userData.part.id,targetProfileId:target.userData.part.id,
+      sourceEnd,targetFace,sourceMountFace:validation.sourceMountFace,
+      sourceSlot:validation.sourceSlot,targetSlot:validation.targetSlot,
+      orientationMode:'AUTO_INNER',validation,status:'DESIGN_VALID',generatedHardwareIds:[]
+    };
+    this.connections.push(connection);
+    this.rebuild(connection);
+    return connection;
+  }
+
+  recommendFor(source,target,options={}) {
+    this.assertSupportedProfiles(source,target);
+    const sourceEnd=options.sourceEnd==='END'?'END':'START';
+    const targetFace=normalizeFace(options.targetFace||'FRONT');
+    const preliminary=this.evaluateConnectionGeometry(source,target,null,{sourceEnd,targetFace,skipRuleCompatibility:true});
+    const candidates=recommendConnectionRules(source.userData.part,target.userData.part,{angleErrorDeg:preliminary.angleErrorDeg,targetSlotMatched:preliminary.targetSlot?.matched});
+    return candidates.map(candidate=>{
+      const geometry=this.evaluateConnectionGeometry(source,target,candidate.rule,{sourceEnd,targetFace});
+      return {...candidate,geometry,valid:geometry.ok};
+    }).sort((a,b)=>Number(b.valid)-Number(a.valid)||b.score-a.score);
+  }
+
+  createRecommendedConnection(source,target,options={}) {
+    const recommended=this.recommendDesignFor(source,target,options).find(item=>item.valid);
+    if(!recommended)throw new Error('当前几何位置没有可用的自动连接方案，请先将端部吸附到目标面/槽中心');
+    return this.createDesignConnection(source,target,{...options,designType:recommended.type});
+  }
+
+  recommendDesignFor(source,target,options={}) {
+    const ranked=this.recommendFor(source,target,options);
+    return DesignConnectionList.map(definition=>{
+      const choices=ranked.filter(item=>item.rule?.type===definition.id);
+      const best=choices.find(item=>item.valid) || choices[0] || null;
+      return {
+        type:definition.id,label:definition.label,score:Number(best?.score||0),valid:best?.valid===true,
+        reasons:[...(best?.reasons||[])],geometry:best?.geometry||null,representativeRuleId:best?.rule?.id||null,
+        error:best?.geometry?.errors?.[0]?.message || (choices.length?'当前几何不满足该连接方式':'当前截面系列没有对应连接规则')
+      };
+    }).sort((a,b)=>Number(b.valid)-Number(a.valid)||b.score-a.score);
+  }
+
+  getDesignSwitchOptions(connectionOrId) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)return [];
+    const source=this.editor.getMeshByPartId(connection.sourceProfileId);
+    const target=this.editor.getMeshByPartId(connection.targetProfileId);
+    if(!source||!target)return [];
+    return this.recommendDesignFor(source,target,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace})
+      .map(item=>({...item,current:item.type===connection.designType}));
+  }
+
+  switchDesignType(connectionOrId,nextType,options={}) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)throw new Error('未找到要修改的连接');
+    const designType=String(nextType||'').toUpperCase();
+    if(!getDesignConnectionDefinition(designType))throw new Error('请选择有效的设计连接方式');
+    if(connection.designType===designType)return {connection,changed:false,previousType:designType};
+    const option=this.getDesignSwitchOptions(connection).find(item=>item.type===designType);
+    if(!option?.valid)throw new Error(option?.error || '当前几何关系不支持该连接方式');
+    const previousType=connection.designType;
+    connection.designType=designType;
+    connection.type=designType;
+    connection.manufacturingRuleId=null;
+    if(options.userOverride!==false){
+      if(connection.autoGenerated===true)connection.autoOrigin={generated:true,source:connection.autoSource||null,snapType:connection.autoSnapType||null,designType:previousType,recommendationScore:Number(connection.autoRecommendationScore||0)};
+      connection.autoGenerated=false;
+      connection.userOverridden=true;
+    }
+    connection.quickChangeCount=Number(connection.quickChangeCount||0)+1;
+    connection.quickChangedFromType=previousType;
+    connection.quickChangedAt=new Date().toISOString();
+    this.rebuild(connection);
+    return {connection,changed:true,previousType};
+  }
+
+  switchToRecommendedDesignType(connectionOrId,options={}) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)throw new Error('未找到要推荐的连接');
+    const option=this.getDesignSwitchOptions(connection).find(item=>item.valid&&!item.current)
+      || this.getDesignSwitchOptions(connection).find(item=>item.valid);
+    if(!option)throw new Error('当前几何位置没有可用的替代连接方式');
+    return this.switchDesignType(connection,option.type,options);
+  }
+
+  getManufacturingOptions(connectionOrId) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)return [];
+    const source=this.editor.getMeshByPartId(connection.sourceProfileId);
+    const target=this.editor.getMeshByPartId(connection.targetProfileId);
+    if(!source||!target)return [];
+    const sourceMaterial=source.userData.part?.manufacturingProfile;
+    const targetMaterial=target.userData.part?.manufacturingProfile;
+    const materialsReady=!!sourceMaterial?.profileId && !!targetMaterial?.profileId;
+    return this.recommendFor(source,target,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace})
+      .filter(item=>item.rule?.type===connection.designType)
+      .map(item=>{
+        let materialError=null;
+        const tNutSku=item.rule?.hardware?.tNutSku;
+        if(!materialsReady)materialError='请先完成连接两端型材的真实材料配置';
+        else if(tNutSku){
+          const targetSlotWidth=Number(targetMaterial.slotWidth||0);
+          if(!isHardwareCompatibleWithSlot(tNutSku,targetSlotWidth))materialError=`${getHardwareDefinition(tNutSku)?.label||tNutSku} 与目标型材制造槽宽 ${round2(targetSlotWidth)}mm 不匹配`;
+          if(!materialError && ['ANGLE_BRACKET','CONNECTION_PLATE'].includes(item.rule.type)){
+            const sourceSlotWidth=Number(sourceMaterial.slotWidth||0);
+            if(!isHardwareCompatibleWithSlot(tNutSku,sourceSlotWidth))materialError=`${getHardwareDefinition(tNutSku)?.label||tNutSku} 与源型材制造槽宽 ${round2(sourceSlotWidth)}mm 不匹配`;
+          }
+        }
+        const valid=item.valid===true && !materialError;
+        return {ruleId:item.rule.id,label:item.rule.label,valid,score:Number(item.score||0),reasons:[...(item.reasons||[])],error:valid?null:(materialError||item.geometry?.errors?.[0]?.message||'当前几何不满足该制造方案')};
+      });
+  }
+
+  configureManufacturingRule(connectionOrId,ruleId,options={}) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)throw new Error('未找到要配置的连接');
+    const rule=getConnectionRule(ruleId);
+    if(!rule)throw new Error('请选择有效的制造连接方案');
+    if(rule.type!==connection.designType)throw new Error(`当前设计连接为“${designConnectionLabel(connection.designType)}”，不能绑定其它类型的制造方案`);
+    const option=this.getManufacturingOptions(connection).find(item=>item.ruleId===rule.id);
+    if(!option?.valid)throw new Error(option?.error || '当前几何不满足该制造连接方案');
+    const previousRuleId=connection.manufacturingRuleId||null;
+    connection.manufacturingRuleId=rule.id;
+    connection.manufacturingConfiguredAt=new Date().toISOString();
+    connection.manufacturingUserSelected=options.userOverride!==false;
+    this.rebuild(connection);
+    return {connection,changed:previousRuleId!==rule.id,previousRuleId,rule};
+  }
+
+  clearManufacturingRule(connectionOrId) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)return null;
+    connection.manufacturingRuleId=null;
+    delete connection.manufacturingConfiguredAt;
+    delete connection.manufacturingUserSelected;
+    this.rebuild(connection);
+    return connection;
+  }
+
+  // 兼容内部旧调用名：制造规则切换统一转到制造配置 API。
+  getSwitchOptions(connectionOrId) {
+    const connection=this.resolveConnection(connectionOrId);
+    return this.getManufacturingOptions(connection).map(item=>({...item,current:item.ruleId===connection?.manufacturingRuleId}));
+  }
+
+  switchConnectionRule(connectionOrId,newRuleId,options={}) {
+    return this.configureManufacturingRule(connectionOrId,newRuleId,options);
+  }
+
+  switchToRecommendedRule(connectionOrId,options={}) {
+    const connection=this.resolveConnection(connectionOrId);
+    if(!connection)throw new Error('未找到要推荐的连接');
+    const recommended=this.getManufacturingOptions(connection).find(item=>item.valid&&item.ruleId!==connection.manufacturingRuleId)
+      || this.getManufacturingOptions(connection).find(item=>item.valid);
+    if(!recommended)throw new Error('当前几何位置没有可用的制造连接方案');
+    return this.configureManufacturingRule(connection,recommended.ruleId,options);
+  }
+
+  resolveConnection(connectionOrId) {
+    if(!connectionOrId)return null;
+    if(typeof connectionOrId==='object')return this.connections.find(item=>item.id===connectionOrId.id)||connectionOrId;
+    return this.connections.find(item=>item.id===connectionOrId)||null;
+  }
+
+  createEndScrewConnection(source,target,options={}) {
+    const ruleId=options.ruleId||DEFAULT_END_SCREW_RULE_ID;
+    return this.createConnection(source,target,{...options,ruleId});
+  }
+
+  createAngleBracketConnection(source,target,options={}) {
+    return this.createConnection(source,target,{...options,designType:'ANGLE_BRACKET',ruleId:options.ruleId});
+  }
+
+  createRuleConnection(source,target,options={}) {
+    const rule=getConnectionRule(options.ruleId);
+    if(!rule)throw new Error('请选择有效连接规则');
+    return this.createConnection(source,target,{...options,designType:rule.type,ruleId:rule.id});
+  }
+
+  rebuild(connection) {
+    this.editor.machiningManager.removeGeneratedByConnection(connection.id);
+    this.removeHelper(connection.id);
+    this.removeGeneratedHardware(connection);
+    const source=this.editor.getMeshByPartId(connection.sourceProfileId);
+    const target=this.editor.getMeshByPartId(connection.targetProfileId);
+    if(!source||!target){connection.status='INVALID';connection.validation={ok:false,errors:[{code:'DANGLING_CONNECTION',message:'连接源或目标不存在'}],warnings:[]};return;}
+    this.assertSupportedProfiles(source,target);
+    connection.designType=String(connection.designType||connection.type||DEFAULT_DESIGN_CONNECTION_TYPE).toUpperCase();
+    connection.type=connection.designType;
+    let rule=connection.manufacturingRuleId?getConnectionRule(connection.manufacturingRuleId):null;
+    if(rule && rule.type!==connection.designType){
+      connection.manufacturingRuleId=null;
+      rule=null;
+    }
+    if(!rule){
+      const representative=this.recommendDesignFor(source,target,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace})
+        .find(item=>item.type===connection.designType);
+      if(!representative?.representativeRuleId){
+        connection.status='INVALID';
+        connection.validation={ok:false,errors:[{code:'DESIGN_CONNECTION_UNSUPPORTED',message:representative?.error||'当前设计连接没有可用的几何规则'}],warnings:[]};
+        return;
+      }
+      rule=getConnectionRule(representative.representativeRuleId);
+    }
+    const validation=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace});
+    connection.validation=validation;
+    connection.status=validation.ok?(connection.manufacturingRuleId?'VALID':'DESIGN_VALID'):'INVALID';
+    connection.sourceMountFace=validation.sourceMountFace;
+    connection.sourceSlot=validation.sourceSlot;
+    connection.targetSlot=validation.targetSlot;
+    if(!validation.ok)return;
+    if(!connection.manufacturingRuleId){
+      this.createDesignHelper(connection,source,target);
+      return;
+    }
+    if(rule?.type==='ANGLE_BRACKET')this.rebuildAngleBracket(connection,rule,source,target);
+    else if(rule?.type==='INTERNAL_CONNECTOR'||rule?.type==='ANCHOR_CONNECTOR')this.rebuildInternalConnector(connection,rule,source,target);
+    else if(rule?.type==='CONNECTION_PLATE')this.rebuildConnectionPlate(connection,rule,source,target);
+    else this.rebuildEndScrew(connection,rule,source,target);
+  }
+
+  rebuildEndScrew(connection,rule,source,target) {
+    const parameters=buildConnectionParameters(connection.manufacturingRuleId,connection);
+    const sourceLength=Number(source.userData.part.dimensions.length);
+    const targetLength=Number(target.userData.part.dimensions.length);
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const localEnd=new THREE.Vector3(0,0,endToLocalZ(sourceLength,connection.sourceEnd));
+    const worldEnd=source.localToWorld(localEnd.clone());
+    const targetLocal=target.worldToLocal(worldEnd.clone());
+    const distanceFromStart=localZToStation(targetLength,targetLocal.z);
+    const offset=getFaceOffset(targetLocal,connection.targetFace);
+
+    this.editor.machiningManager.addEndTap(source,{end:connection.sourceEnd,tappingSize:parameters.tappingSize,depth:parameters.tappingDepth,generatedByConnectionId:connection.id});
+    const throughHole=this.editor.machiningManager.addThroughHole(target,{face:connection.targetFace,distanceFromStart,offset,diameter:parameters.throughHoleDiameter,generatedByConnectionId:connection.id});
+    if(parameters.headMachiningEnabled){
+      const common={face:connection.targetFace,distanceFromStart,offset,linkedHoleId:throughHole.id,generatedByConnectionId:connection.id};
+      if(parameters.headMachiningType==='COUNTERBORE')this.editor.machiningManager.addCounterbore(target,{...common,diameter:parameters.headDiameter,depth:parameters.headDepth});
+      else if(parameters.headMachiningType==='COUNTERSINK')this.editor.machiningManager.addCountersink(target,{...common,majorDiameter:parameters.headDiameter,angleDeg:parameters.headAngleDeg});
+    }
+    const normal=slotWorldNormal(target,connection.targetFace);
+    const fastenerPoint=worldEnd.clone().addScaledVector(normal,Number(rule?.hardware?.count||1)*2);
+    if(rule?.hardware?.washerSku){const washer=this.addGeneratedHardware(rule.hardware.washerSku,connection,fastenerPoint.clone().addScaledVector(normal,1.2),orientAlong(normal),`${target.userData.part.displayId} 垫片`,{face:connection.targetFace,stationS:distanceFromStart,offset});connection.generatedHardwareIds.push(washer.userData.part.id);}
+    if(rule?.hardware?.screwSku){const screw=this.addGeneratedHardware(rule.hardware.screwSku,connection,fastenerPoint.clone().addScaledVector(normal,4),orientAlong(normal),`${source.userData.part.displayId}-${target.userData.part.displayId} 端面螺钉`,{face:connection.targetFace,stationS:distanceFromStart,offset});connection.generatedHardwareIds.push(screw.userData.part.id);}
+    this.createHelper(connection,target,worldEnd);
+  }
+
+  rebuildAngleBracket(connection,rule,source,target) {
+    if(!rule?.hardware) return;
+    const sourceLength=Number(source.userData.part.dimensions.length);
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const localEnd=new THREE.Vector3(0,0,endToLocalZ(sourceLength,connection.sourceEnd));
+    const worldEnd=source.localToWorld(localEnd.clone());
+    const targetNormal=slotWorldNormal(target,connection.targetFace);
+    const sourceMountFace=connection.sourceMountFace||pickSourceMountFace(source,target,worldEnd);
+    const sourceMountNormal=slotWorldNormal(source,sourceMountFace);
+    const targetAxis=profileAxisWorld(target,'END');
+
+    // 角码本地 X/Y 分别对应两条腿的贴合面法向。旧实现把 X 轴错误地设成
+    // 两个面的叉积，导致角码在部分姿态下旋转 90°、无法真正贴住两侧型材。
+    const bracketX=sourceMountNormal.clone().normalize();
+    const bracketY=targetNormal.clone().normalize();
+    let bracketZ=new THREE.Vector3().crossVectors(bracketX,bracketY);
+    if(bracketZ.lengthSq()<1e-6)bracketZ=targetAxis.clone().normalize();
+    else bracketZ.normalize();
+    // 重新正交化 X，避免浮点误差让 L 型角码发生轻微扭斜。
+    bracketX.crossVectors(bracketY,bracketZ).normalize();
+    const basis=new THREE.Matrix4().makeBasis(bracketX,bracketY,bracketZ);
+    const bracketQuaternion=new THREE.Quaternion().setFromRotationMatrix(basis);
+    const bracketDef=getHardwareDefinition(rule.hardware.bracketSku);
+    const size=Number(bracketDef?.size||30);
+    const targetPoint=connection.targetSlot?.slotId?slotWorldPoint(target,connection.targetSlot):worldEnd.clone();
+    const sourcePoint=connection.sourceSlot?.slotId?slotWorldPoint(source,connection.sourceSlot):worldEnd.clone();
+    const bracketPos=targetPoint.clone().lerp(sourcePoint,0.5);
+    const bracket=this.addGeneratedHardware(rule.hardware.bracketSku,connection,bracketPos,bracketQuaternion,`${source.userData.part.displayId}-${target.userData.part.displayId} 角码`,{orientation:'AUTO_INNER'});
+    connection.generatedHardwareIds.push(bracket.userData.part.id);
+    connection.orientationResolved='INNER';
+
+    this.addFastenerStack(rule,connection,targetPoint,targetNormal,'目标槽',connection.targetSlot);
+    this.addFastenerStack(rule,connection,sourcePoint,sourceMountNormal,'源槽',connection.sourceSlot);
+  }
+
+  rebuildInternalConnector(connection,rule,source,target) {
+    const sourceLength=Number(source.userData.part.dimensions.length);
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const worldEnd=source.localToWorld(new THREE.Vector3(0,0,endToLocalZ(sourceLength,connection.sourceEnd)));
+    const targetPoint=connection.targetSlot?.slotId?slotWorldPoint(target,connection.targetSlot):worldEnd.clone();
+    const targetNormal=slotWorldNormal(target,connection.targetFace);
+    const sourceAxis=profileAxisWorld(source,connection.sourceEnd);
+    if(rule.source?.tap){
+      this.editor.machiningManager.addEndTap(source,{end:connection.sourceEnd,tappingSize:rule.source.tap.size,depth:rule.source.tap.depth,generatedByConnectionId:connection.id});
+    }
+    const connectorSku=rule.hardware?.connectorSku;
+    if(connectorSku){
+      const q=orientAlong(sourceAxis);
+      const connector=this.addGeneratedHardware(connectorSku,connection,targetPoint.clone().addScaledVector(sourceAxis,-8),q,`${source.userData.part.displayId}-${target.userData.part.displayId} ${rule.type==='ANCHOR_CONNECTOR'?'锚式':'内置'}连接件`,connection.targetSlot);
+      connection.generatedHardwareIds.push(connector.userData.part.id);
+    }
+    if(rule.type==='ANCHOR_CONNECTOR')this.addFastenerStack(rule,connection,targetPoint,targetNormal,'目标槽',connection.targetSlot);
+    else if(rule.hardware?.screwSku){
+      const screw=this.addGeneratedHardware(rule.hardware.screwSku,connection,targetPoint.clone().addScaledVector(targetNormal,3),orientAlong(targetNormal),`${source.userData.part.displayId}-${target.userData.part.displayId} 内置连接螺钉`,connection.targetSlot);
+      connection.generatedHardwareIds.push(screw.userData.part.id);
+    }
+    this.createHelper(connection,target,targetPoint);
+  }
+
+  rebuildConnectionPlate(connection,rule,source,target) {
+    const sourceLength=Number(source.userData.part.dimensions.length);
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const worldEnd=source.localToWorld(new THREE.Vector3(0,0,endToLocalZ(sourceLength,connection.sourceEnd)));
+    const targetPoint=connection.targetSlot?.slotId?slotWorldPoint(target,connection.targetSlot):worldEnd.clone();
+    const targetNormal=slotWorldNormal(target,connection.targetFace);
+    const sourceMountFace=connection.sourceMountFace||pickSourceMountFace(source,target,worldEnd);
+    const sourceNormal=slotWorldNormal(source,sourceMountFace);
+    const plateNormal=targetNormal.clone().add(sourceNormal);
+    if(plateNormal.lengthSq()<1e-6)plateNormal.copy(targetNormal);plateNormal.normalize();
+    const plate=this.addGeneratedHardware(rule.hardware.plateSku,connection,targetPoint.clone().addScaledVector(plateNormal,3),orientAlong(plateNormal),`${source.userData.part.displayId}-${target.userData.part.displayId} 连接板`,{orientation:'AUTO_INNER'});
+    connection.generatedHardwareIds.push(plate.userData.part.id);
+    const series=Number(profileSeries(source.userData.part)||30);
+    const plateHoles=[];
+    for(const sign of [-1,1]){
+      const targetRef={...connection.targetSlot,stationS:clamp(Number(connection.targetSlot?.stationS||0)+sign*series*0.32,0,Number(target.userData.part.dimensions.length))};
+      const tp=slotWorldPoint(target,targetRef);
+      this.addFastenerStack(rule,connection,tp,targetNormal,`目标槽${sign<0?'A':'B'}`,targetRef);
+      plateHoles.push({side:'TARGET',...slotReference(targetRef)});
+      const sourceStation=connection.sourceEnd==='START'?series*0.32:Number(source.userData.part.dimensions.length)-series*0.32;
+      const sourceRef={...connection.sourceSlot,face:sourceMountFace,stationS:clamp(sourceStation+sign*series*0.18,0,Number(source.userData.part.dimensions.length))};
+      const sp=slotWorldPoint(source,sourceRef);
+      this.addFastenerStack(rule,connection,sp,sourceNormal,`源槽${sign<0?'A':'B'}`,sourceRef);
+      plateHoles.push({side:'SOURCE',...slotReference(sourceRef)});
+    }
+    connection.plateMountPattern={type:'SLOT_FASTENER_PATTERN',holes:plateHoles};
+    plate.userData.part.mountPattern=structuredClone(connection.plateMountPattern);
+  }
+
+  addFastenerStack(rule,connection,point,normal,label,slot) {
+    if(!rule?.hardware)return;
+    const mountRef=slotReference(slot)||slot||null;
+    if(rule.hardware.tNutSku){
+      const nut=this.addGeneratedHardware(rule.hardware.tNutSku,connection,point.clone().addScaledVector(normal,-3),orientAlong(normal),`${label} T螺母`,mountRef);
+      connection.generatedHardwareIds.push(nut.userData.part.id);
+    }
+    if(rule.hardware.washerSku){
+      const washer=this.addGeneratedHardware(rule.hardware.washerSku,connection,point.clone().addScaledVector(normal,2),orientAlong(normal),`${label} 垫片`,mountRef);
+      connection.generatedHardwareIds.push(washer.userData.part.id);
+    }
+    if(rule.hardware.screwSku){
+      const screw=this.addGeneratedHardware(rule.hardware.screwSku,connection,point.clone().addScaledVector(normal,5),orientAlong(normal),`${label} 螺钉`,mountRef);
+      connection.generatedHardwareIds.push(screw.userData.part.id);
+    }
+  }
+
+  evaluateConnectionGeometry(source,target,rule,options={}) {
+    const errors=[];const warnings=[];
+    if(!source?.userData?.part||!target?.userData?.part)return {ok:false,errors:[{code:'MISSING_PROFILE',message:'连接源或目标型材不存在'}],warnings};
+    const sourcePart=source.userData.part;const targetPart=target.userData.part;
+    const sourceEnd=options.sourceEnd==='END'?'END':'START';
+    const targetFace=normalizeFace(options.targetFace||'FRONT');
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const sourceLength=Number(sourcePart.dimensions?.length||0);
+    const targetLength=Number(targetPart.dimensions?.length||0);
+    const worldEnd=source.localToWorld(new THREE.Vector3(0,0,endToLocalZ(sourceLength,sourceEnd)));
+    const targetLocal=target.worldToLocal(worldEnd.clone());
+    const sourceAxis=profileAxisWorld(source,sourceEnd);
+    const targetNormal=slotWorldNormal(target,targetFace);
+    const dot=Math.abs(THREE.MathUtils.clamp(sourceAxis.dot(targetNormal),-1,1));
+    const angleErrorDeg=THREE.MathUtils.radToDeg(Math.acos(dot));
+    const compatibility=rule?.compatibility||{};
+    if(!options.skipRuleCompatibility && compatibility.requireAxisNormalAlignment!==false&&angleErrorDeg>Number(compatibility.maxAngleErrorDeg??8)){
+      errors.push({code:'CONNECTION_AXIS_MISALIGNED',message:`源型材端轴与目标面法向偏差 ${round2(angleErrorDeg)}°，超过允许 ${Number(compatibility.maxAngleErrorDeg??8)}°`});
+    }
+    const plane=facePlaneCoordinate(targetPart,targetFace);
+    const coordinate=targetFace==='FRONT'||targetFace==='BACK'?targetLocal.y:targetLocal.x;
+    const contactGap=Math.abs(coordinate-plane);
+    if(!options.skipRuleCompatibility && contactGap>Number(compatibility.maxContactGapMm??12)){
+      errors.push({code:'CONNECTION_CONTACT_GAP',message:`源端与目标面间隙 ${round2(contactGap)}mm，超过允许 ${Number(compatibility.maxContactGapMm??12)}mm；请先吸附到目标面`});
+    }
+    const stationS=localZToStation(targetLength,targetLocal.z);
+    if(stationS<-0.01||stationS>targetLength+0.01)errors.push({code:'CONNECTION_STATION_OUT_OF_RANGE',message:`连接点 S=${round2(stationS)}mm 超出目标型材长度 0~${round2(targetLength)}mm`});
+
+    const targetSlotMatch=matchNearestSlot(target,targetFace,worldEnd,{toleranceMm:Number(compatibility.targetSlotCenterToleranceMm||Math.max(4,Number(profileSlotWidth(targetPart)||8)/2+1))});
+    const targetSlot=targetSlotMatch?{...slotReference(targetSlotMatch),actualOffset:targetSlotMatch.actualOffset,errorMm:targetSlotMatch.errorMm,matched:targetSlotMatch.matched}:null;
+    if(!options.skipRuleCompatibility && compatibility.requireTargetSlot && (!targetSlotMatch||!targetSlotMatch.matched)){
+      const error=targetSlotMatch?.errorMm;
+      errors.push({code:'TARGET_SLOT_NOT_ALIGNED',message:targetSlotMatch?`目标连接点未对准 ${targetFace} 面目录槽中心：偏差 ${round2(error)}mm，最近槽 ${targetSlotMatch.id}`:`目标型材 ${targetFace} 面没有可用槽位`});
+    }
+
+    const sourceMountFace=pickSourceMountFace(source,target,worldEnd);
+    const sourceSlotMatch=matchNearestSlot(source,sourceMountFace,worldEnd,{stationS:sourceEnd==='START'?0:sourceLength,toleranceMm:Number(compatibility.sourceSlotCenterToleranceMm||Math.max(4,Number(profileSlotWidth(sourcePart)||8)/2+1))});
+    const sourceSlot=sourceSlotMatch?{...slotReference(sourceSlotMatch),actualOffset:sourceSlotMatch.actualOffset,errorMm:sourceSlotMatch.errorMm,matched:sourceSlotMatch.matched}:null;
+    if(!options.skipRuleCompatibility && compatibility.requireSourceSlot && (!sourceSlotMatch||!sourceSlotMatch.matched)){
+      errors.push({code:'SOURCE_SLOT_NOT_ALIGNED',message:sourceSlotMatch?`源型材 ${sourceMountFace} 面未对准槽中心：偏差 ${round2(sourceSlotMatch.errorMm)}mm`:`源型材 ${sourceMountFace} 面没有可用槽位`});
+    }
+
+    const sourceSeries=profileSeries(sourcePart);const targetSeries=profileSeries(targetPart);
+    if(!options.skipRuleCompatibility && Array.isArray(compatibility.sourceSeries)&&!compatibility.sourceSeries.includes(sourceSeries))errors.push({code:'SOURCE_SERIES_NOT_SUPPORTED',message:`该规则要求源型材系列 ${compatibility.sourceSeries.join('/')}，当前为 ${sourceSeries||'未知'} 系列`});
+    if(!options.skipRuleCompatibility && Array.isArray(compatibility.targetSeries)&&!compatibility.targetSeries.includes(targetSeries))errors.push({code:'TARGET_SERIES_NOT_SUPPORTED',message:`该规则要求目标型材系列 ${compatibility.targetSeries.join('/')}，当前为 ${targetSeries||'未知'} 系列`});
+
+    if(!options.skipRuleCompatibility && rule?.hardware?.tNutSku && targetSlotMatch && !isHardwareCompatibleWithSlot(rule.hardware.tNutSku,targetSlotMatch.width)){
+      errors.push({code:'T_NUT_SLOT_MISMATCH',message:`${rule.hardware.tNutSku} 与目标槽宽 ${round2(targetSlotMatch.width)}mm 不匹配`});
+    }
+    if(angleErrorDeg>2&&angleErrorDeg<=Number(compatibility.maxAngleErrorDeg??8))warnings.push({code:'CONNECTION_ALIGNMENT_TOLERANCE',message:`连接轴线存在 ${round2(angleErrorDeg)}° 小偏差，建议吸附后再创建`});
+    if(targetSlotMatch && targetSlotMatch.errorMm>0.05 && targetSlotMatch.matched)warnings.push({code:'SLOT_AUTO_CENTERED',message:`连接件将从偏移 ${round2(targetSlotMatch.actualOffset)}mm 自动落到目录槽 ${targetSlotMatch.id}（${round2(targetSlotMatch.offset)}mm）`});
+    return {ok:errors.length===0,errors,warnings,angleErrorDeg:round2(angleErrorDeg),contactGapMm:round2(contactGap),sourceMountFace,sourceSlot,targetSlot};
+  }
+
+  addGeneratedHardware(sku,connection,position,quaternion,name,mountReference=null) {
+    const euler=new THREE.Euler().setFromQuaternion(quaternion,'XYZ');
+    const mesh=this.editor.addHardware(sku,{
+      name,position:{x:position.x,y:position.y,z:position.z},rotation:{x:euler.x,y:euler.y,z:euler.z},
+      select:false,captureHistory:false,generatedByConnectionId:connection.id,mountReference
+    });
+    if(mesh?.userData?.part && mountReference)mesh.userData.part.mountReference=structuredClone(mountReference);
+    return mesh;
+  }
+
+  removeGeneratedHardware(connection) {
+    const ids=new Set([...(connection?.generatedHardwareIds||[]),...this.editor.parts.filter(p=>p.generatedByConnectionId===connection?.id).map(p=>p.id)]);
+    for(const id of ids)this.editor.removePartByIdSilently?.(id);
+    if(connection)connection.generatedHardwareIds=[];
+  }
+
+  createDesignHelper(connection,source,target) {
+    const sourceLength=Number(source.userData.part.dimensions.length||0);
+    source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+    const worldEnd=source.localToWorld(new THREE.Vector3(0,0,endToLocalZ(sourceLength,connection.sourceEnd)));
+    const group=new THREE.Group();
+    group.name=`design-connection-helper-${connection.id}`;
+    group.userData.connectionId=connection.id;
+    const material=new THREE.MeshStandardMaterial({color:0x2f8f61,metalness:.18,roughness:.48,transparent:true,opacity:.62});
+    const normal=slotWorldNormal(target,connection.targetFace);
+    const sourceFace=connection.sourceMountFace||pickSourceMountFace(source,target,worldEnd);
+    const sourceNormal=slotWorldNormal(source,sourceFace);
+    const makeBox=(x,y,z,pos)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(x,y,z),material.clone());mesh.position.copy(pos);mesh.castShadow=true;group.add(mesh);return mesh;};
+    const size=Math.max(18,Number(designProfileSeries(source.userData.part)||30)*0.9);
+    if(connection.designType==='ANGLE_BRACKET'){
+      const a=makeBox(size,4,size,worldEnd.clone().addScaledVector(normal,5));
+      const b=makeBox(4,size,size,worldEnd.clone().addScaledVector(sourceNormal,5));
+      a.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),normal.clone().normalize());
+      b.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),sourceNormal.clone().normalize());
+    }else if(connection.designType==='CONNECTION_PLATE'){
+      const mesh=makeBox(size*1.5,4,size*1.5,worldEnd.clone().addScaledVector(normal,3));
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),normal.clone().normalize());
+    }else if(connection.designType==='END_SCREW'){
+      const mesh=new THREE.Mesh(new THREE.CylinderGeometry(4,4,size*.8,18),material.clone());
+      mesh.position.copy(worldEnd.clone().addScaledVector(normal,3));
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),normal.clone().normalize());
+      group.add(mesh);
+    }else{
+      const mesh=makeBox(size*.55,size*.55,size*.9,worldEnd.clone().addScaledVector(normal,2));
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal.clone().normalize());
+    }
+    this.editor.sceneManager.scene.add(group);
+    this.helperMeshes.set(connection.id,group);
+  }
+
+  createHelper(connection,target,worldPoint) {
+    const group=new THREE.Group();group.name=`connection-helper-${connection.id}`;group.userData.connectionId=connection.id;
+    const shaftMaterial=new THREE.MeshStandardMaterial({color:0x505862,metalness:.72,roughness:.28});
+    const headMaterial=new THREE.MeshStandardMaterial({color:0x676f78,metalness:.75,roughness:.25});
+    const shaft=new THREE.Mesh(new THREE.CylinderGeometry(3.8,3.8,18,20),shaftMaterial);
+    const head=new THREE.Mesh(new THREE.CylinderGeometry(8,8,3.2,24),headMaterial);head.position.y=10.5;group.add(shaft,head);
+    const normal=slotWorldNormal(target,connection.targetFace);
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),normal);group.position.copy(worldPoint).addScaledVector(normal,2.5);
+    group.traverse(object=>{if(object.isMesh){object.castShadow=true;object.receiveShadow=true;}});
+    this.editor.sceneManager.scene.add(group);this.helperMeshes.set(connection.id,group);
+  }
+
+  updateConnectionsForProfile(profileId){this.updateConnectionsForProfiles([profileId]);}
+  updateConnectionsForProfiles(profileIds=[]){const ids=new Set((profileIds||[]).filter(Boolean));if(!ids.size)return;const related=this.connections.filter(c=>ids.has(c.sourceProfileId)||ids.has(c.targetProfileId));for(const connection of related)this.rebuild(connection);}
+  removeConnection(connectionId){const c=this.connections.find(item=>item.id===connectionId);this.editor.machiningManager.removeGeneratedByConnection(connectionId);this.removeHelper(connectionId);if(c)this.removeGeneratedHardware(c);this.connections=this.connections.filter(item=>item.id!==connectionId);}
+  removeHelper(connectionId){const helper=this.helperMeshes.get(connectionId);if(!helper)return;this.editor.sceneManager.scene.remove(helper);helper.traverse(object=>{if(object.geometry)object.geometry.dispose();if(object.material){if(Array.isArray(object.material))object.material.forEach(m=>m.dispose());else object.material.dispose();}});this.helperMeshes.delete(connectionId);}
+  clear(){for(const c of [...this.connections])this.removeGeneratedHardware(c);for(const id of [...this.helperMeshes.keys()])this.removeHelper(id);this.connections=[];}
+  load(list=[]){
+    this.clear();
+    this.connections=structuredClone(list).map(connection=>{
+      const designType=String(connection.designType||connection.type||DEFAULT_DESIGN_CONNECTION_TYPE).toUpperCase();
+      if(!getDesignConnectionDefinition(designType))throw new Error(`工程包含未知设计连接方式：${designType}`);
+      const manufacturingRuleId=connection.manufacturingRuleId||null;
+      if(manufacturingRuleId){
+        const rule=getConnectionRule(manufacturingRuleId);
+        if(!rule||rule.type!==designType)throw new Error(`连接制造方案与设计连接类型不匹配：${manufacturingRuleId}`);
+      }
+      return {...connection,designType,type:designType,manufacturingRuleId,sourceEnd:connection.sourceEnd==='END'?'END':'START',targetFace:normalizeFace(connection.targetFace||'FRONT'),generatedHardwareIds:[]};
+    });
+    this.connections.forEach(connection=>this.rebuild(connection));
+  }
+  export(){return structuredClone(this.connections);}
+  assertSupportedProfiles(source,target){if(!source||!target)throw new Error('连接源和目标不能为空');if(source===target)throw new Error('连接源和目标不能是同一根型材');if(source.userData.part?.type!=='PROFILE'||target.userData.part?.type!=='PROFILE')throw new Error('参数化连接仅支持型材');if(!isLinearProfile(source.userData.part)||!isLinearProfile(target.userData.part))throw new Error('弯型材暂不支持自动参数化连接');}
+}
+
+function resetRuleDerivedState(connection){
+  const keys=[
+    'tappingSize','tappingDepth','throughHoleDiameter',
+    'headMachiningEnabled','headMachiningType','headDiameter','headDepth','headAngleDeg',
+    'countersinkEnabled','countersinkDiameter','countersinkDepth','countersinkAngleDeg',
+    'plateMountPattern','orientationResolved'
+  ];
+  for(const key of keys)delete connection[key];
+  connection.generatedHardwareIds=[];
+  connection.validation=null;
+  connection.status='PENDING';
+}
+
+function profileSeries(part){return designProfileSeries(part) || null;}
+function profileAxisWorld(mesh,end='END'){return new THREE.Vector3(0,0,end==='START'?-1:1).transformDirection(mesh.matrixWorld).normalize();}
+function facePlaneCoordinate(part,face){const [width,height]=part?.dimensions?.sectionSize||[0,0];if(face==='FRONT')return Number(height)/2;if(face==='BACK')return -Number(height)/2;if(face==='RIGHT')return Number(width)/2;return -Number(width)/2;}
+function pickSourceMountFace(source,target,worldEnd=null){
+  const faces=['FRONT','BACK','LEFT','RIGHT'];
+  const joint=worldEnd||source.getWorldPosition(new THREE.Vector3());
+  const targetCenter=target.getWorldPosition(new THREE.Vector3());
+  const desired=targetCenter.clone().sub(joint).normalize();
+  const part=source.userData?.part;
+  let best=null;let score=-Infinity;
+  for(const face of faces){
+    if(isProfileFaceClosed(part,face))continue;
+    const normal=slotWorldNormal(source,face);
+    const value=normal.dot(desired);
+    if(value>score){score=value;best=face;}
+  }
+  // 全部封边时保留确定性回退，随后 source-slot 校验会给出明确不可连接原因。
+  return best||'FRONT';
+}
+function orientAlong(normal){return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),normal.clone().normalize());}
+function round2(value){return Number(Number(value||0).toFixed(2));}
+function normalizeFace(face){const value=String(face||'FRONT').toUpperCase();return ['FRONT','BACK','LEFT','RIGHT'].includes(value)?value:'FRONT';}
+function clamp(value,min,max){return Math.max(min,Math.min(max,Number(value)));}

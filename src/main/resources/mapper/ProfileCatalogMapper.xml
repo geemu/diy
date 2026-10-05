@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.paic.stock.aluminumcad.mapper.ProfileCatalogMapper">
+
+    <resultMap id="ProfileCatalogResultMap" type="com.paic.stock.aluminumcad.domain.entity.ProfileCatalogItem">
+        <id property="id" column="id"/>
+        <result property="nominal" column="nominal"/>
+        <result property="variant" column="variant"/>
+        <result property="code" column="variant"/>
+        <result property="name" column="name"/>
+        <result property="series" column="series"/>
+        <result property="system" column="system"/>
+        <result property="sectionSize" column="section_size_json" typeHandler="com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler"/>
+        <result property="slotWidth" column="slot_width_mm"/>
+        <result property="slotDefinitions" column="slot_definitions_json" typeHandler="com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler"/>
+        <result property="wallThicknessOptions" column="wall_thickness_options_json" typeHandler="com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler"/>
+        <result property="defaultWallThickness" column="default_wall_thickness_mm"/>
+        <result property="alloy" column="alloy"/>
+        <result property="crossSectionStyle" column="cross_section_style"/>
+        <result property="sourceFamily" column="source_family"/>
+        <result property="note" column="note"/>
+        <result property="section" column="section_json" typeHandler="com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler"/>
+        <result property="enabled" column="enabled"/>
+        <result property="sortOrder" column="sort_order"/>
+    </resultMap>
+
+    <select id="list" resultMap="ProfileCatalogResultMap">
+        SELECT
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogColumns"/>
+        FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogTable"/>
+        <if test="!includeDisabled">
+            WHERE enabled = 1
+        </if>
+        ORDER BY
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogOrderBy"/>
+    </select>
+
+    <select id="findById" resultMap="ProfileCatalogResultMap">
+        SELECT
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogColumns"/>
+        FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogTable"/>
+        WHERE id = #{id}
+    </select>
+
+    <insert id="save">
+        INSERT INTO
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogTable"/>
+        (
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogInsertColumns"/>
+        )
+        VALUES
+        (
+            #{id},
+            #{nominal},
+            #{variant},
+            #{name},
+            #{series},
+            #{system},
+            #{sectionSize,typeHandler=com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler},
+            #{slotWidth},
+            #{slotDefinitions,typeHandler=com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler},
+            #{wallThicknessOptions,typeHandler=com.paic.stock.aluminumcad.config.typehandler.DoubleListJsonTypeHandler},
+            #{defaultWallThickness},
+            #{alloy},
+            #{crossSectionStyle},
+            #{sourceFamily},
+            #{note},
+            #{section,typeHandler=com.paic.stock.aluminumcad.config.typehandler.JsonNodeTypeHandler},
+            #{enabled},
+            #{sortOrder}
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogUpdateAssignments"/>
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM
+            <include refid="com.paic.stock.aluminumcad.mapper.BaseMapper.ProfileCatalogTable"/>
+        WHERE id = #{id}
+    </delete>
+
+</mapper>

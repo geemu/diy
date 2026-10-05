@@ -1,0 +1,7 @@
+target/
+data/*.db
+data/*.db-*
+!data/.gitkeep
+*.log
+.idea/
+*.iml

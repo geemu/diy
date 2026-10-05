@@ -1,0 +1,222 @@
+# 项目交接文档 — v0.63.0
+
+## v0.63 当前重点
+
+- 当前优先级是基础 DIY 建模体验，不继续优先扩装配手册或零件种类：用户必须能明确看出“是否对齐、是否贴合、是否干涉、松手后会发生什么”。
+- `SnapManager` 只负责几何候选、锁定和位移；红/绿实体关系由 `InterferenceFeedbackManager` 负责。绿色接触不是 Connection 事实，Cxxx 仍只能由 ConnectionManager/AutoConnectionResolver 创建。
+- 拖动真实穿透时默认阻止落位并回滚。任何后续新增的联动移动必须进入同一拖动快照，否则会出现主件回滚而从件残留的问题。
+- 连续轮廓的 `Assembly.parameters.points` 是逻辑设计尺寸事实；实体 PROFILE 可以为端面-侧面搭接而派生修剪，禁止为了消除角部碰撞反写逻辑轮廓点。
+- SINGLE / CONNECTED / ASSEMBLY 是移动编排策略，不新增 Part/Connection 类型。CONNECTED 通过已有 connections[] 图遍历。
+- 右键/接头/关系浮层全部必须做 viewport-safe 定位；删除、移动、复制等高频操作保持第一屏可达。
+- 空白画布右键必须保持空白上下文，不能因为场景仍有 selected 而回退到旧构件菜单。
+- `ProfileDrawTool` 的键盘输入属于当前绘制状态机：数字+Enter 精确长度，Backspace 撤回上一段，Esc 结束；撤回必须同步清理该段 Connection/Constraint。
+- SINGLE 移动只自动移除更新后状态为 INVALID 的关联 Connection；CONNECTED/ASSEMBLY 不执行该清理。
+- Schema 62 current-only；全中文；不做报价。
+
+## 1. 当前基线
+
+- 应用版本：**v0.63.0**
+- Project Schema：**62**
+- Schema 策略：**current-only；不维护历史兼容**
+- JDK：21
+- Spring Boot：4.1.1
+- 数据库：SQLite
+- 持久层：MyBatis + XML
+- 前端：Vue 3 Global Build + Three.js + ES Modules
+- 当前主题：**基础 DIY：移动 / 吸附 / 对齐 / 干涉 / 连续搭框 / 上下文编辑**
+
+## 1.0 v0.58 简单关系与安装示意基线
+
+- 轮廓简单关系保存于 `Assembly.parameters.simpleConstraints`，当前支持边等长、边平行和点对齐。
+- 这些关系属于 Contour Configurator 的玩家层能力，不得复制进全局 Constraint/Solver 形成第二套通用约束系统。
+- `Assembly.parameters.points` 继续是唯一轮廓几何事实源；简单关系只约束/联动 points 的编辑。
+- 插点/删点改变拓扑时清空简单关系；不要猜测旧边索引在新拓扑中的含义。
+- `ConnectionInstallationDiagram` v2 只生成展示 SVG，安装箭头、螺钉方向和拆卸顺序不得写回 Connection/Hardware。
+
+## 1.1 v0.57 轮廓直接编辑基线
+
+- `Assembly.parameters.points` 仍是参数化轮廓唯一事实源；派生 PROFILE 可以整框重建。
+- `ContourFrameManager` 负责点拖动、边长修改、边插点、点删除和覆盖层尺寸标签。
+- 正交轮廓修改边长时必须保持相邻边正交，不允许单独拉一根派生 PROFILE。
+- L/U/阶梯快捷模板只能调用 `ProfileDrawTool.createContourFrame()`，不得新建第二种轮廓 Part 类型。
+- `ConnectionInstallationDiagram` 只生成展示 SVG；连接和五金事实仍来自 Connection + ManufacturingIdentity。
+
+## 1.1 v0.53 交互基线
+
+- `AccessoryPlacementManager` 是标准配件的统一交互入口；不要重新做“选中宿主后立即安装”的第二套 UI。
+- 左侧配件库和右键“添加配件”都必须走同一 Placement Manager。
+- 连接/配件/加工统一约定：鼠标移动只预览，单击提交，退出键取消。
+- 配件 Ghost 必须在提交前做兼容/干涉快速判断；绿色可安装、红色不可安装。
+- `mountReference` 仍由 `AccessoryMountManager` 维护，Placement Manager 只编排交互。
+- v0.53 曾收敛为 4 个一级入口；**当前 v0.63 已按基础 CAD 高频操作重新拆分为 文件 / 编辑 / 视图 / 显示 / 移动步长（吸附） / 模型库 / 制造，以当前实现为准。**
+
+
+## 1.2 v0.56 参数化轮廓基线
+
+- `ContourFrameManager` 是轮廓框后续修改的唯一入口。
+- `Assembly.configurator=CONTOUR_FRAME`，`Assembly.parameters.points` 是轮廓事实源。
+- 禁止把单根轮廓派生型材的长度当作参数化事实源；点位/边长变化必须整框重建。
+- 整框重建时必须移除旧连接和连接派生五金，再由 `AutoConnectionResolver` 重建。
+- 装配播放的相机过渡只是 Presentation，禁止写回 Part transform。
+- 装配连接局部信息来自现有 Connection + ManufacturingIdentity，不创建第二套连接详情模型。
+
+## 2. 产品定位
+
+目标不是“小型 SolidWorks”，而是面向玩家和不会 CAD 用户的铝型材 Builder。80/20 IdeaBuilder 是主要产品交互标杆。
+
+```text
+设计截面
+ -> 拖放/绘制
+ -> 吸附
+ -> 设计连接
+ -> 板材/门/配件
+ -> 制造配置（真实材料 + 真实连接件/加工）
+ -> BOM / 加工 / 工程图 / 制造包
+```
+
+## 3. 当前架构决策
+
+### 3.1 每个版本按全新工程维护
+
+- `ProjectSchema.load()` 只接受 schema 62；
+- 不写 migration chain；
+- 不为旧 `profileSpec / ruleId` 做自动转换；
+- sample / tests / docs 必须和当前 Schema 同步。
+
+### 3.2 设计型材与制造型材分离
+
+设计阶段以 `DesignProfileCatalog.js` 为唯一设计目录：截面宽高、系列、槽位、槽宽、封边。
+
+PROFILE：
+
+```text
+designProfile.profileId   必填
+manufacturingProfile       设计阶段默认 null
+```
+
+制造配置由 `ManufacturingConfigurator.configureProfileGroup()` 按设计截面批量绑定真实 Profile Catalog 规格。
+
+### 3.3 设计连接与制造连接分离
+
+设计阶段合法连接类型：
+
+```text
+ANGLE_BRACKET
+INTERNAL_CONNECTOR
+ANCHOR_CONNECTOR
+CONNECTION_PLATE
+END_SCREW
+```
+
+Connection 核心字段：
+
+```text
+designType                 必填
+manufacturingRuleId         设计阶段默认 null
+sourceProfileId / targetProfileId
+sourceEnd / targetFace
+sourceSlot / targetSlot
+```
+
+AutoConnection 和 ConnectionPlacement 只能创建 `designType`，不得偷偷选择 M6/M8 规则。
+
+只有 `ManufacturingConfigurator -> ConnectionManager.configureManufacturingRule()` 才允许绑定真实连接规则，并由 `ConnectionManager.rebuild()` 生成真实五金与连接派生加工。
+
+### 3.4 制造配置顺序
+
+真实连接方案依赖真实型材：
+
+1. 先配置连接两端型材的 `manufacturingProfile`；
+2. 再选择 `manufacturingRuleId`；
+3. T 螺母等硬件按制造型材真实 `slotWidth` 校验；
+4. 更换制造型材后自动重新校验相关连接；
+5. 不兼容时清除旧制造规则并回到“待配置”。
+
+### 3.5 制造导出门禁
+
+`exportFactoryPackage()` 先检查 `manufacturingConfigurator.status().ready`。任何型材/连接尚未配置时打开制造配置页面并阻止正式制造包导出。
+
+`FactoryValidator` 继续作为正式生产检查：
+
+- `MANUFACTURING_PROFILE_UNCONFIGURED`：真实型材未映射；
+- `MANUFACTURING_CONNECTION_UNCONFIGURED`：真实连接方案未配置；
+- 配置完成后继续验证五金、加工、槽位、碰撞和装配完整性。
+
+### 3.6 手动连接仍是玩家操作
+
+`ConnectionPlacementManager.js`：选角码/内置/连接板等设计意图 -> hover Ghost -> 单击接头优先自动推断 -> 歧义时两点选择。
+
+普通用户不拖动/旋转真实角码模型。
+
+### 3.7 工作台布局不属于 Project Schema
+
+`WorkbenchLayoutManager.js` 只把面板宽度、浮动位置和工具条位置保存到 `localStorage`。这些属于用户本机界面偏好，禁止写入 Project JSON。布局变化必须触发浏览器 `resize`，保证 Three.js 相机/渲染器尺寸与新的画布区域一致。
+
+
+### 3.8 v0.52 交互反馈
+
+- `InterferenceFeedbackManager` 只负责设计阶段快速提示；正式制造碰撞仍以 `FactoryValidator` 为准。
+- 移动构件时红色 `BoxHelper` 表示干涉；落位后全局重新检查，问题未解除则红框继续保留。
+- 型材吸附预览由 `SnapManager.preview()` 计算候选，`SceneManager.showSnapPreview()` 只负责显示绿色源点/目标点/连接线，不提前改变业务坐标。
+- 右键菜单是“当前对象下一步能做什么”的入口，禁止再堆通用 CAD 命令；复杂编辑仍放浮动工具条或属性面板。
+- 顶部一级菜单固定收敛为 5 个：文件 / 设计 / 视图 / 制造 / 帮助。
+
+## 4. 当前关键领域链
+
+```text
+Project Model
+  -> DesignProfile / Anchor / Snap
+  -> Design Connection
+  -> ManufacturingConfigurator
+       -> ManufacturingProfile
+       -> ManufacturingRule
+  -> ConnectionManager rebuild
+       -> Hardware
+       -> Machining
+  -> Validation / BOM / Drawing / Factory Package
+```
+
+Three.js Mesh 只是视图和几何计算载体，不是持久化业务事实源。
+
+## 5. UI 原则
+
+- 页面用户文案使用中文；内部 enum/class/source 可英文。
+- 设计页不显示欧标/国标、壁厚、米重等制造属性。
+- 制造属性集中在“制造配置”页面。
+- 连接页只表达设计连接方式；真实角码、螺钉、螺母和加工在制造配置中确定。
+- 文件格式名 SVG/DXF/JSON 可作为技术格式名保留，但普通按钮/状态/检查文本不得直接显示 Warning/Error/Feature/Snap 等内部词。
+
+## 6. 报价范围
+
+用户明确：**报价相关先不要。**
+
+不做单价、总价、成本估算、供应商价格比较、订单和库存。
+
+## 7. v0.54 当前制造与装配基线
+
+1. `ManufacturingIdentityManager` 是制造编号唯一分配入口；禁止各导出器自行生成另一套编号。
+2. 编号前缀：P 型材、B 板材、S 光轴、A 独立配件、H 连接派生五金、C 连接、M 加工、G 组件。
+3. `AssemblyManager.normalizeAssembly()` 必须保留 `manufacturingCode`，保证保存/重开后组件编号稳定。
+4. `AssemblyInstructionGenerator` 先建立完整步骤，再把跨步骤连接归到较晚步骤；同一连接/五金不得在多个步骤重复。
+5. `EngineeringDrawingModel` 的 `tags` 使用制造编号；默认不标自动连接派生五金，五金通过 BOM/装配步骤追溯。
+6. 工程中心装配步骤支持定位、步骤高亮、分步爆炸和还原。
+7. v0.55 已完成 Contour Creator 基础版和装配步骤播放器；下一步优先轮廓编辑增强、连接详图和装配说明可读性，STEP 继续后置。
+
+### 7.1 v0.55 轮廓与装配播放基线
+
+- `ProfileDrawTool` 的 `CONTOUR` 是轮廓框唯一入口；不要另建独立 Mesh/Project 类型。
+- 轮廓完成后必须生成普通 PROFILE + Assembly，并复用 AutoConnection。
+- 闭合前必须至少 3 点；短边和自相交必须阻断。
+- `AssemblyPlaybackManager` 只属于 Presentation 层：禁止把播放偏移写回 Part transform。
+- 播放数据来源只允许使用 `AssemblyInstructionGenerator`；不要维护第二套步骤模型。
+- 未安装步骤可以临时隐藏，但退出播放必须完整恢复原可见性。
+
+## 8. 交付验证
+
+```bash
+find src/main/resources/static tools -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+for f in tools/verify-*.mjs; do node "$f"; done
+mvn clean test
+```
+
+若执行环境没有 Maven，必须明确写“未执行”，不得当成通过。

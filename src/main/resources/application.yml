@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: aluminum-cad
+  datasource:
+    url: jdbc:sqlite:./data/aluminum-cad.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:sql/schema.sql
+      data-locations: classpath:sql/data.sql
+      encoding: UTF-8
+      continue-on-error: false
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-handlers-package: com.paic.stock.aluminumcad.config.typehandler
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  port: 8080
+
+app:
+  vendor:
+    three-version: 0.155.0

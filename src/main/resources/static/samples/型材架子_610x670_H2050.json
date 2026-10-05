@@ -1,0 +1,1606 @@
+{
+  "metadata": {
+    "version": "0.63.0",
+    "generator": "Aluminum CAD Web",
+    "date": "2026-09-29T16:08:07.811Z",
+    "schemaVersion": 62,
+    "expectedStructuralBounds": {
+      "width": 610,
+      "depth": 670,
+      "height": 2050
+    }
+  },
+  "parts": [
+    {
+      "name": "30×60 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1741,
+        "y": -207.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 4.440892098500626e-16,
+        "y": -9.860761315262648e-32,
+        "z": -1.5707963267948968
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "ANODIZED",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "4c1a7f79-c9f0-4aba-a0d3-a0fd445d55f4",
+      "displayId": "P-04",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L2020",
+      "type": "PROFILE",
+      "position": {
+        "x": -1741,
+        "y": 787.5,
+        "z": -1128
+      },
+      "rotation": {
+        "x": 1.5707963267948968,
+        "y": 2.7755575615628914e-16,
+        "z": 1.5707963267948966
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 2020,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "24a02ae5-4876-454f-a7a6-7eb4c237fad3",
+      "displayId": "P-03",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 2020
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L2020",
+      "type": "PROFILE",
+      "position": {
+        "x": -1741,
+        "y": 787.5,
+        "z": -488
+      },
+      "rotation": {
+        "x": 1.5707963267948968,
+        "y": 2.7755575615628914e-16,
+        "z": 1.5707963267948966
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 2020,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "c95a17bb-6e1e-41d7-b5d6-fa7f337991a2",
+      "displayId": "P-03",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 2020
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L490",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": -207.5,
+        "z": -503
+      },
+      "rotation": {
+        "x": 1.5707963267948961,
+        "y": 1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "ANODIZED",
+      "dimensions": {
+        "length": 490,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "950ec9d6-86a3-4385-9925-e3bb04467c50",
+      "displayId": "P-04",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 490
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L490",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": -207.5,
+        "z": -1113
+      },
+      "rotation": {
+        "x": 1.5707963267948961,
+        "y": 1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "ANODIZED",
+      "dimensions": {
+        "length": 490,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "5058cb21-6378-415d-a0b0-77698bfcb788",
+      "displayId": "P-04",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 490
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L2020",
+      "type": "PROFILE",
+      "position": {
+        "x": -1191,
+        "y": 787.5,
+        "z": -1128
+      },
+      "rotation": {
+        "x": 1.5707963267948968,
+        "y": 2.7755575615628914e-16,
+        "z": 1.5707963267948966
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 2020,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "d48fe183-f6a4-489d-9a20-075650b3bb64",
+      "displayId": "P-03",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 2020
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L2020",
+      "type": "PROFILE",
+      "position": {
+        "x": -1191,
+        "y": 787.5,
+        "z": -488
+      },
+      "rotation": {
+        "x": 1.5707963267948968,
+        "y": 2.7755575615628914e-16,
+        "z": 1.5707963267948966
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 2020,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "6169bf86-6f5d-42a3-b653-a4a019c09ea7",
+      "displayId": "P-03",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 2020
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×60 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1191,
+        "y": -207.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 4.440892098500626e-16,
+        "y": -9.860761315262648e-32,
+        "z": -1.5707963267948968
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "ANODIZED",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          60
+        ]
+      },
+      "id": "d40e08c9-e52d-4866-a4b3-3de0ff744b78",
+      "displayId": "P-04",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3060",
+        "nominal": "3060",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L660",
+      "type": "PROFILE",
+      "position": {
+        "x": -1176,
+        "y": 1812.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 2.2204460492503128e-16,
+        "y": 2.220446049250313e-16,
+        "z": -3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 660,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "b249ae77-bb96-4ebb-b6f0-99990f4edca4",
+      "displayId": "P-09",
+      "machining": {
+        "active": true,
+        "referenceEnd": "start",
+        "tappingType": "both_ends",
+        "tappingSize": "M8",
+        "holes": [],
+        "tappingDepth": 12,
+        "matchingScrewEnabled": true,
+        "matchingScrewHeadType": "FLAT_COUNTERSUNK",
+        "matchingScrewLength": 12,
+        "matchingScrew2HeadType": "FLAT_COUNTERSUNK",
+        "matchingScrew2Length": 12,
+        "useSameScrew": true
+      },
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 660
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L660",
+      "type": "PROFILE",
+      "position": {
+        "x": -1756,
+        "y": 1812.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 2.2204460492503128e-16,
+        "y": 2.220446049250313e-16,
+        "z": -3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 660,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "4c8b727c-0a63-4421-8d29-d3dfb65ae744",
+      "displayId": "P-09",
+      "machining": {
+        "active": true,
+        "referenceEnd": "end",
+        "tappingType": "both_ends",
+        "tappingSize": "M8",
+        "holes": [],
+        "tappingDepth": 12,
+        "matchingScrewEnabled": true,
+        "matchingScrewHeadType": "FLAT_COUNTERSUNK",
+        "matchingScrewLength": 12,
+        "matchingScrew2HeadType": "FLAT_COUNTERSUNK",
+        "matchingScrew2Length": 12,
+        "useSameScrew": true
+      },
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 660
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 1812.5,
+        "z": -1128
+      },
+      "rotation": {
+        "x": 3.141592653589793,
+        "y": -1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "e8c2601d-e527-4c3a-a640-2d651e6e3712",
+      "displayId": "P-09",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 1812.5,
+        "z": -488
+      },
+      "rotation": {
+        "x": 3.141592653589793,
+        "y": -1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "5070731b-2a18-4a69-aa3b-e928cfddbbb5",
+      "displayId": "P-09",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1176,
+        "y": 152.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 9.957992501029596e-17,
+        "y": 2.2204460492503126e-16,
+        "z": 2.220446049250314e-16
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "b6df28b9-c84a-4106-8bfb-bcdf1a300ead",
+      "displayId": "P-13",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 152.5,
+        "z": -1098
+      },
+      "rotation": {
+        "x": -4.440892098500626e-16,
+        "y": 1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "cd5fb360-2ec2-47c0-a2f1-2ad4ae349545",
+      "displayId": "P-13",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1756,
+        "y": 152.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": 9.957992501029596e-17,
+        "y": 2.2204460492503126e-16,
+        "z": 2.220446049250314e-16
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "4b8eef8e-c360-4b2d-ac9f-24523f04f2e6",
+      "displayId": "P-13",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 152.5,
+        "z": -518
+      },
+      "rotation": {
+        "x": -4.440892098500626e-16,
+        "y": 1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "26ae541f-4998-4b6f-b11a-e3786f3554b5",
+      "displayId": "P-13",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1176,
+        "y": 519.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "ab0f225a-ed12-4444-b894-63b6fae21530",
+      "displayId": "P-28",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 519.5,
+        "z": -1098
+      },
+      "rotation": {
+        "x": 3.1415926535897922,
+        "y": -1.5707962934748871,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "d859877c-684f-4048-88a2-5468fa82c5bb",
+      "displayId": "P-29",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1756,
+        "y": 519.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "f6848a7f-fdfc-4706-b434-8b13f1f7433f",
+      "displayId": "P-28",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 519.5,
+        "z": -518
+      },
+      "rotation": {
+        "x": 3.1415926535897922,
+        "y": -1.5707962934748871,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "508a16f3-0242-42b9-88c6-0d9562592557",
+      "displayId": "P-29",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1756,
+        "y": 779.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "c73fc399-2c41-4b66-b934-419db1f1844a",
+      "displayId": "P-28",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 779.5,
+        "z": -518
+      },
+      "rotation": {
+        "x": 3.1415926535897922,
+        "y": -1.5707962934748871,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "69a3580a-0841-4033-9a19-296d92a77d31",
+      "displayId": "P-29",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1176,
+        "y": 779.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "4637e06c-5a33-4d9f-a75f-bbe6d3d2a518",
+      "displayId": "P-28",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 779.5,
+        "z": -1098
+      },
+      "rotation": {
+        "x": 3.1415926535897922,
+        "y": -1.5707962934748871,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "28a6e2c1-7685-43ef-b6ff-289af59fec3e",
+      "displayId": "P-29",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 1294.5,
+        "z": -518
+      },
+      "rotation": {
+        "x": 3.1415926535897922,
+        "y": -1.5707962934748871,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "26c85b5b-fb6e-488a-9d77-563519292d3a",
+      "displayId": "P-29",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1176,
+        "y": 1294.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "fc5f589c-a64d-49d3-9cbe-7930b28261ee",
+      "displayId": "P-28",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L550",
+      "type": "PROFILE",
+      "position": {
+        "x": -1466,
+        "y": 1294.5,
+        "z": -1098
+      },
+      "rotation": {
+        "x": 1.5707963267948966,
+        "y": 1.5707963267948966,
+        "z": 0
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 550,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "2f5e06dc-04d6-408d-a4e9-710587d564ca",
+      "displayId": "P-38",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 550
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    },
+    {
+      "name": "30×30 槽型材 L610",
+      "type": "PROFILE",
+      "position": {
+        "x": -1756,
+        "y": 1294.5,
+        "z": -808
+      },
+      "rotation": {
+        "x": -3.141592653589793,
+        "y": -2.2204460492503136e-16,
+        "z": 3.141592653589793
+      },
+      "color": "#d9d9d9",
+      "materialFinish": "STANDARD",
+      "dimensions": {
+        "length": 610,
+        "size": 30,
+        "sectionSize": [
+          30,
+          30
+        ]
+      },
+      "id": "0c3a939b-8175-4332-adec-c8102fea64af",
+      "displayId": "P-39",
+      "machiningItems": [],
+      "profilePath": {
+        "type": "LINE",
+        "length": 610
+      },
+      "hidden": false,
+      "locked": false,
+      "endCuts": {
+        "START": {
+          "angleDeg": 0,
+          "axis": "X"
+        },
+        "END": {
+          "angleDeg": 0,
+          "axis": "X"
+        }
+      },
+      "generatedByConnectionId": null,
+      "designProfile": {
+        "profileId": "DESIGN-3030",
+        "nominal": "3030",
+        "series": "30",
+        "slotWidth": 8,
+        "faceClosures": []
+      },
+      "manufacturingProfile": null
+    }
+  ],
+  "connections": [],
+  "schemaVersion": 62,
+  "profileSections": [],
+  "coordinateSystem": {
+    "version": 1,
+    "unit": "mm",
+    "lengthAxis": "Z",
+    "sectionWidthAxis": "X",
+    "sectionHeightAxis": "Y",
+    "profileLocalAxes": {
+      "X": "截面宽度方向",
+      "Y": "截面高度方向",
+      "Z": "型材长度方向 A→B"
+    },
+    "ends": {
+      "START": "A端 / local Z-",
+      "END": "B端 / local Z+"
+    },
+    "faces": {
+      "FRONT": "local Y+",
+      "BACK": "local Y-",
+      "RIGHT": "local X+",
+      "LEFT": "local X-"
+    },
+    "machining": {
+      "stationField": "distanceFromStart",
+      "stationMeaning": "从A端沿型材中心线量取的距离",
+      "offsetMeaning": "在加工面内，以截面中心线为0的偏移"
+    }
+  },
+  "manufacturing": {
+    "unit": "mm",
+    "strictExport": true,
+    "minimumEndDistanceMm": 8,
+    "duplicatePositionToleranceMm": 0.05
+  },
+  "editorState": {
+    "autosaveEnabled": true,
+    "annotations": {
+      "showOverall": true,
+      "showPartDimensions": true,
+      "showMachiningLabels": true,
+      "showMachiningDimensions": true,
+      "showUserDimensions": true
+    },
+    "machiningPatternDefaults": {
+      "count": 3,
+      "spacingMm": 50
+    },
+    "semanticConstraintSolverVersion": 8,
+    "multiConstraintIterationEnabled": true,
+    "constrainedDragEnabled": true,
+    "remainingMobilityVisible": true,
+    "mobilitySubspaceIntersectionVersion": 2,
+    "mobilityGizmoEnabled": true,
+    "profileDrawToolVersion": 3,
+    "featureSnapVersion": 2,
+    "drawingDefaults": {
+      "catalogId": "DESIGN-3030",
+      "plane": "XZ",
+      "orthogonal": true,
+      "gridSnap": true,
+      "gridStepMm": 10,
+      "fixedLengthMm": 0,
+      "boxWidthMm": 1000,
+      "boxDepthMm": 600,
+      "boxHeightMm": 1000
+    },
+    "assemblySystemVersion": 2,
+    "assemblyExplodedViewVersion": 1,
+    "assemblyDiagnosticsVersion": 1,
+    "dimensionSystemVersion": 2,
+    "engineeringDrawingSystemVersion": 2,
+    "engineeringDrawing": {
+      "projectName": "型材架子 610×670×2050",
+      "revision": "A",
+      "paper": "A3",
+      "sideView": "RIGHT"
+    },
+    "profileGripEditingVersion": 1,
+    "profileGripDefaults": {
+      "enabled": true,
+      "minLengthMm": 10,
+      "gridSnap": true,
+      "gridStepMm": 10,
+      "featureSnap": true,
+      "featureSnapDistanceMm": 28,
+      "axisSnapToleranceMm": 3
+    },
+    "engineeringDrawingDxfVersion": 1,
+    "hardwareBomVersion": 2,
+    "bomReportVersion": 1,
+    "designModelVersion": 1,
+    "connectionAnchorVersion": 1,
+    "connectionPlacementVersion": 1,
+    "machiningPlacementVersion": 1,
+    "contourFrameVersion": 5,
+    "assemblyPlaybackVersion": 2,
+    "workbenchMode": "BEGINNER",
+    "connectionInstallationDiagramVersion": 3,
+    "assemblyInstructionVersion": 2,
+    "contourRelationVisualizationVersion": 1,
+    "assemblyGuideDocumentVersion": 1
+  },
+  "constraints": [],
+  "assemblies": [],
+  "dimensions": []
+}

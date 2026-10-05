@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:file:aluminum-cad-test?mode=memory&cache=shared
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:sql/schema.sql
+      data-locations: classpath:sql/data.sql
+      encoding: UTF-8
+      continue-on-error: false
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-handlers-package: com.paic.stock.aluminumcad.config.typehandler
+  configuration:
+    map-underscore-to-camel-case: true
