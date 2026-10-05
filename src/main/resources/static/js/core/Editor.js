@@ -2721,12 +2721,23 @@ export default class Editor {
     const size = new THREE.Vector3();
     box.getCenter(center);
     box.getSize(size);
-    return {center,max:Math.max(size.x,size.y,size.z,500)};
+    return {center,max:Math.max(size.x,size.y,size.z,500),radius:size.length()/2};
   }
 
   fitView() {
-    const {center,max} = this.getCenterAndSize();
-    this.sceneManager.setView('iso', center, max * 1.65);
+    const {center,max,radius} = this.getCenterAndSize();
+    const manager=this.sceneManager;
+    const aspect=Math.max(.1,manager.container.clientWidth/Math.max(1,manager.container.clientHeight));
+    const paddedRadius=Math.max(radius||max*.866,250)*1.2;
+    if(manager.camera.isOrthographicCamera){
+      manager.camera.zoom=2200/(2*paddedRadius/Math.min(1,aspect));
+      manager.resize();
+    }
+    // 按包围球及较小视场角适配实际画布，窄画布也不能裁掉框架。
+    const verticalHalfFov=THREE.MathUtils.degToRad(manager.perspectiveCamera.fov/2);
+    const halfFov=Math.min(verticalHalfFov,Math.atan(Math.tan(verticalHalfFov)*aspect));
+    const distance=paddedRadius/Math.sin(halfFov);
+    this.sceneManager.setView('iso',center,distance/Math.hypot(.78,.62,.78));
   }
 
   viewDirection(direction) { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView(direction,center,max*1.65); }

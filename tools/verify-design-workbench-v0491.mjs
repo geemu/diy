@@ -53,7 +53,7 @@ for(const token of ['closeCadMenus','handleCadMenuPointerDown','function returnT
 }
 assert.ok(!html.includes('workbenchMode') && !app.includes('setWorkbenchMode'),'工作台不再区分模式');
 assert.ok(!html.includes('@click="openProfileCatalogManager"'),'设计页面不得暴露真实制造型材目录管理入口');
-for(const text of ['设计型材','设计时只选择截面、槽位和封边；真实材料在制造阶段再配置','选择一种方式后，直接点击接头附近','打孔、攻丝和开槽','精确连接与配合','更多加工']){
+for(const text of ['规格尺寸','先选规格，再点击预览开始绘制','选择一种方式后，直接点击接头附近','打孔、攻丝和开槽','精确连接与配合','更多加工']){
   assert.ok(html.includes(text),`工作台缺少中文交互：${text}`);
 }
 for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>Feature<','>Snap<','>Assembly<']){
@@ -62,7 +62,7 @@ for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.68.0',
+  version:'0.70.0',
   schema:62,
   currentOnly:true,
   designManufacturingSeparated:true,

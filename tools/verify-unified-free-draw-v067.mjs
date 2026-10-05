@@ -42,10 +42,10 @@ tool.start={point:origin};tool.hover=null;tool.cancelStep();assert.equal(tool.st
 const html=fs.readFileSync(path.join(root,'src/main/resources/static/index.html'),'utf8');
 const app=fs.readFileSync(path.join(root,'src/main/resources/static/js/app.js'),'utf8');
 assert.ok(!/startProfileDraw\('(DIAGONAL|LINE|POLYLINE)'/.test(html),'不保留分裂的绘制入口');
-const freePanel=html.slice(html.indexOf('<template v-if="quickPanel===\'draw\'">'),html.indexOf('<template v-if="quickPanel===\'build\'">'));
-assert.ok(!freePanel.includes('draw-mode-grid'));assert.ok(!freePanel.includes('contour-preset-card'));
+assert.ok(!html.includes("quickPanel==='draw'"),'自由绘制不再占用重复的左侧面板');
+assert.ok(html.includes('catalog-profile-preview')&&html.includes('class="transform-tool draw-tool"'),'右侧选材与画布续画共用 FREE');
 const buildPanel=html.slice(html.indexOf('<template v-if="quickPanel===\'build\'">'),html.indexOf('<template v-if="quickPanel===\'build\' ||'));
 for(const mode of ['RECTANGLE','BOX','CONTOUR'])assert.ok(buildPanel.includes(`startProfileDraw('${mode}')`));
 assert.ok(buildPanel.includes('contour-preset-card'));assert.ok(app.includes("startProfileDraw('FREE',{fixedLengthMm:Number(newProfile.length)})"));
 assert.ok(!app.includes("startProfileDraw('DIAGONAL')"));
-console.log(JSON.stringify({ok:true,version:'0.68.0',singleDrawEntry:true,axisAndDiagonal:true,modifierPriority:true,quickBuildPreserved:true}));
+console.log(JSON.stringify({ok:true,version:'0.70.0',singleDrawEntry:true,axisAndDiagonal:true,modifierPriority:true,quickBuildPreserved:true}));

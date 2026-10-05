@@ -73,11 +73,11 @@ assert.ok(pom.includes('<java.version>21</java.version>'));
 assert.ok(pom.includes('<groupId>tools.jackson.core</groupId>'));
 assert.ok(pom.includes('<artifactId>jackson-databind</artifactId>'));
 assert.ok(pom.includes('<artifactId>lombok</artifactId>'));
-assert.ok(pom.includes('<version>0.68.0</version>'));
+assert.ok(pom.includes('<version>0.70.0</version>'));
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.68.0',
+  version:'0.70.0',
   schema:62,
   javaStyle:'controller/domain/mapper/service/service.impl/config',
   jackson:3,

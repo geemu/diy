@@ -2,7 +2,7 @@ import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSyste
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.68.0';
+export const CURRENT_APP_VERSION = '0.70.0';
 
 /**
  * Current-only project schema gate.

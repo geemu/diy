@@ -188,7 +188,8 @@ export default class SceneManager {
     const height = Math.max(1, this.container.clientHeight);
     this.perspectiveCamera.aspect = width / height;
     this.perspectiveCamera.updateProjectionMatrix();
-    const vertical = 2200 / Math.max(this.orthographicCamera.zoom, 0.001);
+    // 正交缩放只由 camera.zoom 应用一次，调整窗口不能再重复除以 zoom。
+    const vertical = 2200;
     this.orthographicCamera.left = -vertical * width / height / 2;
     this.orthographicCamera.right = vertical * width / height / 2;
     this.orthographicCamera.top = vertical / 2;

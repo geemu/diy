@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>DIY 铝型材设计器</title>
-  <link rel="stylesheet" href="./css/app.css?v=0.68.0">
+  <link rel="stylesheet" href="./css/app.css?v=0.70.0">
   <script src="./vendor/vue/vue.global.js"></script>
   <script src="./vendor/jszip/jszip.min.js"></script>
-  <script src="./js/boot.js?v=0.68.0"></script>
+  <script src="./js/boot.js?v=0.70.0"></script>
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/controls/OrbitControls.js":"./vendor/three/examples/jsm/controls/OrbitControls.js","three/addons/controls/TransformControls.js":"./vendor/three/examples/jsm/controls/TransformControls.js"}}
   </script>
@@ -23,7 +23,7 @@
       </div>
       <nav class="cad-menubar" aria-label="主菜单">
         <details class="cad-menu"><summary>文件</summary><div class="cad-menu-popover wide">
-          <button @click="newProject">新建项目</button><button @click="importJson">打开项目</button><button @click="exportJson">保存项目 <kbd>控制键+S</kbd></button><span class="cad-menu-divider"></span><button @click="capturePng">导出当前视图</button><button @click="openEngineeringCenter('materials')">材料清单</button><button @click="openEngineeringCenter('drawing')">导出 / 工程图</button><span class="cad-menu-divider"></span><button @click="loadSample">打开鱼缸架示例</button>
+          <button @click="newProject">新建项目</button><button @click="renameProject">重命名工程</button><button @click="importJson">打开项目</button><button @click="exportJson">保存项目 <kbd>控制键+S</kbd></button><span class="cad-menu-divider"></span><button @click="capturePng">导出当前视图</button><button @click="openEngineeringCenter('materials')">材料清单</button><button @click="openEngineeringCenter('drawing')">导出 / 工程图</button><span class="cad-menu-divider"></span><button @click="loadSample">打开鱼缸架示例</button>
         </div></details>
         <details class="cad-menu"><summary>编辑</summary><div class="cad-menu-popover wide">
           <button @click="undo">撤销 <kbd>控制键+Z</kbd></button><button @click="redo">重做 <kbd>控制键+Y</kbd></button><span class="cad-menu-divider"></span><button @click="duplicateSelected" :disabled="!selectionCount">复制</button><button @click="mirrorSelection" :disabled="!selectionCount">镜像复制</button><button @click="groupSelection" :disabled="selectionCount<2">组合组件</button><button @click="ungroupSelection" :disabled="!selectionCount">解组</button><button @click="deleteSelected" :disabled="!selectionCount" class="danger">删除 <kbd>Del</kbd></button>
@@ -33,10 +33,10 @@
           <div class="cad-menu-caption">视角切换</div><button @click="viewIso">三维视角</button><button @click="toggleProjection">{{projection==='perspective'?'切换正交投影':'切换透视投影'}}</button><button @click="viewTop">顶视图</button><button @click="viewBottom">底视图</button><button @click="viewFront">前视图</button><button @click="viewRight">右视图</button><button @click="viewLeft">左视图</button><button @click="viewBack">后视图</button><span class="cad-menu-divider"></span><button @click="fitView">适配全部 <kbd>F</kbd></button>
         </div></details>
         <details class="cad-menu"><summary>显示</summary><div class="cad-menu-popover wide">
-          <button :class="{active:annotationOptions.showOverall}" @click="annotationOptions.showOverall=!annotationOptions.showOverall;updateAnnotationOptions()">{{annotationOptions.showOverall?'✓':'　'}} 外轮廓标注</button><button :class="{active:annotationOptions.showPartDimensions}" @click="annotationOptions.showPartDimensions=!annotationOptions.showPartDimensions;updateAnnotationOptions()">{{annotationOptions.showPartDimensions?'✓':'　'}} 构件尺寸标注</button><button :class="{active:annotationOptions.showMachiningLabels}" @click="annotationOptions.showMachiningLabels=!annotationOptions.showMachiningLabels;updateAnnotationOptions()">{{annotationOptions.showMachiningLabels?'✓':'　'}} 型材加工标识</button><span class="cad-menu-divider"></span><button :class="{active:gridEnabled}" @click="toggleGrid">{{gridEnabled?'✓':'　'}} 网格辅助</button><button :class="{active:workPlaneVisible}" @click="toggleWorkPlane">{{workPlaneVisible?'✓':'　'}} 工作平面</button><button @click="showAllParts">显示全部构件</button><button @click="resetWorkbenchLayout">复位工作台布局</button>
+          <button :class="{active:annotationOptions.showOverall}" @click="annotationOptions.showOverall=!annotationOptions.showOverall;updateAnnotationOptions()" :aria-pressed="annotationOptions.showOverall"><span>外轮廓标注</span><span class="menu-state" aria-hidden="true">{{annotationOptions.showOverall?'✓':''}}</span></button><button :class="{active:annotationOptions.showPartDimensions}" @click="annotationOptions.showPartDimensions=!annotationOptions.showPartDimensions;updateAnnotationOptions()" :aria-pressed="annotationOptions.showPartDimensions"><span>构件尺寸标注</span><span class="menu-state" aria-hidden="true">{{annotationOptions.showPartDimensions?'✓':''}}</span></button><button :class="{active:annotationOptions.showMachiningLabels}" @click="annotationOptions.showMachiningLabels=!annotationOptions.showMachiningLabels;updateAnnotationOptions()" :aria-pressed="annotationOptions.showMachiningLabels"><span>型材加工标识</span><span class="menu-state" aria-hidden="true">{{annotationOptions.showMachiningLabels?'✓':''}}</span></button><span class="cad-menu-divider"></span><button :class="{active:gridEnabled}" @click="toggleGrid" :aria-pressed="gridEnabled"><span>网格辅助</span><span class="menu-state" aria-hidden="true">{{gridEnabled?'✓':''}}</span></button><button :class="{active:workPlaneVisible}" @click="toggleWorkPlane" :aria-pressed="workPlaneVisible"><span>工作平面</span><span class="menu-state" aria-hidden="true">{{workPlaneVisible?'✓':''}}</span></button><button @click="showAllParts">显示全部构件</button><button @click="resetWorkbenchLayout">复位工作台布局</button>
         </div></details>
         <details class="cad-menu"><summary>移动步长（吸附）</summary><div class="cad-menu-popover wide">
-          <button :class="{active:!snapEnabled}" @click="toggleSnap">{{!snapEnabled?'✓':'　'}} 关闭几何吸附</button><span class="cad-menu-divider"></span><button :class="{active:movementStepMm===0}" @click="setMovementStep(0)">{{movementStepMm===0?'✓':'　'}} 自由移动</button><button :class="{active:movementStepMm===1}" @click="setMovementStep(1)">{{movementStepMm===1?'✓':'　'}} 1 mm</button><button :class="{active:movementStepMm===5}" @click="setMovementStep(5)">{{movementStepMm===5?'✓':'　'}} 5 mm</button><button :class="{active:movementStepMm===10}" @click="setMovementStep(10)">{{movementStepMm===10?'✓':'　'}} 10 mm</button><button :class="{active:movementStepMm===50}" @click="setMovementStep(50)">{{movementStepMm===50?'✓':'　'}} 50 mm</button><span class="cad-menu-divider"></span><div class="cad-menu-caption">拖动时按住 Ctrl 临时绕过几何吸附</div>
+          <button :class="{active:!snapEnabled}" @click="toggleSnap" :aria-pressed="!snapEnabled"><span>关闭几何吸附</span><span class="menu-state" aria-hidden="true">{{!snapEnabled?'✓':''}}</span></button><span class="cad-menu-divider"></span><button :class="{active:movementStepMm===0}" @click="setMovementStep(0)" :aria-pressed="movementStepMm===0"><span>自由移动</span><span class="menu-state" aria-hidden="true">{{movementStepMm===0?'✓':''}}</span></button><button :class="{active:movementStepMm===1}" @click="setMovementStep(1)" :aria-pressed="movementStepMm===1"><span>1 mm</span><span class="menu-state" aria-hidden="true">{{movementStepMm===1?'✓':''}}</span></button><button :class="{active:movementStepMm===5}" @click="setMovementStep(5)" :aria-pressed="movementStepMm===5"><span>5 mm</span><span class="menu-state" aria-hidden="true">{{movementStepMm===5?'✓':''}}</span></button><button :class="{active:movementStepMm===10}" @click="setMovementStep(10)" :aria-pressed="movementStepMm===10"><span>10 mm</span><span class="menu-state" aria-hidden="true">{{movementStepMm===10?'✓':''}}</span></button><button :class="{active:movementStepMm===50}" @click="setMovementStep(50)" :aria-pressed="movementStepMm===50"><span>50 mm</span><span class="menu-state" aria-hidden="true">{{movementStepMm===50?'✓':''}}</span></button><span class="cad-menu-divider"></span><div class="cad-menu-caption">拖动时按住 Ctrl 临时绕过几何吸附</div>
         </div></details>
         <details class="cad-menu"><summary>模型库</summary><div class="cad-menu-popover wide">
           <button class="accent" @click="openQuickPanel('build')">快速设计</button><button @click="openResource('profile')">铝材</button><button @click="openResource('connection')">连接</button><button @click="openResource('panel')">板材</button><button @click="openResource('accessory')">配件</button><button @click="openResource('machining')">加工</button>
@@ -46,7 +46,7 @@
         </div></details>
         <details class="cad-menu"><summary>帮助</summary><div class="cad-menu-popover"><button @click="showShortcutHelp=true">快捷键与操作说明</button><button @click="resetWorkbenchLayout">复位工作台布局</button></div></details>
       </nav>
-      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.68.0</span></div>
+      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.70.0</span></div>
       <div class="topbar-actions compact"><button class="icon-button" title="撤销 控制键+Z" @click="undo">↶</button><button class="icon-button" title="重做 控制键+Y" @click="redo">↷</button><button class="top-action primary" @click="exportFactoryPackage">制造输出</button></div>
       <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="handleFile">
       <input ref="sectionDxfInput" type="file" accept=".dxf,application/dxf,text/plain" hidden @change="handleSectionDxf">
@@ -54,14 +54,14 @@
 
     <div class="workspace" :data-right-mode="rightPanelMode" :style="{'--quick-track':quickPanel?'280px':'0px'}">
       <nav class="tool-rail cad-tool-rail" aria-label="快捷搭建与批量操作">
-        <button class="rail-tool" :class="{active:quickPanel==='build'}" @click="openQuickPanel('build')" title="按用途和尺寸快速生成框架"><span class="rail-icon">▦</span><span>快捷搭建</span></button>
-        <button class="rail-tool" :class="{active:quickPanel==='batch'}" @click="openQuickPanel('batch')" title="复制、线性阵列、镜像、圆周阵列"><span class="rail-icon">⧉</span><span>批量操作</span></button>
-        <button class="rail-tool" @click="completeExistingConnections" :disabled="stats.profiles<2" title="扫描现有结构并补全连接"><span class="rail-icon">∟</span><span>补全连接</span></button>
-        <button class="rail-tool" @click="groupSelection" :disabled="selectionCount<2" title="将所选构件组合成组件"><span class="rail-icon">▣</span><span>组合组件</span></button>
+        <button class="rail-tool" :class="{active:quickPanel==='build'}" @click="openQuickPanel('build')" title="按用途和尺寸快速生成框架"><span class="rail-icon workbench-icon" v-html="workbenchIcon('build')"></span><span>快捷搭建</span></button>
+        <button class="rail-tool" :class="{active:quickPanel==='batch'}" @click="openQuickPanel('batch')" title="复制、线性阵列、镜像、圆周阵列"><span class="rail-icon workbench-icon" v-html="workbenchIcon('batch')"></span><span>批量操作</span></button>
+        <button class="rail-tool" @click="completeExistingConnections" :disabled="stats.profiles<2" title="扫描现有结构并补全连接"><span class="rail-icon workbench-icon" v-html="workbenchIcon('connection')"></span><span>补全连接</span></button>
+        <button class="rail-tool" @click="groupSelection" :disabled="selectionCount<2" title="将所选构件组合成组件"><span class="rail-icon workbench-icon" v-html="workbenchIcon('group')"></span><span>组合组件</span></button>
         <span class="rail-divider"></span>
-        <button class="rail-tool" @click="runFactoryValidation" title="检查结构和制造问题"><span class="rail-icon">✓</span><span>检查</span></button>
-        <button class="rail-tool" :class="{active:measureMode}" @click="toggleMeasure" title="测量"><span class="rail-icon">⌁</span><span>测量</span></button>
-        <button class="rail-tool" @click="fitView" title="适配视图"><span class="rail-icon">⌗</span><span>适配</span></button>
+        <button class="rail-tool" @click="runFactoryValidation" title="检查结构和制造问题"><span class="rail-icon workbench-icon" v-html="workbenchIcon('check')"></span><span>检查</span></button>
+        <button class="rail-tool" :class="{active:measureMode}" @click="toggleMeasure" title="测量"><span class="rail-icon workbench-icon" v-html="workbenchIcon('measure')"></span><span>测量</span></button>
+        <button class="rail-tool" @click="fitView" title="适配视图"><span class="rail-icon workbench-icon" v-html="workbenchIcon('fit')"></span><span>适配</span></button>
       </nav>
       <aside v-show="quickPanel" class="quick-operation-panel" :data-operation="quickPanel">
         <div class="quick-operation-heading"><strong>{{quickPanel==='batch'?'批量操作':'快捷搭建'}}</strong><button @click="quickPanel=''" title="收起快捷操作">×</button></div>
@@ -144,7 +144,7 @@
         </div>
         <div class="panel-resize-handle panel-resize-left" data-layout-resize="library" title="拖动调整面板宽度"></div>
         <div class="right-workbench-tabs"><button :class="{active:rightPanelMode==='create'}" @click="showRightPanel('create')">创建</button><button :class="{active:rightPanelMode==='modify'}" @click="showRightPanel('modify')">修改</button></div>
-        <div class="resource-category-tabs" aria-label="组件类别"><button v-for="item in resourceCategories" :key="item.id" :class="{active:activeLibrary===item.id}" @click="openResource(item.id)" :title="item.id==='machining'?'打孔、攻丝和开槽':item.label"><span>{{item.icon}}</span>{{item.label}}</button></div>
+        <div class="resource-category-tabs" aria-label="组件类别"><button v-for="item in resourceCategories" :key="item.id" :class="{active:activeLibrary===item.id}" @click="openResource(item.id)" :title="item.id==='machining'?'打孔、攻丝和开槽':item.label"><span class="workbench-icon" v-html="workbenchIcon(item.id)"></span>{{item.label}}</button></div>
         <template v-if="activeLibrary==='profile'">
           <div class="profile-catalog-content">
             <div class="field-stack"><label for="design-profile-choice">规格尺寸</label><select id="design-profile-choice" v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in designProfiles" :key="item.id" :value="item.id">{{item.name}} · 槽宽 {{item.slotWidth}} mm</option></select></div>
@@ -160,7 +160,6 @@
             <details class="free-draw-options"><summary>绘制设置</summary><div class="field-stack"><label>斜杆所在面</label><select v-model="drawForm.plane" @change="drawOptionsChanged"><option value="XZ">水平面</option><option value="XY">正面</option><option value="YZ">侧面</option></select></div><label class="inline-check"><input type="checkbox" v-model="drawForm.gridSnap" @change="drawOptionsChanged">网格 {{drawForm.gridStepMm}} mm</label><div class="field-stack"><label>固定长度（0 表示不限）</label><input type="number" min="0" v-model.number="drawForm.fixedLengthMm" @change="drawOptionsChanged"></div><p class="muted-note">X/Y/Z 锁轴 · Alt 斜向 · Shift 正交 · Ctrl 临时不吸附</p></details>
             <button class="soft-button full" @click="openInspectorForNewProfile">{{profileAdvanced ? '收起截面设置' : '封边 / 弯型设置'}}</button>
             <div v-if="profileAdvanced" class="advanced-profile">
-              <div class="field-stack"><label>设计截面</label><select v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in designProfiles" :key="item.id" :value="item.id">{{item.name}}</option></select></div>
               <div class="field-stack"><label>封边面</label><div class="draw-toggle-row face-closure-row"><label v-for="face in ['FRONT','BACK','LEFT','RIGHT']" :key="face"><input type="checkbox" :checked="newProfile.faceClosures.includes(face)" @change="toggleNewProfileFaceClosure(face)"> {{({FRONT:'正面',BACK:'背面',LEFT:'左侧',RIGHT:'右侧'})[face]}}</label></div><small>封边后该侧不再提供槽位连接吸附。</small></div>
               <div class="field-stack"><label>形状</label><select v-model="newProfile.pathType"><option value="LINE">直型材</option><option value="ARC">弯型材</option></select></div>
               <template v-if="newProfile.pathType==='ARC'">
@@ -173,21 +172,32 @@
         </template>
 
         <template v-else-if="activeLibrary==='shaft'">
-          <div class="panel-heading"><div><h2>光轴</h2><p>常用镀铬光轴与圆杆</p></div></div>
-          <div class="form-card">
-            <label>直径</label>
-            <div class="choice-grid">
-              <button v-for="d in shaftDiameters" :key="d" class="choice" :class="{active:newShaft.diameter===d}" @click="newShaft.diameter=d">Ø{{d}}</button>
-            </div>
-            <div class="field-stack"><label>长度 mm</label><input type="number" min="10" v-model.number="newShaft.length"></div>
-            <div class="field-stack"><label>材质</label><select v-model="newShaft.material"><option>45#钢</option><option>304不锈钢</option><option>铝合金</option></select></div>
-            <button class="primary-button full" @click="addShaft">添加光轴</button>
+          <div class="catalog-component-content">
+            <div class="field-stack"><label for="shaft-diameter">光轴规格（直径）</label><select id="shaft-diameter" v-model.number="newShaft.diameter"><option v-for="d in shaftDiameters" :key="d" :value="d">Φ{{d}} mm 光轴</option></select></div>
+            <div class="field-stack"><label for="shaft-material">材质</label><select id="shaft-material" v-model="newShaft.material"><option>45#钢</option><option>304不锈钢</option><option>铝合金</option></select></div>
+            <button class="catalog-profile-preview" @click="addShaft" :aria-label="'添加 Φ'+newShaft.diameter+' mm 光轴'">
+              <span class="catalog-preview-head"><span>光轴预览</span><strong>Φ{{newShaft.diameter}} mm 光轴</strong></span>
+              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
+              <span class="catalog-preview-foot"><span>{{newShaft.material}} · 长 {{newShaft.length}} mm</span><strong>点击添加</strong></span>
+            </button>
+            <p class="catalog-draw-hint">选择规格和长度，点击预览添加到画布，再用移动工具调整位置。</p>
+            <div class="field-stack"><label for="shaft-length">长度（mm）</label><input id="shaft-length" type="number" min="10" v-model.number="newShaft.length"></div>
           </div>
-          <div class="info-card"><strong>提示</strong><p>光轴使用与型材一致的局部 Z 长度轴，可与框架混合建模。</p></div>
         </template>
 
         <template v-else-if="activeLibrary==='panel'">
-          <div class="panel-heading"><div><h2>板材与门</h2><p>手工板材 · 框口填板 · 门组件</p></div></div>
+          <div class="catalog-component-content">
+            <div class="field-stack"><label>板材形状</label><select aria-label="板材形状"><option>矩形板材</option></select></div>
+            <div class="field-stack"><label for="panel-material">材质</label><select id="panel-material" v-model="newPanel.material"><option>木饰面板</option><option>亚克力</option><option>铝板</option><option>钢板</option></select></div>
+            <div class="field-pair"><div><label for="panel-width">宽（mm）</label><input id="panel-width" type="number" min="1" v-model.number="newPanel.width"></div><div><label for="panel-height">高（mm）</label><input id="panel-height" type="number" min="1" v-model.number="newPanel.height"></div></div>
+            <div class="field-stack"><label for="panel-thickness">厚（mm）</label><input id="panel-thickness" type="number" min="0.5" step="0.5" v-model.number="newPanel.thickness"></div>
+            <button class="catalog-profile-preview" @click="addPanel" aria-label="添加自由板材">
+              <span class="catalog-preview-head"><span>板材预览</span><strong>{{newPanel.width}}×{{newPanel.height}}×{{newPanel.thickness}} mm</strong></span>
+              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
+              <span class="catalog-preview-foot"><span>{{newPanel.material}} · 矩形</span><strong>点击添加</strong></span>
+            </button>
+            <p class="catalog-draw-hint">按尺寸添加独立板材；需要填充框口或生成门组件时，展开下面的框口工具。</p>
+            <details class="advanced-options"><summary>框口填板 / 门组件</summary>
           <div class="form-card">
             <div class="generator-title compact"><span>▣</span><div><strong>框口自动填板</strong><p>控制键 / 换挡键 选择围成矩形的 4 根直线型材</p></div></div>
             <div class="field-pair"><div><label>四边间隙 mm</label><input type="number" min="0" v-model.number="panelFitForm.clearanceMm"></div><div><label>厚度 mm</label><input type="number" min="0.5" v-model.number="panelFitForm.thickness"></div></div>
@@ -202,54 +212,41 @@
             <div class="inline-checks"><label><input type="checkbox" v-model="doorForm.includeHinges"> 自动加铰链</label><label><input type="checkbox" v-model="doorForm.includeHandle"> 自动加拉手</label></div>
             <button class="primary-button full" @click="createDoorFromOpening">按所选框口生成门组件</button>
           </div>
-          <div class="form-card">
-            <div class="generator-title compact"><span>□</span><div><strong>自由板材</strong><p>不依赖框口，按精确尺寸直接添加</p></div></div>
-            <div class="field-pair"><div><label>宽 mm</label><input type="number" v-model.number="newPanel.width"></div><div><label>高 mm</label><input type="number" v-model.number="newPanel.height"></div></div>
-            <div class="field-pair"><div><label>厚 mm</label><input type="number" v-model.number="newPanel.thickness"></div><div><label>材质</label><select v-model="newPanel.material"><option>木饰面板</option><option>亚克力</option><option>铝板</option><option>钢板</option></select></div></div>
-            <button class="soft-button full" @click="addPanel">添加自由板材</button>
-          </div>
-          <div class="asset-presets">
-            <button @click="applyPanelPreset(18,'木饰面板')">18mm 木板</button>
-            <button @click="applyPanelPreset(5,'亚克力')">5mm 亚克力</button>
-            <button @click="applyPanelPreset(2,'铝板')">2mm 铝板</button>
+            </details>
+            <div class="asset-presets"><button @click="applyPanelPreset(18,'木饰面板')">18mm 木板</button><button @click="applyPanelPreset(5,'亚克力')">5mm 亚克力</button><button @click="applyPanelPreset(2,'铝板')">2mm 铝板</button></div>
           </div>
         </template>
 
         <template v-else-if="activeLibrary==='accessory'">
-          <div class="panel-heading accessory-heading">
-            <div><h2>标准配件</h2><p>端盖 · 脚杯 · 福马轮 · 抽屉滑轨</p></div>
-            <div class="heading-actions">
-              <button class="heading-text-button" @click="openAccessoryCatalogManager" title="管理数据库配件">管理</button>
-              <button class="heading-icon" :class="{loading:accessoryCatalogLoading}" @click="loadAccessoryCatalog()" title="刷新配件库">↻</button>
-            </div>
+          <div class="catalog-component-content">
+            <div class="field-stack"><label for="accessory-category">配件类型</label><select id="accessory-category" v-model="accessoryCategory"><option v-for="item in accessoryCategoryOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <div class="field-stack"><label for="accessory-search">搜索配件</label><input id="accessory-search" v-model.trim="accessorySearch" placeholder="搜索型号 / 名称"></div>
+            <div class="field-stack"><label for="accessory-choice">配件规格</label><select id="accessory-choice" :value="selectedCatalogAccessory?.id" @change="catalogAccessoryId=Number($event.target.value)" :disabled="!visibleAccessories.length"><option v-for="item in visibleAccessories" :key="item.id" :value="item.id">{{item.name}}</option></select></div>
+            <button v-if="selectedCatalogAccessory" class="catalog-profile-preview" title="点位置安装" @click="mountCatalogAccessory(selectedCatalogAccessory)" :aria-label="'放置 '+selectedCatalogAccessory.name">
+              <span class="catalog-preview-head"><span>配件预览</span><strong>{{selectedCatalogAccessory.name}}</strong></span>
+              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
+              <span class="catalog-preview-foot"><span>{{accessoryCategoryLabel(selectedCatalogAccessory.category)}}</span><strong>{{accessoryPlacementState.active?'重新选中':'点击选中'}}</strong></span>
+            </button>
+            <div v-else class="empty-library"><p>{{accessoryCatalogLoading?'正在加载配件…':'没有匹配的配件，试试其他分类或关键词'}}</p></div>
+            <p class="catalog-draw-hint">点击预览后，移到型材或板材上预览安装位置；绿色表示可安装，单击确认，Esc 取消。</p>
+            <div class="catalog-secondary-actions"><button class="soft-button" :disabled="!selectedCatalogAccessory" @click="addCatalogAccessory(selectedCatalogAccessory)">自由添加</button><button class="soft-button" @click="openAccessoryCatalogManager">管理配件</button><button class="soft-button" :disabled="accessoryCatalogLoading" @click="loadAccessoryCatalog()">刷新</button></div>
+            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">退出配件放置</button>
           </div>
-          <div class="search-box accessory-search">
-            <span>⌕</span><input v-model.trim="accessorySearch" placeholder="搜索型号 / 名称 / 分类">
-          </div>
-          <div class="accessory-category-filter">
-            <button v-for="item in accessoryCategoryOptions" :key="item.value" :class="{active:accessoryCategory===item.value}" @click="accessoryCategory=item.value">{{item.label}}</button>
-          </div>
-          <div class="library-scroll accessory-catalog-list">
-            <div v-for="item in visibleAccessories" :key="item.id" class="accessory-catalog-card">
-              <span class="accessory-catalog-icon">{{item.category==='END_CAP'?'■':item.category==='FOOT'?'⌖':item.category==='CASTER'?'◉':'▰'}}</span>
-              <span class="accessory-catalog-main">
-                <strong>{{item.name}}</strong>
-                <small>{{accessoryCategoryLabel(item.category)}}</small>
-              </span>
-              <span class="accessory-catalog-actions">
-                <button @click="addCatalogAccessory(item)" title="以自由构件添加到画布中心">自由添加</button>
-                <button class="primary" :class="{placing:accessoryPlacementState.active&&accessoryPlacementState.definitionId===String(item.model||item.id)}" @click="mountCatalogAccessory(item)" title="移动到可安装位置，预览后单击确认">放置</button>
-              </span>
-            </div>
-            <div v-if="!accessoryCatalogLoading && !visibleAccessories.length" class="empty-library"><span>◇</span><p>当前分类没有可用配件</p></div>
-          </div>
-          <div class="info-card accessory-tip"><strong>点位置安装</strong><p>选择配件后直接把鼠标移到型材或板材上。绿色表示可安装，红色表示不兼容或会干涉；单击确认，退出键取消。</p></div>
-          <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">退出配件放置</button>
         </template>
 
 
         <template v-else-if="activeLibrary==='connection'">
-          <div class="panel-heading"><div><h2>连接</h2><p>先选连接方式，再点击两根型材需要连接的位置</p></div></div>
+          <div class="catalog-component-content">
+            <div class="field-stack"><label for="connection-choice">连接件类型</label><select id="connection-choice" v-model="connectionRuleId"><option v-for="rule in connectionRules" :key="rule.id" :value="rule.id">{{rule.label}}</option></select></div>
+            <button class="catalog-profile-preview" @click="startConnectionPlacement(connectionRuleId)" :aria-label="'放置 '+selectedConnectionPreview?.label">
+              <span class="catalog-preview-head"><span>连接示意</span><strong>{{selectedConnectionPreview?.label}}</strong></span>
+              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
+              <span class="catalog-preview-foot"><span>按实际接头自动匹配</span><strong>点击选中</strong></span>
+            </button>
+            <p class="catalog-draw-hint">{{connectionPlacementState.active?connectionPlacementState.message:selectedConnectionPreview?.summary}}。点击预览后，再点型材接头安装；Esc 取消。</p>
+            <p class="catalog-draw-hint">此处选择连接方式，不指定实际料号；具体五金和加工在制造阶段配置。</p>
+            <button v-if="connectionPlacementState.active" class="soft-button full" @click="cancelConnectionPlacement">退出连接放置</button>
+            <details class="advanced-options"><summary>结构连接管理</summary>
           <div class="connection-overview-card">
             <div class="connection-overview-stats">
               <div><strong>{{connectionOverview.total}}</strong><span>全部连接</span></div>
@@ -261,20 +258,8 @@
             <button class="soft-button full" :disabled="!connectionOverview.automatic" @click="clearAutoConnections">清除纯自动连接</button>
             <p>只根据当前型材接触关系补连接，不会移动构件；清除时保留手工创建和已经人工切换过的连接。</p>
           </div>
-          <div class="form-card connection-placement-card" :class="{active:connectionPlacementState.active}">
-            <div class="generator-title compact"><span>∟</span><div><strong>放置连接</strong><p>{{connectionPlacementState.active ? connectionPlacementState.message : '选择一种方式后，直接点击接头附近；系统会优先自动识别并吸附两根型材'}}</p></div></div>
-            <div class="connection-tool-grid">
-              <button :class="{active:connectionPlacementState.active&&connectionPlacementState.mode==='ANGLE_BRACKET'}" @click="startConnectionPlacement('ANGLE_BRACKET')"><span>∟</span><strong>角码</strong><small>两侧槽位固定</small></button>
-              <button :class="{active:connectionPlacementState.active&&connectionPlacementState.mode==='INTERNAL_CONNECTOR'}" @click="startConnectionPlacement('INTERNAL_CONNECTOR')"><span>⇥</span><strong>内置连接</strong><small>隐藏式连接</small></button>
-              <button :class="{active:connectionPlacementState.active&&connectionPlacementState.mode==='CONNECTION_PLATE'}" @click="startConnectionPlacement('CONNECTION_PLATE')"><span>▣</span><strong>连接板</strong><small>外置平板连接</small></button>
-              <button :class="{active:connectionPlacementState.active&&connectionPlacementState.mode==='ANCHOR_CONNECTOR'}" @click="startConnectionPlacement('ANCHOR_CONNECTOR')"><span>◆</span><strong>锚式连接</strong><small>端部到槽位</small></button>
-            </div>
-            <button v-if="connectionPlacementState.active" class="soft-button full" @click="cancelConnectionPlacement">退出连接放置</button>
-          </div>
-          <div class="info-card"><strong>怎么用</strong><p>鼠标靠近可连接位置时会出现绿色吸附标记和半透明连接预览；只有点击才会确认位置。连接方向由系统自动匹配；真实角码、螺钉和螺母在制造配置中确定。</p></div>
-          <div class="form-card">
-            <button class="soft-button full" :class="{active:autoConnectionEnabled}" @click="toggleAutoConnection">{{autoConnectionEnabled?'新建构件自动连接：已开启':'新建构件自动连接：已关闭'}}</button>
-          </div>
+              <button class="soft-button full" :class="{active:autoConnectionEnabled}" @click="toggleAutoConnection">{{autoConnectionEnabled?'新建构件自动连接：已开启':'新建构件自动连接：已关闭'}}</button>
+            </details>
           <details class="advanced-options"><summary>精确连接与配合</summary>
             <div class="connection-guide" :class="{ready:canSmartConnect}">
               <div class="guide-state"><span></span>{{canSmartConnect ? '检测到可连接关系' : '先把型材端部吸附到目标型材'}}</div>
@@ -291,6 +276,7 @@
               </div>
             </div>
           </details>
+          </div>
         </template>
 
         <template v-else-if="activeLibrary==='machining'">
@@ -450,18 +436,18 @@
 
       <main class="canvas-shell" @dragover.prevent @drop="dropAsset">
         <div ref="viewport" class="viewport"></div>
-        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.69.0</span></div>
+        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.70.0</span></div>
 
         <div class="canvas-transform-bar">
           <button class="floating-drag-handle" data-floating-drag="toolbar" title="拖动工具条；双击恢复默认位置">⠿</button>
-          <button class="transform-tool select-tool" @click="returnToSelection" title="返回选择，退出当前工具">↖<span>选择</span></button>
-          <button class="transform-tool draw-tool" :class="{active:drawState.active}" @click="drawState.active?stopProfileDraw():startProfileDraw('FREE')" title="自由绘制 · E；Esc 或右键单击结束">✎<span>{{drawState.active?'结束绘制':'绘制'}}</span></button>
+          <button class="transform-tool select-tool" @click="returnToSelection" title="返回选择，退出当前工具"><i class="workbench-icon" v-html="workbenchIcon('select')"></i><span>选择</span></button>
+          <button class="transform-tool draw-tool" :class="{active:drawState.active}" @click="drawState.active?stopProfileDraw():startProfileDraw('FREE')" title="自由绘制 · E；Esc 或右键单击结束"><i class="workbench-icon" v-html="workbenchIcon('draw')"></i><span>{{drawState.active?'结束绘制':'绘制'}}</span></button>
           <div class="float-divider"></div>
-          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" title="移动 W">↔<span>移动</span></button>
-          <button class="transform-tool" :class="{active:toolMode==='rotate'&&!drawState.active}" @click="setMode('rotate')" title="旋转 R">⟳<span>旋转</span></button>
+          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" title="移动 W"><i class="workbench-icon" v-html="workbenchIcon('move')"></i><span>移动</span></button>
+          <button class="transform-tool" :class="{active:toolMode==='rotate'&&!drawState.active}" @click="setMode('rotate')" title="旋转 R"><i class="workbench-icon" v-html="workbenchIcon('rotate')"></i><span>旋转</span></button>
           <div class="float-divider"></div>
-          <button class="transform-tool" @click="duplicateSelected" :disabled="!selected" title="复制 控制键+D">⧉<span>复制</span></button>
-          <button class="transform-tool danger" @click="deleteSelected" :disabled="!selected" title="删除 Delete">⌫<span>删除</span></button>
+          <button class="transform-tool" @click="duplicateSelected" :disabled="!selected" title="复制 控制键+D"><i class="workbench-icon" v-html="workbenchIcon('batch')"></i><span>复制</span></button>
+          <button class="transform-tool danger" @click="deleteSelected" :disabled="!selected" title="删除 Delete"><i class="workbench-icon" v-html="workbenchIcon('delete')"></i><span>删除</span></button>
           <details class="cad-menu toolbar-more"><summary title="更多操作" aria-label="更多操作">⋯</summary><div class="cad-menu-popover">
             <button :class="{active:measureMode}" @click="toggleMeasure">测量 <kbd>M</kbd></button>
             <button :class="{active:dimensionMode}" @click="toggleDimensionMode">永久标注 <kbd>D</kbd></button>
@@ -1050,6 +1036,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./js/app.js?v=0.68.0"></script>
+<script type="module" src="./js/app.js?v=0.70.0"></script>
 </body>
 </html>

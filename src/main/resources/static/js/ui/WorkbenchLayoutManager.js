@@ -128,8 +128,8 @@ export default class WorkbenchLayoutManager {
   }
 
   syncWorkspaceTracks() {
-    const library = this.panelState('library',286);
-    const inspector = this.panelState('inspector',318);
+    const library = this.panelState('library',344);
+    const inspector = this.panelState('inspector',344);
     this.workspace.style.setProperty('--library-track',library.mode === 'floating' ? '0px' : `${library.width}px`);
     this.workspace.style.setProperty('--inspector-track',inspector.mode === 'floating' ? '0px' : `${inspector.width}px`);
     this.workspace.dataset.libraryMode = library.mode;

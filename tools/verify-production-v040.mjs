@@ -57,4 +57,4 @@ assert.ok(html.includes('定位模型'));
 assert.ok(app.includes('focusValidationIssue'));
 assert.ok(factory.includes('生产检查报告.txt'));
 
-console.log(JSON.stringify({ok:true,version:'0.68.0',schema:62,obbSat:true,contactCompleteness:true,locatableIssues:true,factoryGate:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.70.0',schema:62,obbSat:true,contactCompleteness:true,locatableIssues:true,factoryGate:true},null,2));

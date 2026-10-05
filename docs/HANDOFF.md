@@ -1,6 +1,19 @@
-# 项目交接文档 — v0.68.0
+# 项目交接文档 — v0.69.0
 
-## v0.68 当前重点
+## v0.69 当前重点
+
+- 用户批准移除重复左侧自由绘制面板，右侧统一选材和使用；要求整体风格与 LewanDIY 编辑器保持一致。实际参考站在浏览器中核对，不复制品牌、账号功能或商业入口。
+- 右侧只有 design-profile-choice 截面选择器；catalogProfileCanvas 使用 ProfileSectionPreview3D，长槽与端面可同时看见。ResizeObserver 随面板尺寸刷新，dispose 清理。预览不创建 Project Part。
+- hasChosenProfile 是交互状态，不持久化。未选材 E 定位右侧；选择规格或点击卡片后允许 FREE。底部工具条复用同一个绘制工具，左侧 quickPanel 仅 build / batch。
+- 新主题集中在 app.css 的 v0.69 区域，深色 shell/弹窗 + 浅蓝 canvas + 单一橙色。布局默认 48 px header / 64 px rail / 344 px library；用户保存的自定义布局不强制抹掉。本地 WorkbenchIcons 不接收任意 SVG 输入。
+- 顶部八组菜单均调用既有 Editor / Manager。新建是 clear + 新名称/绘制状态 + reset 历史，不再等于 loadSample；示例另设明确入口。打开、新建、示例替换 dirty 工程会确认；保存为下载 JSON，不是云端保存。
+- 命名、导入、撤销/重做同步 engineeringDrawingForm；没有可撤销项时反馈。菜单 click 后关闭规则沿用 v0.68，header stacking 保证窄屏左侧操作面板不能遮住菜单。
+- Esc 关闭帮助/工程中心/制造配置/生产检查，模态窗口期间阻止背景快捷键。目录编辑弹窗仍经过自身关闭处理。
+- Editor.fitView 使用包围球和较小视场角，兼顾实际 viewport aspect；SceneManager.resize 正交 frustum 固定 2200，zoom 只应用一次。不要重新使用最大边长固定倍数作为完整适配承诺。
+- 验证覆盖 18 个透视/正交与长梁/高杆/框架适配情况；浏览器真实导出 JSON、PNG、SVG、DXF、39 条目的 ZIP。完整结果、静态预览与 REST 边界见 docs/VALIDATION.md。
+- Schema 62 / profileDrawToolVersion 7 不变，不扩展报价/供应商/订单/库存，不保存参考站凭据。
+
+## v0.68 历史重点
 
 - 用户要求不再区分简单/专业模式，统一样式并解决画完后退出不便。删除 Editor/app 中模式状态；Schema 当前工程规范化丢弃展示字段 workbenchMode，不新增历史迁移。
 - ProfileDrawTool.options.continueDrawing 默认 false。FREE 成功提交后 stop；开启连续添加才保持 FREE。退出清理 Ghost、Snap 和光标并恢复所选构件操作，不删除已提交件、不额外写历史。

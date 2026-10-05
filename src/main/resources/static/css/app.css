@@ -708,9 +708,10 @@ body{background:linear-gradient(180deg,#eef2f6 0,#e9eef3 100%)}
   --shadow:0 8px 28px rgba(0,0,0,.2);
 }
 body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.workbench-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}.workbench-icon svg{width:20px;height:20px}.canvas-transform-bar .workbench-icon svg{width:16px;height:16px}.rail-icon svg{width:23px;height:23px}
 button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:disabled{cursor:not-allowed;opacity:.35}
-.cad-topbar{height:48px;flex-basis:48px;background:#020617;border-bottom:1px solid var(--line);padding:0 16px;color:var(--muted);box-shadow:none}
+.cad-topbar{position:relative;z-index:3000;height:48px;flex-basis:48px;background:#020617;border-bottom:1px solid var(--line);padding:0 16px;color:var(--muted);box-shadow:none}
 .cad-topbar .brand-lockup{min-width:42px;width:42px;flex-shrink:0}.cad-topbar .brand-copy{display:none}
 .cad-topbar .brand-mark{width:32px;height:32px;font-size:13px;letter-spacing:-1px;background:#000;color:var(--accent);border:0;border-radius:2px;box-shadow:none}
 .cad-menubar{margin-left:12px;gap:4px;min-width:0}
@@ -718,7 +719,7 @@ button:disabled{cursor:not-allowed;opacity:.35}
 .cad-menu[open]>summary,.cad-menu>summary:hover{background:rgba(255,255,255,.05);color:#f3f4f6}
 .cad-menu-popover{background:#11131d;border-color:rgba(255,255,255,.12);box-shadow:0 14px 34px #0005;border-radius:8px;top:47px}
 .cad-menu-popover button{color:#d1d5db;min-height:34px;font-size:12px}.cad-menu-popover button:hover:not(:disabled){background:rgba(255,255,255,.06);color:#fff}
-.cad-menu-popover button.active,.cad-menu-popover button.accent{color:var(--accent)}.cad-menu-popover button.danger{color:#f87171}
+.cad-menu-popover button.active{background:transparent;color:#d1d5db;font-weight:400}.cad-menu-popover button.active:hover{background:rgba(255,255,255,.06);color:#fff}.cad-menu-popover .menu-state{color:var(--accent);margin-left:auto;min-width:14px;text-align:right}.cad-menu-popover button.accent{color:var(--accent)}.cad-menu-popover button.danger{color:#f87171}
 .cad-menu-caption,.cad-menu-divider{color:var(--muted)}.cad-menu-divider{background:var(--line)}
 .cad-menu-popover kbd{background:rgba(255,255,255,.08);color:#9ca3af;border:1px solid var(--line);font-size:10px}
 .cad-project-chip{display:flex;margin-left:auto;gap:7px;background:transparent;border:0;color:#6b7280;box-shadow:none;min-width:0;padding:0 9px}
@@ -729,13 +730,16 @@ button:disabled{cursor:not-allowed;opacity:.35}
 .workspace{grid-template-columns:64px var(--quick-track) minmax(200px,1fr) var(--library-track)!important;background:#020617}
 .workspace[data-right-mode="modify"]{grid-template-columns:64px var(--quick-track) minmax(200px,1fr) var(--inspector-track)!important}
 .cad-tool-rail{background:#020617;border-color:var(--line);padding:8px;gap:5px}
-.cad-tool-rail .rail-tool{width:47px;height:66px;margin:0;padding:8px 3px;color:#6b7280;border-radius:8px;box-shadow:none;font-size:10px}
-.cad-tool-rail .rail-tool span:last-child{font-size:10px;white-space:normal;line-height:1.3}
-.cad-tool-rail .rail-tool:hover{background:#ffffff0c;color:#d1d5db}
-.cad-tool-rail .rail-tool.active{background:var(--accent-soft);color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
-.cad-tool-rail .rail-tool:disabled{opacity:.4}.rail-divider{background:var(--line);margin:6px 4px!important}
+.cad-tool-rail .rail-tool{width:47px;height:66px;margin:0;padding:8px 0;color:#9ca3af;border-radius:4px;box-shadow:none;font-size:10px;border:1px solid transparent}
+.cad-tool-rail .rail-tool span:last-child{font-size:9px;white-space:nowrap;line-height:1.3}
+.cad-tool-rail .rail-tool:hover{background:#ffffff0c;color:#d1d5db;transform:none;border-color:transparent}
+.cad-tool-rail .rail-tool.active{background:var(--accent-soft);color:var(--accent);box-shadow:none;border-color:rgba(255,138,0,.3);font-weight:500}
+.cad-tool-rail .rail-tool.active:before{content:none}
+.cad-tool-rail .rail-tool:disabled{opacity:.5}.rail-divider{background:var(--line);margin:6px 4px!important}
 .library-panel,.inspector-panel,.quick-operation-panel{background:#020617;border-color:var(--line);box-shadow:none}
-.dock-panel-handle{height:0;min-height:0;border:0;background:transparent;overflow:hidden}
+.library-panel:not(.layout-floating) .dock-panel-handle,.inspector-panel:not(.layout-floating) .dock-panel-handle{position:absolute;top:0;left:0;right:0;height:12px;min-height:0;padding:0;border:0;background:transparent;opacity:0;z-index:12;overflow:hidden}
+.library-panel:not(.layout-floating):hover .dock-panel-handle,.inspector-panel:not(.layout-floating):hover .dock-panel-handle{opacity:.6}
+.library-panel:not(.layout-floating) .dock-panel-handle :is(strong,.dock-panel-hint),.inspector-panel:not(.layout-floating) .dock-panel-handle :is(strong,.dock-panel-hint){display:none}
 .library-panel.layout-floating .dock-panel-handle,.inspector-panel.layout-floating .dock-panel-handle{height:28px;background:#111827;border-color:var(--line)}
 .library-panel.layout-floating .dock-panel-handle strong,.inspector-panel.layout-floating .dock-panel-handle strong{color:#d1d5db}
 .right-workbench-tabs{background:#020617;border-color:var(--line)}
@@ -758,14 +762,23 @@ button:disabled{cursor:not-allowed;opacity:.35}
 .catalog-preview-foot strong{color:var(--accent);font-size:12px}.catalog-draw-hint{color:#6b7280;font-size:11px;line-height:1.65;margin:10px 0 0}
 .library-footer-form{padding:16px 20px;border-color:var(--line);background:#020617}
 .library-footer-form .field-row{margin-bottom:10px}
-:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) input:not([type="checkbox"]):not([type="range"]):not([type="file"]),:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) select,:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) textarea{background:#1a1a1a;color:#e5e7eb;border-color:#333;border-radius:8px}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) input:not([type="checkbox"]):not([type="range"]):not([type="file"]),:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) select,:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) textarea{background:#1a1a1a;color:#e5e7eb;border-color:#333;border-radius:8px}
+/* 深色控件的状态必须一并定义，不能被旧浅色 :hover/:focus 规则覆盖。 */
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(input,select,textarea):hover:not(:disabled):not([type="checkbox"]):not([type="range"]):not([type="file"]){background:#202020;color:#f3f4f6;border-color:#555}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(input,select,textarea):focus:not([type="checkbox"]):not([type="range"]):not([type="file"]){background:#1a1a1a;color:#f3f4f6;border-color:var(--accent);outline:none;box-shadow:0 0 0 2px rgba(255,138,0,.12)}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(input,select,textarea):disabled{background:#15171d;color:#9ca3af;border-color:#30343d;opacity:1}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(input,select,textarea){color-scheme:dark}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) option{background:#1a1a1a;color:#f3f4f6}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) input::placeholder{color:#9ca3af;opacity:1}
 input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
-:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) :is(h2,h3,h4,strong){color:#e5e7eb}
-:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) :is(label,p,small,dt){color:#9ca3af}
-:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal) dd{color:#d1d5db}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(h2,h3,h4,strong){color:#e5e7eb}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) :is(label,p,small,dt){color:#9ca3af}
+.library-panel .catalog-preview-foot strong{color:var(--accent)}
+:is(.library-panel,.inspector-panel,.quick-operation-panel,.modal-card) dd{color:#d1d5db}
 .panel-heading{padding:16px 20px}.panel-heading h2{font-size:16px}.panel-heading p{font-size:11px;line-height:1.6}
 .form-card,.profile-draw-card,.generator-card,.connection-card,.bom-summary-card,.info-card,.contour-preset-card,.profile-replace-card,.selected-part-card{background:#101320;border-color:var(--line);border-radius:8px;box-shadow:none}
 .form-card:hover,.generator-card:hover{border-color:#ffffff24}
+.profile-draw-card.active,.profile-draw-card.active .profile-draw-title{background:var(--accent-soft);border-color:#ff8a0044}.profile-draw-card.active .profile-draw-title strong{color:var(--accent)}
 .read-only-field,.selection-card,.metric-strip span,.mount-reference-card,.assembly-tools-card,.constraint-diagnostics-card,.dof-grid>div,.inspector-no-selection .shortcut-list span{background:#101320;border-color:var(--line);color:#9ca3af}
 .inspector-tabs{background:#020617;border-color:var(--line)}.inspector-tabs button{color:#6b7280}.inspector-tabs button.active{color:var(--accent)}.inspector-tabs button.active:after{background:var(--accent)}
 .soft-button,.choice,.filter-chip,.project-actions-grid button,.feature-mate-actions button,.contour-preset-buttons button{background:#101320;color:#9ca3af;border-color:#ffffff1a;border-radius:6px}
@@ -779,6 +792,16 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .free-draw-options,.advanced-options{background:transparent;border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:0 10px}
 .free-draw-options>summary,.advanced-options>summary{padding:10px 0;cursor:pointer;color:#9ca3af;font-size:12px}
 .free-draw-options[open],.advanced-options[open]{padding-bottom:10px}.library-panel>.advanced-options{margin:12px 20px}
+.catalog-component-content{padding:0 20px 20px}.catalog-component-content>.field-stack{margin:0 0 12px}
+.catalog-component-content>.field-pair{margin-bottom:12px}.catalog-component-content label{color:#9ca3af;font-size:13px}
+.catalog-component-content :is(input,select){width:100%;height:42px;padding:0 12px;font-size:13px;border:1px solid #333}
+.catalog-component-content .catalog-profile-preview{margin-top:12px}.catalog-component-content .catalog-preview-foot strong{color:var(--accent)}
+.catalog-component-content .advanced-options{margin-top:20px}.catalog-component-content .advanced-options .form-card{margin:10px 0;padding:12px}
+.catalog-component-content .catalog-secondary-actions{display:flex;gap:8px;margin-top:12px}.catalog-secondary-actions button{flex:1;min-height:34px;font-size:12px}
+.catalog-component-content .catalog-preview-head strong{color:#f3f4f6}.catalog-component-content .catalog-draw-hint{color:#9ca3af;font-size:11px;line-height:1.7}
+.asset-presets button,.accessory-category-filter button,.accessory-catalog-actions button,.connection-tool-grid button,.machining-grid button{background:#101320;border-color:#ffffff1a;color:#9ca3af}
+.asset-presets button:hover,.accessory-category-filter button:hover,.accessory-catalog-actions button:hover,.connection-tool-grid button:hover,.machining-grid button:hover{background:#191d2b;border-color:#ffffff33;color:#e5e7eb}
+.accessory-category-filter button.active,.connection-tool-grid button.active,.machining-grid button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .quick-operation-heading{background:#020617;border-color:var(--line);color:#e5e7eb}
 .quick-operation-content .panel-heading{padding:14px}
 .profile-grip-tip{background:#101320;border-color:#ffffff1a;color:#9ca3af}
@@ -811,7 +834,16 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .profile-length-input{border-color:var(--accent)}.profile-length-input input{color:#9a4c00}
 .context-menu{background:#11131d;border-color:#ffffff24;color:#d1d5db}.context-menu-cad .context-menu-head{color:#d1d5db;border-color:var(--line)}
 .context-menu-cad button{color:#d1d5db}.context-menu-cad button:hover:not(:disabled){background:#ffffff0d;color:var(--accent)}
-.modal,.engineering-center-modal{background:#020617;border-color:#ffffff1a;color:#d1d5db}
+.modal-card,.engineering-center-modal{background:#020617;border-color:#ffffff1a;color:#d1d5db}
+.engineering-center-backdrop{z-index:5000}
+.modal-actions{background:#020617;border-color:var(--line)}.shortcut-grid span{color:#9ca3af}.shortcut-grid kbd{background:#101320;border-color:var(--line);color:#d1d5db}
+.engineering-summary-strip b{color:#f3f4f6}.engineering-center-tip{background:var(--accent-soft);color:#fbbf24;border-color:var(--line)}
+.manufacturing-status-card,.manufacturing-config-row{background:#101320;border-color:var(--line)}.manufacturing-status-card.ready,.validation-summary.ok{background:#123322;color:#86efac;border-color:#29583c}
+.manufacturing-config-list{background:#0b1020}.manufacturing-config-warning{background:var(--accent-soft);color:#fbbf24}
+.assembly-playback-bar,.assembly-guide-book-toolbar{background:#101320;border-color:var(--line);box-shadow:none}.assembly-playback-bar strong{color:#d1d5db}.assembly-step-card.active{background:#221b16;border-color:var(--accent)}
+.validation-summary.failed,.validation-item.error-item{background:#351c23;border-color:#73303c;color:#fca5a5}.validation-item.warning-item{background:#322818;border-color:#69502b;color:#fcd58a}
+.validation-item.error-item .validation-level{color:#f87171}.validation-item.warning-item .validation-level{color:#fbbf24}
+.engineering-table tbody tr.engineering-current-row td{background:#382714!important}.engineering-table tbody tr.engineering-locatable:hover td{background:#221b16}
 .modal-header,.modal-footer,.engineering-center-header,.engineering-center-tabs{background:#020617;color:#d1d5db;border-color:var(--line)}
 .engineering-center-header .modal-subtitle,.engineering-center-tabs button{color:#9ca3af}.engineering-center-tabs button.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .engineering-summary-strip,.engineering-table-wrap,.drawing-export-center{background:#0b1020;border-color:var(--line)}

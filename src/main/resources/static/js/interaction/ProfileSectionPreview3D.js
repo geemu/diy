@@ -24,10 +24,15 @@ export default class ProfileSectionPreview3D {
     this.scene.add(keyLight);
     this.mesh=null;
     this.resize();
+    this.resizeObserver=new ResizeObserver(()=>this.resize());
+    this.resizeObserver.observe(canvas);
   }
 
   setSection(section,options={}) {
     this.clearMesh();
+    this.camera.near=.1;
+    this.camera.far=5000;
+    this.camera.updateProjectionMatrix();
     if(!section?.outer?.length) {
       this.render();
       return;
@@ -39,8 +44,16 @@ export default class ProfileSectionPreview3D {
     this.mesh=ProfileGeometryFactory.createSectionMesh(section,span*lengthRatio,material);
     ProfileGeometryFactory.addCadEdges(this.mesh);
     this.root.add(this.mesh);
-    const fitScale=Math.max(1,lengthRatio/2.2);
-    this.camera.position.set(span*2.6*fitScale,span*2.1*fitScale,span*3.4*fitScale);
+    if(options.presentation==='catalog') {
+      // 目录卡须同时看到截面和长槽，避免相机沿挤出轴看成一小块端面。
+      this.root.rotation.set(0,0,0);
+      const fitScale=Math.max(1,lengthRatio/3.5);
+      this.camera.position.set(span*5*fitScale,span*4*fitScale,span*3*fitScale);
+    } else {
+      this.root.rotation.set(-0.48,0.62,-0.08);
+      const fitScale=Math.max(1,lengthRatio/2.2);
+      this.camera.position.set(span*2.6*fitScale,span*2.1*fitScale,span*3.4*fitScale);
+    }
     this.camera.lookAt(0,0,0);
     this.render();
   }
@@ -51,7 +64,37 @@ export default class ProfileSectionPreview3D {
     this.renderer.setSize(width,height,false);
     this.camera.aspect=width/height;
     this.camera.updateProjectionMatrix();
+    if(this.catalogObject)this.fitCatalogObject();
     this.render();
+  }
+
+  /** 组件库复用工程几何工厂，但预览对象永远不进入 Editor/Project。 */
+  setObject(object) {
+    this.clearMesh();
+    this.catalogObject=true;
+    this.mesh=object;
+    this.root.rotation.set(0,0,0);
+    if(object)this.root.add(object);
+    this.fitCatalogObject();
+    this.render();
+  }
+
+  fitCatalogObject() {
+    if(!this.mesh)return;
+    this.mesh.position.set(0,0,0);
+    this.root.updateMatrixWorld(true);
+    const box=new THREE.Box3().setFromObject(this.mesh);
+    const center=box.getCenter(new THREE.Vector3());
+    this.mesh.position.sub(center);
+    const radius=Math.max(1,box.getSize(new THREE.Vector3()).length()/2);
+    const halfFov=THREE.MathUtils.degToRad(this.camera.fov/2);
+    const limitingFov=Math.min(halfFov,Math.atan(Math.tan(halfFov)*this.camera.aspect));
+    const distance=radius/Math.sin(limitingFov)*1.12;
+    this.camera.position.copy(new THREE.Vector3(5,4,3).normalize().multiplyScalar(distance));
+    this.camera.near=Math.max(.1,distance-radius*2);
+    this.camera.far=distance+radius*4;
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(0,0,0);
   }
 
   render() {
@@ -59,6 +102,7 @@ export default class ProfileSectionPreview3D {
   }
 
   clearMesh() {
+    this.catalogObject=false;
     if(!this.mesh)return;
     this.root.remove(this.mesh);
     ProfileGeometryFactory.disposeObject(this.mesh);
@@ -66,7 +110,9 @@ export default class ProfileSectionPreview3D {
   }
 
   dispose() {
+    this.resizeObserver.disconnect();
     this.clearMesh();
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
   }
 }
