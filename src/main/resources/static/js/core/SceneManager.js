@@ -126,6 +126,7 @@ export default class SceneManager {
 
     window.addEventListener('resize', () => this.resize());
     this.renderer.domElement.addEventListener('pointerdown', event => {
+      this.skipContextMenu=false;
       this.cameraTween = null;
       if (this.marqueeMode && event.button === 0 && !this.transformControls.dragging) {
         event.preventDefault();
@@ -147,6 +148,13 @@ export default class SceneManager {
       if (this.pointerMoveHandler && !this.transformControls.dragging) this.pointerMoveHandler(event);
     });
     this.renderer.domElement.addEventListener('pointerup', event => {
+      // 右键只用于结束工具或平移/菜单，不能被当作左键提交几何。
+      if(event.button!==0){
+        const down=this.pointerDownPosition;
+        this.pointerDownPosition=null;
+        if(event.button===2&&down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)<=4&&this.secondaryClickHandler?.(event)===true)this.skipContextMenu=true;
+        return;
+      }
       if (this.marqueeStart) {
         event.preventDefault();
         event.stopPropagation();
@@ -167,6 +175,7 @@ export default class SceneManager {
     });
     this.renderer.domElement.addEventListener('contextmenu', event => {
       event.preventDefault();
+      if(this.skipContextMenu){this.skipContextMenu=false;return;}
       if (this.contextMenuHandler) this.contextMenuHandler(event);
     });
 

@@ -10,7 +10,7 @@ const schemaModule = await import(pathToFileURL(path.join(staticRoot,'js/io/Proj
 const {default:ProjectSchema,CURRENT_PROJECT_SCHEMA_VERSION,CURRENT_APP_VERSION} = schemaModule;
 
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
-assert.equal(CURRENT_APP_VERSION,'0.65.0');
+assert.equal(CURRENT_APP_VERSION,'0.68.0');
 
 const sample = {
   metadata:{name:'Schema 62 验证工程'},
@@ -49,7 +49,7 @@ assert.ok(loadedShippedSample.project.parts.every(part=>part.type!=='PROFILE'||(
 
 const loaded = ProjectSchema.load(sample);
 assert.equal(loaded.project.schemaVersion,62);
-assert.equal(loaded.project.metadata.version,'0.65.0');
+assert.equal(loaded.project.metadata.version,'0.68.0');
 assert.equal(loaded.project.parts[0].designProfile.profileId,'DESIGN-3030');
 assert.equal(loaded.project.parts[0].manufacturingProfile,null);
 assert.equal(loaded.project.connections[0].designType,'ANGLE_BRACKET');
@@ -59,7 +59,7 @@ assert.equal(loaded.project.editorState.manufacturingConfigurationVersion,1);
 assert.equal(loaded.project.editorState.connectionAnchorVersion,1);
 assert.equal(loaded.project.editorState.connectionPlacementVersion,2);
 assert.equal(loaded.project.editorState.machiningPlacementVersion,1);
-assert.equal(loaded.project.editorState.workbenchMode,'BEGINNER');
+assert.equal(Object.hasOwn(loaded.project.editorState,'workbenchMode'),false);
 assert.equal(loaded.project.editorState.autoConnectionSystemVersion,2);
 assert.equal(loaded.project.editorState.autoConnectionEnabled,true);
 assert.equal(loaded.project.editorState.dimensionSystemVersion,2);
@@ -99,9 +99,9 @@ console.log(JSON.stringify({
   ok:true,
   schema:62,
   currentOnly:true,
-  version:'0.65.0',
+  version:'0.68.0',
   designManufacturingSeparated:true,
   abstractDesignConnections:true,
   legacyProjectCompatibility:false,
-  beginnerMode:true
+  unifiedWorkbench:true
 },null,2));

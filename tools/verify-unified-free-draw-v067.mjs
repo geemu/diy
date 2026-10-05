@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {registerHooks} from 'node:module';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const vendor=path.join(root,'target/classes/static/vendor/three/build/three.module.min.js');
+assert.ok(fs.existsSync(vendor),'先执行 Maven resources 获取实际 Three.js');
+registerHooks({resolve(specifier,context,next){return specifier==='three'?{url:pathToFileURL(vendor).href,shortCircuit:true}:next(specifier,context);}});
+const THREE=await import('three');
+const {resolveScreenAxis}=await import('../src/main/resources/static/js/drawing/ScreenAxisResolver.js');
+const {default:ProfileDrawTool}=await import('../src/main/resources/static/js/drawing/ProfileDrawTool.js');
+const rect={left:0,top:0,width:1000,height:800};
+const camera=new THREE.OrthographicCamera(-1000,1000,800,-800,1,50000);
+camera.position.set(0,0,3000);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
+function eventFor(point,modifiers={}){const p=point.clone().project(camera);return {clientX:(p.x+1)*rect.width/2,clientY:(1-p.y)*rect.height/2,...modifiers};}
+const origin=new THREE.Vector3(0,0,0);
+assert.equal(resolveScreenAxis(camera,rect,eventFor(new THREE.Vector3(600,20,0)),origin,null,8).axis,'X','近轴自动吸附');
+assert.equal(resolveScreenAxis(camera,rect,eventFor(new THREE.Vector3(300,400,0)),origin,null,8),null,'离轴不能强行掰直');
+assert.equal(resolveScreenAxis(camera,rect,eventFor(new THREE.Vector3(300,400,0)),origin,'X',8).axis,'X','显式锁轴优先');
+
+const editor={meshes:[],sceneManager:{camera,renderer:{domElement:{getBoundingClientRect:()=>rect,style:{}}},setMarqueeMode(){},transformControls:{detach(){}},hideSnapFeedback(){},worldPointOnPlane(event,normal,point){const raycaster=new THREE.Raycaster();raycaster.setFromCamera(new THREE.Vector2(event.clientX/rect.width*2-1,1-event.clientY/rect.height*2),camera);return raycaster.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(normal,point),new THREE.Vector3());}},snapManager:{isEnabled:()=>false}};
+const tool=new ProfileDrawTool(editor);tool.begin('FREE',{plane:'XY',gridSnap:false});tool.start={point:origin};
+const slope=tool.resolvePointer(eventFor(new THREE.Vector3(300,400,0)));tool.hover=slope;
+assert.equal(slope.axis,null);assert.ok(slope.point.distanceTo(new THREE.Vector3(300,400,0))<1e-7);
+assert.ok(tool.typedCandidate(500).point.distanceTo(new THREE.Vector3(300,400,0))<1e-7,'斜杆输入长度不丢方向');
+assert.ok(tool.applyDraftRules(slope).point.distanceTo(slope.point)<1e-7);
+const nearAxis=tool.resolvePointer(eventFor(new THREE.Vector3(600,20,0)));
+assert.equal(nearAxis.axis,'X');assert.equal(nearAxis.point.y,0);
+const alt=tool.resolvePointer(eventFor(new THREE.Vector3(600,20,0),{altKey:true}));
+assert.equal(alt.axis,null);assert.ok(Math.abs(alt.point.y-20)<1e-7,'Alt 强制斜向');
+const shift=tool.resolvePointer(eventFor(new THREE.Vector3(300,400,0),{shiftKey:true}));
+assert.equal(shift.axis,'Y');
+tool.axisLock='X';const locked=tool.resolvePointer(eventFor(new THREE.Vector3(300,400,0),{altKey:true}));assert.equal(locked.axis,'X');
+assert.equal(tool.acceptFeature({worldPoint:new THREE.Vector3(300,400,0)}),false);
+tool.axisLock=null;assert.equal(tool.acceptFeature({worldPoint:new THREE.Vector3(300,400,200)}),true,'未锁轴可取空间接头');
+tool.hover={point:new THREE.Vector3(300,400,200)};assert.ok(Math.abs(tool.typedCandidate(600).point.length()-600)<1e-7);
+let modifierEvent=null;tool.handlePointerMove=event=>{modifierEvent=event;};tool.lastPointer={clientX:10,clientY:20,altKey:true};tool.handleModifierChange({altKey:false,shiftKey:false});assert.equal(modifierEvent.altKey,false,'松开修饰键立即刷新');
+tool.start={point:origin};tool.hover=null;tool.cancelStep();assert.equal(tool.start,null);assert.equal(tool.mode,'FREE');tool.cancelStep();assert.equal(tool.mode,'OFF');
+
+const html=fs.readFileSync(path.join(root,'src/main/resources/static/index.html'),'utf8');
+const app=fs.readFileSync(path.join(root,'src/main/resources/static/js/app.js'),'utf8');
+assert.ok(!/startProfileDraw\('(DIAGONAL|LINE|POLYLINE)'/.test(html),'不保留分裂的绘制入口');
+const freePanel=html.slice(html.indexOf('<template v-if="quickPanel===\'draw\'">'),html.indexOf('<template v-if="quickPanel===\'build\'">'));
+assert.ok(!freePanel.includes('draw-mode-grid'));assert.ok(!freePanel.includes('contour-preset-card'));
+const buildPanel=html.slice(html.indexOf('<template v-if="quickPanel===\'build\'">'),html.indexOf('<template v-if="quickPanel===\'build\' ||'));
+for(const mode of ['RECTANGLE','BOX','CONTOUR'])assert.ok(buildPanel.includes(`startProfileDraw('${mode}')`));
+assert.ok(buildPanel.includes('contour-preset-card'));assert.ok(app.includes("startProfileDraw('FREE',{fixedLengthMm:Number(newProfile.length)})"));
+assert.ok(!app.includes("startProfileDraw('DIAGONAL')"));
+console.log(JSON.stringify({ok:true,version:'0.68.0',singleDrawEntry:true,axisAndDiagonal:true,modifierPriority:true,quickBuildPreserved:true}));

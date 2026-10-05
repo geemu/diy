@@ -61,14 +61,13 @@ createApp({
     let viewCube = null;
     watch(activeLibrary,()=>{rightPanelMode.value='create';});
     watch([quickPanel,rightPanelMode],()=>nextTick(()=>window.dispatchEvent(new Event('resize'))));
-    function openQuickPanel(mode) { quickPanel.value=quickPanel.value===mode?'':mode; }
-    function openResource(id) { rightPanelMode.value='create';activeLibrary.value=id; }
+    function openQuickPanel(mode) { if(mode!=='draw')editor?.profileDrawTool.stop();quickPanel.value=quickPanel.value===mode?'':mode; }
+    function openResource(id) { editor?.profileDrawTool.stop();rightPanelMode.value='create';activeLibrary.value=id; }
     function viewDirection(item) { editor?.viewDirection(new THREE.Vector3(item.x,item.y,item.z)); }
     function quickRotate(axis) {
       try { setMode('rotate');if(editor?.rotateSelectionQuarterTurn(axis))notify(`已绕 ${axis} 轴旋转 +90°`); }
       catch(error){notify(error.message||'旋转失败','warning');}
     }
-    const workbenchMode = ref('BEGINNER');
     const connectionPlacementState = reactive({active:false,mode:null,step:1,message:''});
     const machiningPlacementState = reactive({active:false,mode:null,message:''});
     const accessoryPlacementState = reactive({active:false,definitionId:null,label:'',valid:null,message:''});
@@ -117,7 +116,7 @@ createApp({
     const transformMoveScope = ref('SINGLE');
     const workPlaneVisible = ref(true);
     const featureHover = ref(null);
-    const drawState = reactive({active:false,mode:'OFF',start:null,hover:null,committed:null,lengthMm:null,typedLength:'',segmentCount:0,contourPointCount:0});
+    const drawState = reactive({active:false,mode:'OFF',axisLock:null,start:null,hover:null,committed:null,lengthMm:null,typedLength:'',segmentCount:0,contourPointCount:0});
     const gripState = reactive({active:false,end:null,lengthMm:null,typed:'',snappedFeature:null,message:'',blocked:false,error:false});
     const selectionFilter = ref('ALL');
     const curvedMachiningStage = ref('BEND_BEFORE');
@@ -192,7 +191,7 @@ createApp({
     const diyForm = reactive({catalogId:getDefaultDesignProfileId('3030'),width:1000,depth:500,height:1800,levels:4,centerBeamCount:1,autoConnect:true});
     const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const frameForm = reactive({catalogId:getDefaultDesignProfileId('3030'),width:1000,depth:600,height:1000});
-    const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
+    const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
     const drawerForm = reactive({width:500,depth:450,height:600,count:3,gap:3,frontMode:'INSET',includeSlides:true,slideLength:450});
     const arrayForm = reactive({axis:'X',count:3,spacing:100});
     const mirrorForm = reactive({axis:'X',copy:true,planeMode:'WORLD_ORIGIN'});
@@ -743,6 +742,7 @@ createApp({
       editor.onSelectionChanged = (object,selection = []) => {
         selected.value = object;
         selectedMeshes.value = selection;
+        if(object&&!editor.profileDrawTool.isActive()&&!editor.connectionPlacementManager.isActive()&&!editor.accessoryPlacementManager.isActive()&&!editor.machiningPlacementManager.isActive())rightPanelMode.value='modify';
         lastSnap.value = object?.userData?.lastSnap || null;
         contextMenu.visible = false;
         selectedAssemblyId.value = object ? (object.userData?.part?.assemblyId || null) : selectedAssemblyId.value;
@@ -771,7 +771,6 @@ createApp({
         if(count)notify(`单个移动后 ${count} 个失效连接已解除；需要整体保持时请选择“保持连接移动”`,'warning');
       };
       autoConnectionEnabled.value = editor.autoConnectionEnabled !== false;
-      workbenchMode.value = editor.workbenchMode || 'BEGINNER';
       editor.connectionPlacementManager.onChanged = state => {
         Object.assign(connectionPlacementState,{active:false,mode:null,step:1,message:'',...(state||{})});
         if(state?.notify && state?.message) notify(state.message,state.message.includes('失败')||state.message.includes('不支持')?'warning':'success');
@@ -836,8 +835,14 @@ createApp({
       editor.onFeatureSelectionChanged = items => { selectedFeatures.value = items || []; };
       editor.featureHoverManager.onChanged = value => { featureHover.value = value; };
       editor.profileDrawTool.onStateChanged = state => {
-        Object.assign(drawState,{active:!!state.active,mode:state.mode||'OFF',start:state.start||null,hover:state.hover||null,committed:state.committed||null,lengthMm:state.lengthMm??null,typedLength:state.typedLength||'',segmentCount:Number(state.segmentCount||0),contourPointCount:Number(state.contourPointCount||0),assemblyId:state.assemblyId||null});
+        const wasDrawing=drawState.active;
+        Object.assign(drawState,{active:!!state.active,mode:state.mode||'OFF',axisLock:state.axisLock||null,start:state.start||null,hover:state.hover||null,committed:state.committed||null,lengthMm:state.lengthMm??null,typedLength:state.typedLength||'',segmentCount:Number(state.segmentCount||0),contourPointCount:Number(state.contourPointCount||0),assemblyId:state.assemblyId||null});
         if(state.options) Object.assign(drawForm,state.options);
+        if(wasDrawing&&!state.active){
+          contextMenu.visible=false;
+          if(quickPanel.value==='draw')quickPanel.value='';
+          if(editor.selected)rightPanelMode.value='modify';
+        }
         if(state.committed==='PROFILE') notify(`已绘制型材 L${Math.round(Number(state.lengthMm||0))}${state.autoConnections ? ` · 自动连接 ${state.autoConnections} 处` : ''}`);
         else if(state.committed==='RECTANGLE') notify(`已绘制矩形框架 · ${state.createdCount||4} 根型材`);
         else if(state.committed==='BOX') notify(`已放置空间框架${state.autoConnections ? ` · 自动连接 ${state.autoConnections} 处` : ''}`);
@@ -939,11 +944,16 @@ createApp({
       layoutManager?.destroy();
       layoutManager=null;
       viewCube?.dispose();viewCube=null;
+      editor?.profileDrawTool.dispose();
     });
 
     function handleKeyboard(event) {
       if(event.key==='Control')editor?.setSnapTemporarilyDisabled(true);
       if (event.defaultPrevented || gripState.active) return;
+      // 绘制中的退出不能被表单焦点吞掉；已打开的模态窗口保留自己的 Esc 语义。
+      if(event.key==='Escape'&&drawState.active&&!document.querySelector('.modal-backdrop,.engineering-center-backdrop')){
+        event.preventDefault();stopProfileDraw();return;
+      }
       const target = event.target;
       if (target && ['INPUT','SELECT','TEXTAREA'].includes(target.tagName)) return;
       if(event.altKey&&!event.ctrlKey&&!event.metaKey&&['x','y','z'].includes(event.key.toLowerCase())) {
@@ -997,13 +1007,14 @@ createApp({
         if (connectionPlacementState.active) { cancelConnectionPlacement(); return; }
         if (accessoryPlacementState.active) { cancelAccessoryPlacement(); return; }
         if (machiningPlacementState.active) { cancelMachiningPlacement(); return; }
-        if (drawState.active) { editor?.profileDrawTool.cancelStep(); return; }
+        if (drawState.active) { stopProfileDraw(); return; }
         if (measureMode.value) toggleMeasure();
         if (dimensionMode.value) toggleDimensionMode();
         if (boxSelectMode.value) toggleBoxSelect();
         if (lassoSelectMode.value) toggleLassoSelect();
         if (featureSelectMode.value) toggleFeatureSelectMode();
       }
+      else if (event.key.toLowerCase() === 'e') startProfileDraw('FREE');
       else if (event.key.toLowerCase() === 'b') toggleBoxSelect();
       else if (event.key.toLowerCase() === 'l') toggleLassoSelect();
       else if (event.key.toLowerCase() === 'x') toggleTransformSpace();
@@ -1025,6 +1036,7 @@ createApp({
 
     function handleKeyboardUp(event) {
       if(event.key==='Control')editor?.setSnapTemporarilyDisabled(false);
+      if(['Alt','Shift'].includes(event.key))editor?.profileDrawTool.handleModifierChange(event);
     }
 
     function quickNominal(nominal) {
@@ -1050,6 +1062,7 @@ createApp({
       const set=new Set((newProfile.faceClosures||[]).map(item=>String(item).toUpperCase()));
       set.has(value)?set.delete(value):set.add(value);
       newProfile.faceClosures=[...set];
+      editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});
     }
 
     function startProfileDrag(catalogId,event) {
@@ -1084,8 +1097,9 @@ createApp({
       if (!definition) return;
       newProfile.nominal = definition.nominal;
       newProfile.catalogId = definition.id;
-      editor.addProfile(definition.id, Number(newProfile.length), {faceClosures:[...(newProfile.faceClosures||[])]});
-      notify(`已添加 ${definition.name} · L${newProfile.length}`);
+      newProfile.faceClosures=[...(definition.defaultFaceClosures||[])];
+      startProfileDraw('FREE');
+      notify(`已选 ${definition.name} · 到画布点击起点，再定方向和长度`);
     }
 
     function openInspectorForNewProfile() {
@@ -1095,6 +1109,10 @@ createApp({
     function addConfiguredProfile() {
       const definition = getDesignProfileDefinition(newProfile.catalogId);
       if (!definition) return notify('未找到设计截面','error');
+      if(newProfile.pathType!=='ARC'){
+        startProfileDraw('FREE',{fixedLengthMm:Number(newProfile.length)});
+        return;
+      }
       const path = newProfile.pathType === 'ARC'
         ? {type:'ARC',radius:Number(newProfile.radius),angleDeg:Number(newProfile.angleDeg),plane:newProfile.plane}
         : {type:'LINE',length:Number(newProfile.length)};
@@ -1102,20 +1120,33 @@ createApp({
       notify(`已添加 ${definition.name}`);
     }
 
-    function startProfileDraw(mode) {
+    function startProfileDraw(mode='FREE',options={}) {
       if (!editor) return;
       if (measureMode.value) toggleMeasure();
       if (dimensionMode.value) toggleDimensionMode();
       if (boxSelectMode.value) toggleBoxSelect();
       if (lassoSelectMode.value) toggleLassoSelect();
       if (featureSelectMode.value) toggleFeatureSelectMode();
-      quickPanel.value='draw';
-      editor.profileDrawTool.begin(mode,{...drawForm});
-      notify(mode==='POLYLINE'?'连续绘制：点击起点后可直接输入长度并回车；退格撤回上一段，Esc 结束':'绘制模式已开启；绘制后可直接输入长度并回车','warning');
+      editor.connectionPlacementManager.cancel();editor.machiningPlacementManager.cancel();editor.accessoryPlacementManager.cancel();
+      quickPanel.value=['RECTANGLE','BOX','CONTOUR'].includes(mode)?'build':'draw';
+      rightPanelMode.value='create';activeLibrary.value='profile';
+      drawForm.fixedLengthMm=Number(options.fixedLengthMm||0);
+      editor.profileDrawTool.begin(mode,{...drawForm,faceClosures:[...(newProfile.faceClosures||[])]});
+      if(mode!=='FREE')notify('快捷搭建：点击画布定位并生成框架','warning');
     }
 
     function stopProfileDraw() {
       editor?.profileDrawTool.stop();
+    }
+
+    function cancelProfileDrawStep(){editor?.profileDrawTool.cancelStep();}
+    function confirmProfileDraw(){
+      const tool=editor?.profileDrawTool;
+      if(!tool?.start)return;
+      const input=tool.lengthOverlay?.input;
+      // 就地输入框可能已人工改过值，不能被之前键盘缓存的长度覆盖。
+      const length=Number(input?.value||tool.typedLength);
+      if(!tool.commitLength(length))notify('当前长度或位置不可用，请调整后确认','warning');
     }
 
     function finishContourDraw() {
@@ -1354,17 +1385,6 @@ createApp({
       if(current && event.target?.closest?.('.cad-menu-popover button')) {
         queueMicrotask(()=>{ current.open=false; });
       }
-    }
-
-    function setWorkbenchMode(mode) {
-      const normalized=String(mode).toUpperCase()==='EXPERT'?'EXPERT':'BEGINNER';
-      workbenchMode.value=normalized;
-      if(editor)editor.workbenchMode=normalized;
-      if(normalized==='BEGINNER') {
-        featureSelectMode.value=false;
-        editor?.setFeatureSelectionMode(false);
-      }
-      notify(normalized==='BEGINNER'?'已切换到简易模式':'已切换到专业模式');
     }
 
     function startJointConnectionFromMenu(menu,item) {
@@ -1855,6 +1875,7 @@ createApp({
 
 
     function toggleBoxSelect() {
+      if(!boxSelectMode.value)cancelPlacementTools();
       boxSelectMode.value = !boxSelectMode.value;
       if (boxSelectMode.value) {
         if (lassoSelectMode.value) { lassoSelectMode.value = false; editor?.setLassoMode(false); }
@@ -1867,6 +1888,7 @@ createApp({
 
     /** 自由套索用于不规则区域；与框选、测量、尺寸模式互斥。 */
     function toggleLassoSelect() {
+      if(!lassoSelectMode.value)cancelPlacementTools();
       lassoSelectMode.value = !lassoSelectMode.value;
       if (lassoSelectMode.value) {
         if (boxSelectMode.value) { boxSelectMode.value = false; editor?.setMarqueeMode(false); }
@@ -1879,6 +1901,7 @@ createApp({
     }
 
     function toggleMeasure() {
+      if(!measureMode.value)cancelPlacementTools();
       measureMode.value = !measureMode.value;
       if (measureMode.value && dimensionMode.value) {
         dimensionMode.value = false;
@@ -1897,6 +1920,7 @@ createApp({
     }
 
     function toggleDimensionMode() {
+      if(!dimensionMode.value)cancelPlacementTools();
       dimensionMode.value = !dimensionMode.value;
       if (dimensionMode.value && measureMode.value) {
         measureMode.value = false;
@@ -2091,9 +2115,30 @@ createApp({
     }
 
     function setMode(mode) {
-      if(drawState.active) editor?.profileDrawTool.stop();
+      cancelPlacementTools();
       toolMode.value = mode;
       editor?.setTransformMode(mode);
+    }
+
+    function cancelPlacementTools() {
+      stopProfileDraw();
+      cancelConnectionPlacement();cancelAccessoryPlacement();cancelMachiningPlacement();
+    }
+
+    function showRightPanel(mode) {
+      returnToSelection();
+      rightPanelMode.value=mode;
+    }
+
+    // 返回选择统一清理临时工具，已完成构件和历史记录不受影响。
+    function returnToSelection() {
+      cancelPlacementTools();
+      if(measureMode.value)toggleMeasure();
+      if(dimensionMode.value)toggleDimensionMode();
+      if(boxSelectMode.value)toggleBoxSelect();
+      if(lassoSelectMode.value)toggleLassoSelect();
+      if(featureSelectMode.value)toggleFeatureSelectMode();
+      setMode('translate');
     }
 
     function toggleTransformSpace() {
@@ -2954,15 +2999,15 @@ createApp({
       quickPanel,rightPanelMode,resourceCategories,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
-      activeLibrary,workbenchMode,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
+      activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
       designProfiles,profileCatalog,profileSystems,nominalOptions,newVariants,selectedVariants,visibleProfileVariants,frameProfileOptions,connectionRules,connectionRuleId,hardwareCatalog,databaseAccessories,databaseAccessoryRows,visibleAccessories,accessoryManagerRows,accessoryCategoryOptions,
       newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyTemplates,diyTemplateId,diyForm,selectedDiyTemplate,frameForm,drawForm,drawerForm,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,
       sectionTargetVariant,sectionInfo,sectionSvg,sectionIsCustom,canSmartConnect,
-      endLabel,faceLabel,mateKindLabel,constraintStatusLabel,assemblyStatusLabel,severityLabel,validationCategoryLabel,quickNominal,nominalChanged,newProfileModelChanged,toggleNewProfileFaceClosure,startProfileDrag,dropAsset,quickAddProfile,openInspectorForNewProfile,addConfiguredProfile,profileThumbSvg,profileManagerThumbSvg,openCustomProfileDialog,openProfileCatalogManager,closeProfileCatalogManager,editDatabaseProfile,duplicateDatabaseProfile,toggleDatabaseProfile,closeCustomProfileDialog,saveCustomProfile,loadDatabaseProfiles,removeDatabaseProfile,loadAccessoryCatalog,addCatalogAccessory,mountCatalogAccessory,cancelAccessoryPlacement,mountedTargetLabel,mountPositionLabel,detachSelectedAccessory,openAccessoryCatalogManager,closeAccessoryCatalogManager,openAccessoryEditor,saveAccessoryEditor,toggleAccessoryCatalog,removeAccessoryCatalog,accessoryCategoryLabel,startProfileDraw,stopProfileDraw,finishContourDraw,drawOptionsChanged,syncDrawProfile,beginContourFrameEdit,stopContourFrameEdit,setContourEdgeLength,toggleContourOrthogonal,addContourEdgeConstraint,addContourPointAlignment,focusContourConstraint,removeContourConstraint,applyQuickContourRelation,toggleQuickContourRelation,deleteQuickContourRelation,createContourPreset,showAssemblyConnectionDetail,focusAssemblyConnectionDetail,connectionDiagramSvg,
+      endLabel,faceLabel,mateKindLabel,constraintStatusLabel,assemblyStatusLabel,severityLabel,validationCategoryLabel,quickNominal,nominalChanged,newProfileModelChanged,toggleNewProfileFaceClosure,startProfileDrag,dropAsset,quickAddProfile,openInspectorForNewProfile,addConfiguredProfile,profileThumbSvg,profileManagerThumbSvg,openCustomProfileDialog,openProfileCatalogManager,closeProfileCatalogManager,editDatabaseProfile,duplicateDatabaseProfile,toggleDatabaseProfile,closeCustomProfileDialog,saveCustomProfile,loadDatabaseProfiles,removeDatabaseProfile,loadAccessoryCatalog,addCatalogAccessory,mountCatalogAccessory,cancelAccessoryPlacement,mountedTargetLabel,mountPositionLabel,detachSelectedAccessory,openAccessoryCatalogManager,closeAccessoryCatalogManager,openAccessoryEditor,saveAccessoryEditor,toggleAccessoryCatalog,removeAccessoryCatalog,accessoryCategoryLabel,startProfileDraw,stopProfileDraw,cancelProfileDrawStep,confirmProfileDraw,returnToSelection,showRightPanel,finishContourDraw,drawOptionsChanged,syncDrawProfile,beginContourFrameEdit,stopContourFrameEdit,setContourEdgeLength,toggleContourOrthogonal,addContourEdgeConstraint,addContourPointAlignment,focusContourConstraint,removeContourConstraint,applyQuickContourRelation,toggleQuickContourRelation,deleteQuickContourRelation,createContourPreset,showAssemblyConnectionDetail,focusAssemblyConnectionDetail,connectionDiagramSvg,
       addShaft,addPanel,applyPanelPreset,createPanelFromOpening,refitSelectedPanel,createDoorFromOpening,refitSelectedDoor,replaceSelectedProfiles,selectDiyTemplate,generateDiyTemplate,generateFrame,generateDrawers,duplicateArray,mirrorSelection,circularArray,addHardware,
       selectedNominalChanged,selectedProfileModelChanged,profileMetaChanged,toggleSelectedFaceClosure,selectedPathChanged,primitiveChanged,
       importSectionDxf,handleSectionDxf,restoreReferenceSection,
-      setWorkbenchMode,startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
+      startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
       propertyChanged,applyTransformFromFields,setRotationField,radToDeg,
       importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
       addThroughHole,addCountersink,addStartTap,addEndTap,addSlot,addObroundSlot,addMillingRegion,addStartEndHole,addEndEndHole,machiningChanged,deleteMachining,machiningTypeName,machiningLinearPattern,machiningRectangularPattern,machiningEditPattern,machiningDissolvePattern,machiningCopy,machiningPaste,machiningMirrorOffset,machiningMirrorFace,machiningMirrorEnd,toggleMachiningSelection,applyMachiningBatchFace,clearMachiningSelection,

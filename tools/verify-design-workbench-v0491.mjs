@@ -29,7 +29,7 @@ const app=read('js/app.js');
 const html=read('index.html');
 
 assert.ok(schema.includes('CURRENT_PROJECT_SCHEMA_VERSION = 62'));
-assert.ok(schema.includes("workbenchMode:'BEGINNER'"));
+assert.ok(schema.includes('delete project.editorState.workbenchMode'));
 assert.ok(schema.includes('项目当前不维护历史 Schema 兼容'));
 assert.ok(editor.includes('manufacturingProfile:null'),'新建设计型材必须保持 manufacturingProfile=null');
 assert.ok(editor.includes('designProfile:{'),'Editor 必须写入 designProfile');
@@ -48,12 +48,12 @@ for(const token of ['handlePointerMove','handleClick','renderPreview','TorusGeom
 }
 assert.ok(machiningPlacement.includes('点击后才写入 MachiningFeature'),'加工 hover 不得直接落业务数据');
 
-for(const token of ['closeCadMenus','handleCadMenuPointerDown',"const workbenchMode = ref('BEGINNER')",'function setWorkbenchMode']){
+for(const token of ['closeCadMenus','handleCadMenuPointerDown','function returnToSelection']){
   assert.ok(app.includes(token),`app.js 缺少 ${token}`);
 }
-assert.ok(html.includes("setWorkbenchMode('BEGINNER')"),'简易模式入口缺失');
+assert.ok(!html.includes('workbenchMode') && !app.includes('setWorkbenchMode'),'工作台不再区分模式');
 assert.ok(!html.includes('@click="openProfileCatalogManager"'),'设计页面不得暴露真实制造型材目录管理入口');
-for(const text of ['设计型材','设计时只选择截面、槽位和封边；真实材料在制造阶段再配置','选择一种方式后，直接点击接头附近','打孔、攻丝和开槽','简易模式','专业模式']){
+for(const text of ['设计型材','设计时只选择截面、槽位和封边；真实材料在制造阶段再配置','选择一种方式后，直接点击接头附近','打孔、攻丝和开槽','精确连接与配合','更多加工']){
   assert.ok(html.includes(text),`工作台缺少中文交互：${text}`);
 }
 for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>Feature<','>Snap<','>Assembly<']){
@@ -62,7 +62,7 @@ for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.65.0',
+  version:'0.68.0',
   schema:62,
   currentOnly:true,
   designManufacturingSeparated:true,
@@ -72,7 +72,7 @@ console.log(JSON.stringify({
   twoClickFallback:true,
   ghostConnector:true,
   ghostMachining:true,
-  beginnerMode:true,
+  unifiedWorkbench:true,
   chineseWorkbench:true,
   menuAutoClose:true,
   pricing:false

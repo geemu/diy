@@ -2,7 +2,7 @@ import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSyste
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.65.0';
+export const CURRENT_APP_VERSION = '0.68.0';
 
 /**
  * Current-only project schema gate.
@@ -73,7 +73,7 @@ export default class ProjectSchema {
     };
     project.editorState = {
       autosaveEnabled:true,
-      profileDrawToolVersion:4,
+      profileDrawToolVersion:7,
       featureSnapVersion:3,
       assemblySystemVersion:2,
       assemblyExplodedViewVersion:1,
@@ -110,7 +110,6 @@ export default class ProjectSchema {
       connectionAnchorVersion:1,
       connectionPlacementVersion:2,
       machiningPlacementVersion:1,
-      workbenchMode:'BEGINNER',
       autoConnectionEnabled:true,
       machiningFeatureSystemVersion:1,
       machiningReferenceVersion:1,
@@ -122,11 +121,12 @@ export default class ProjectSchema {
       profileGripEditingVersion:1,
       profileGripDefaults:{enabled:true,minLengthMm:10,gridSnap:true,gridStepMm:10,featureSnap:true,featureSnapDistanceMm:28,axisSnapToleranceMm:3},
       engineeringDrawing:{projectName:'未命名工程',revision:'A',paper:'A3',sideView:'RIGHT'},
-      drawingDefaults:{catalogId:'DESIGN-3030',plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000},
+      drawingDefaults:{catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000},
       annotations:{showOverall:true,showPartDimensions:true,showMachiningLabels:true,showMachiningDimensions:true,showUserDimensions:true},
       ...(project.editorState || {})
     };
-    project.editorState.drawingDefaults = {catalogId:'DESIGN-3030',plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,...(project.editorState.drawingDefaults || {})};
+    project.editorState.drawingDefaults = {catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,...(project.editorState.drawingDefaults || {})};
+    project.editorState.drawingDefaults.continueDrawing = project.editorState.drawingDefaults.continueDrawing === true;
     project.editorState.annotations = {showOverall:true,showPartDimensions:true,showMachiningLabels:true,showMachiningDimensions:true,showUserDimensions:true,...(project.editorState.annotations || {})};
     project.editorState.dimensionSystemVersion = DIMENSION_SYSTEM_VERSION;
     project.editorState.engineeringDrawingSystemVersion = 2;
@@ -157,9 +157,10 @@ export default class ProjectSchema {
     project.editorState.connectionAnchorVersion = 1;
     project.editorState.connectionPlacementVersion = 2;
     project.editorState.machiningPlacementVersion = 1;
-    project.editorState.workbenchMode = project.editorState.workbenchMode === 'EXPERT' ? 'EXPERT' : 'BEGINNER';
+    // 工作台不再分模式，展示偏好不应成为工程的业务事实。
+    delete project.editorState.workbenchMode;
     project.editorState.autoConnectionEnabled = project.editorState.autoConnectionEnabled !== false;
-    project.editorState.profileDrawToolVersion = 4;
+    project.editorState.profileDrawToolVersion = 7;
     project.editorState.featureSnapVersion = 3;
     project.editorState.profileCollisionCheckVersion = 2;
     project.editorState.profileGripEditingVersion = 1;

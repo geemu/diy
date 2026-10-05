@@ -21,7 +21,7 @@ export default class ProfileDrawOverlay {
         event.preventDefault();
         if(!tool.commitLength(this.input.value))this.input.setAttribute('aria-invalid','true');
       }else if(event.key==='Escape') {
-        event.preventDefault();tool.cancelStep();
+        event.preventDefault();tool.stop();
       }
     });
     this.removeFrameHandler=this.sceneManager.addFrameHandler(()=>this.position());

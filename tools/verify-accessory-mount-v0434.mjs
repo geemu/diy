@@ -28,12 +28,12 @@ assert.ok(app.includes('detachSelectedAccessory'));
 assert.ok(app.includes('mountPositionLabel'));
 assert.ok(html.includes('解除安装'));
 assert.ok(html.includes('已安装配件会跟随宿主移动、旋转和尺寸变化'));
-assert.ok(schema.includes("CURRENT_APP_VERSION = '0.65.0'"));
+assert.ok(schema.includes("CURRENT_APP_VERSION = '0.68.0'"));
 assert.ok(schema.includes('accessoryMountingVersion:2'));
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.65.0',
+  version:'0.68.0',
   schema:62,
   mountLifecycle:true,
   hostTransformFollow:true,

@@ -3,8 +3,11 @@ import {profileQuaternion,workPlaneNormal} from '../geometry/ProfileOrientation.
 import {featureLabel} from '../model/ProfileFeatureCatalog.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
+import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
+import ProfileDrawOverlay from '../ui/ProfileDrawOverlay.js';
+import {resolveScreenAxis} from './ScreenAxisResolver.js';
 
-/** Browser CAD-style profile drawing tool (v0.30). Modes: LINE, POLYLINE, RECTANGLE, BOX. */
+/** 玩家型材绘制：自由空间搭建、斜向绘制与工作平面轮廓共用提交和干涉保护。 */
 export default class ProfileDrawTool {
   constructor(editor){
     this.editor=editor;
@@ -18,16 +21,22 @@ export default class ProfileDrawTool {
     this.polylineOrigin=null;
     this.sessionSegments=[];
     this.typedLength='';
+    this.axisLock=null;
+    this.lastPointer=null;
+    this.lengthOverlay=null;
     this.onStateChanged=null;
   }
 
-  defaults(){return {catalogId:'DESIGN-3030',plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,contourCloseToleranceMm:28};}
+  defaults(){return {catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,contourCloseToleranceMm:28};}
   isActive(){return this.mode!=='OFF';}
-  configure(options={}){this.options={...this.options,...options};this.emit();return {...this.options};}
+  dispose(){this.stop();this.lengthOverlay?.dispose();this.lengthOverlay=null;}
+  configure(options={}){if(options.catalogId&&options.catalogId!==this.options.catalogId)this.clearPreview();this.options={...this.options,...options};this.emit();return {...this.options};}
 
   begin(mode='LINE',options={}){
     const next=String(mode||'LINE').toUpperCase();
-    if(!['LINE','POLYLINE','RECTANGLE','BOX','CONTOUR'].includes(next))throw new Error(`不支持的绘制模式：${mode}`);
+    if(!['FREE','DIAGONAL','LINE','POLYLINE','RECTANGLE','BOX','CONTOUR'].includes(next))throw new Error(`不支持的绘制模式：${mode}`);
+    this.axisLock=null;this.lastPointer=null;
+    if(typeof document!=='undefined'&&!this.lengthOverlay)this.lengthOverlay=new ProfileDrawOverlay(this);
     this.mode=next;this.configure(options);this.start=null;this.hover=null;this.contourPoints=[];this.polylinePreviousMesh=null;this.polylineOrigin=null;this.sessionSegments=[];this.typedLength='';this.clearPreview();
     this.editor.sceneManager.setMarqueeMode(false);
     this.editor.sceneManager.transformControls.detach();
@@ -36,8 +45,10 @@ export default class ProfileDrawTool {
   }
 
   stop(){
+    this.axisLock=null;this.lastPointer=null;
     this.mode='OFF';this.start=null;this.hover=null;this.contourPoints=[];this.polylinePreviousMesh=null;this.polylineOrigin=null;this.sessionSegments=[];this.typedLength='';this.clearPreview();
     this.editor.sceneManager.renderer.domElement.style.cursor='';
+    if(this.editor.sceneManager.snapMarker)this.editor.sceneManager.snapMarker.visible=false;
     this.editor.sceneManager.hideSnapFeedback?.();
     if(this.editor.selected&&this.editor.selected.userData?.part?.locked!==true)this.editor.sceneManager.transformControls.attach(this.editor.selected);
     this.emit();
@@ -59,6 +70,16 @@ export default class ProfileDrawTool {
   handleKeyDown(event){
     if(!this.isActive())return false;
     const key=String(event?.key||'');
+    if(key==='Escape'){this.stop();return true;}
+    if(key==='Enter'&&this.mode==='FREE'&&!this.start){this.stop();return true;}
+    if(this.mode==='FREE'&&['Alt','Shift'].includes(key)){
+      this.handleModifierChange(event);return true;
+    }
+    if(this.mode==='FREE'&&/^[xyz]$/i.test(key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
+      const axis=key.toUpperCase();this.axisLock=this.axisLock===axis?null:axis;
+      if(this.lastPointer)this.handlePointerMove(this.lastPointer);
+      this.emit();return true;
+    }
     if(key==='Backspace'){
       if(this.typedLength){
         this.typedLength=this.typedLength.slice(0,-1);
@@ -69,22 +90,32 @@ export default class ProfileDrawTool {
       else return false;
       return true;
     }
-    if((/^\d$/.test(key)||key==='.')&&this.start&&['LINE','POLYLINE','CONTOUR'].includes(this.mode)){
+    if((/^\d$/.test(key)||key==='.')&&this.start&&['FREE','DIAGONAL','LINE','POLYLINE','CONTOUR'].includes(this.mode)){
       if(key==='.'&&this.typedLength.includes('.'))return true;
       this.typedLength=`${this.typedLength}${key}`.slice(0,10);
       this.refreshTypedPreview();
       return true;
     }
-    if(key==='Enter'&&this.start&&['LINE','POLYLINE','CONTOUR'].includes(this.mode)){
+    if(key==='Enter'&&this.start&&['FREE','DIAGONAL','LINE','POLYLINE','CONTOUR'].includes(this.mode)){
       const length=Number(this.typedLength);
       if(!Number.isFinite(length)||length<1)return this.typedLength?true:false;
-      const candidate=this.typedCandidate(length);
-      this.typedLength='';
-      if(this.mode==='CONTOUR')this.handleContourClick(candidate);
-      else this.commitLinearCandidate(candidate);
+      this.commitLength(this.typedLength);
       return true;
     }
     return false;
+  }
+
+  commitLength(value){
+    const length=Number(value);
+    if(!this.start||!Number.isFinite(length)||length<1||length>50000)return false;
+    const candidate=this.typedCandidate(length);
+    if(this.mode==='CONTOUR'){this.typedLength='';this.handleContourClick(candidate);return true;}
+    return this.commitLinearCandidate(candidate);
+  }
+
+  /** 修饰键在鼠标静止时也重新计算方向，避免松开 Alt 后仍沿用旧斜向预览。 */
+  handleModifierChange(event){
+    if(this.mode==='FREE'&&this.lastPointer)this.handlePointerMove({...this.lastPointer,altKey:event.altKey,shiftKey:event.shiftKey,ctrlKey:event.ctrlKey});
   }
 
   refreshTypedPreview(){
@@ -96,14 +127,19 @@ export default class ProfileDrawTool {
     this.emit();
   }
 
-  typedCandidate(length){
+  typedCandidate(length,reference=this.hover){
     const plane=this.options.plane;
-    let delta=(this.hover?.point||this.start.point.clone().add(defaultPlaneDirection(plane))).clone().sub(this.start.point);
-    delta=projectToPlane(delta,plane);
-    if(this.options.orthogonal!==false)delta=orthogonalDelta(delta,plane);
-    if(delta.lengthSq()<1e-9)delta=defaultPlaneDirection(plane);
+    let delta=(reference?.point||this.start.point.clone().add(defaultPlaneDirection(plane))).clone().sub(this.start.point);
+    if(this.mode!=='FREE')delta=projectToPlane(delta,plane);
+    if(this.mode==='FREE'){
+      if(this.axisLock||reference?.axis||reference?.shiftKey)delta=orthogonalDelta3d(delta,this.axisLock);
+    }else if(this.mode!=='DIAGONAL'&&this.options.orthogonal!==false)delta=orthogonalDelta(delta,plane);
+    if(delta.lengthSq()<1e-9){delta=defaultPlaneDirection(plane);if(this.mode==='FREE'&&this.axisLock){delta.set(0,0,0);delta[this.axisLock.toLowerCase()]=1;}}
     delta.normalize().multiplyScalar(Number(length));
-    return {point:this.start.point.clone().add(delta),feature:null,snapLabel:`输入 ${Number(length)} mm`,typed:true};
+    const candidate={point:this.start.point.clone().add(delta),feature:null,snapLabel:`输入 ${Number(length)} mm`,typed:true,axis:this.mode==='FREE'?(this.axisLock||reference?.axis||null):null,shiftKey:reference?.shiftKey===true};
+    // 自由搭建的输入表示真实型材长度，不把搭接预留量从用户输入中扣除。
+    if(this.mode==='FREE'&&this.start.feature?.type==='PROFILE_END')candidate.point=this.linearSegment(candidate).start.add(delta);
+    return candidate;
   }
 
   undoLastSegment(){
@@ -126,18 +162,20 @@ export default class ProfileDrawTool {
 
   handlePointerMove(event){
     if(!this.isActive())return;
+    this.lastPointer={clientX:event.clientX,clientY:event.clientY,ctrlKey:event.ctrlKey,shiftKey:event.shiftKey,altKey:event.altKey};
     const candidate=this.resolvePointer(event);
     if(!candidate)return;
     this.hover=candidate;
     this.editor.sceneManager.showSnapPoint(candidate.point);
-    this.updatePreview(candidate);
-    this.showDraftFeedback(candidate);
+    const draft=this.typedLength?this.typedCandidate(Number(this.typedLength)||0):candidate;
+    this.updatePreview(draft);
+    this.showDraftFeedback(draft);
     this.emit();
   }
 
   handleClick(event){
     if(!this.isActive())return false;
-    const candidate=this.resolvePointer(event);
+    const candidate=this.start&&Number(this.typedLength)>0?this.typedCandidate(Number(this.typedLength)):this.resolvePointer(event);
     if(!candidate)return true;
     this.typedLength='';
     if(this.mode==='CONTOUR'){this.handleContourClick(candidate);return true;}
@@ -170,22 +208,22 @@ export default class ProfileDrawTool {
   }
 
   commitLinearCandidate(candidate){
-    const end=this.applyDraftRules(candidate);
+    const segment=this.linearSegment(candidate);
+    const end=segment.candidate;
     if(!this.start||this.start.point.distanceTo(end.point)<1)return true;
     const logicalStart=this.start.point.clone();
-    const logicalEnd=end.point.clone();
-    let physicalStart=logicalStart.clone();
-    if(this.mode==='POLYLINE'&&this.polylinePreviousMesh)physicalStart=continuationButtStart(this.polylinePreviousMesh,logicalStart,logicalEnd);
+    const logicalEnd=segment.end;
+    const physicalStart=segment.start;
     if(physicalStart.distanceTo(logicalEnd)<1)return true;
     const startCandidate=cloneCandidate(this.start);
-    const mesh=this.editor.addProfileBetweenPoints(this.options.catalogId,physicalStart,logicalEnd,{captureHistory:false,crossSectionUp:workPlaneNormal(this.options.plane)});
+    const mesh=this.editor.addProfileBetweenPoints(this.options.catalogId,physicalStart,logicalEnd,{captureHistory:false,crossSectionUp:workPlaneNormal(this.options.plane),faceClosures:[...(this.options.faceClosures||[])]});
     const collision=this.editor.interferenceFeedbackManager.refresh({focusIds:new Set([mesh.userData.part.id]),live:false});
     if(collision.active){
       this.editor.removePartByIdSilently(mesh.userData.part.id);
       this.editor.interferenceFeedbackManager.requestRefresh();
       this.editor.onTransformBlocked?.(collision);
       this.editor.emitStats();
-      return true;
+      return false;
     }
     const autoResults=[];
     if(this.editor.autoConnectionEnabled){
@@ -200,10 +238,17 @@ export default class ProfileDrawTool {
         }
       }
     }
+    if(this.editor.autoConnectionEnabled&&this.mode==='FREE'){
+      // 端点特征没有 face，搭接后交给既有几何连接解析，不在绘制层另写连接规则。
+      const ids=[mesh.userData.part.id,this.start.feature?.partId,end.feature?.partId].filter(Boolean);
+      const result=this.editor.autoConnectProfiles([...new Set(ids)],{source:'PROFILE_DRAW_FREE'});
+      for(let i=0;i<Number(result?.createdCount||0);i++)autoResults.push({status:'CREATED'});
+    }
     this.editor.emitStats();
     this.editor.historyManager.capture();
     this.editor.emitProjectChanged();
     const part=mesh.userData.part;
+    this.editor.sceneManager.transformControls.detach();
     const nextStart={point:end.point.clone(),feature:{type:'PROFILE_END',kind:'ENDPOINT',partId:part.id,displayId:part.displayId,end:'END',stationS:Number(part.dimensions.length),worldPoint:end.point.clone()},snapLabel:`${part.displayId} B端点`};
     if(this.mode==='POLYLINE'){
       this.sessionSegments.push({partId:part.id,logicalStart:startCandidate,logicalEnd:cloneCandidate(nextStart)});
@@ -211,7 +256,10 @@ export default class ProfileDrawTool {
     }else{
       this.start=null;this.polylinePreviousMesh=null;this.polylineOrigin=null;
     }
-    this.hover=null;this.typedLength='';this.clearPreview();this.emit({committed:'PROFILE',partId:part.id,lengthMm:Number(part.dimensions.length),autoConnections:autoResults.length});return true;
+    this.hover=null;this.typedLength='';this.clearPreview();
+    // 默认单次完成即回到选择；连续添加是明确选择，不让玩家困在“还在画”的状态。
+    if(this.mode==='FREE'&&this.options.continueDrawing!==true)this.stop();
+    this.emit({committed:'PROFILE',partId:part.id,lengthMm:Number(part.dimensions.length),autoConnections:autoResults.length});return true;
   }
 
   rollbackParts(partIds=[]){
@@ -231,7 +279,7 @@ export default class ProfileDrawTool {
   }
 
   state(extra={}){
-    return {active:this.isActive(),mode:this.mode,start:this.start?toPlain(this.start):null,hover:this.hover?toPlain(this.hover):null,contourPointCount:this.contourPoints.length,typedLength:this.typedLength,segmentCount:this.sessionSegments.length,options:{...this.options},...extra};
+    return {active:this.isActive(),mode:this.mode,axisLock:this.axisLock,start:this.start?toPlain(this.start):null,hover:this.hover?toPlain(this.hover):null,contourPointCount:this.contourPoints.length,typedLength:this.typedLength,segmentCount:this.sessionSegments.length,options:{...this.options},...extra};
   }
 
   handleContourClick(candidate){
@@ -313,7 +361,25 @@ export default class ProfileDrawTool {
     const hit=snapActive?this.editor.sceneManager.pickHit(event,roots):null;
     if(hit?.object&&hit.point){
       const feature=this.editor.snapManager.resolveFeatureAtPoint(hit.object,hit.point,{endToleranceMm:32});
-      if(feature)return {point:feature.worldPoint.clone(),feature,snapLabel:`${feature.displayId} ${featureLabel(feature)}`,shiftKey:event?.shiftKey===true};
+      if(feature&&this.acceptFeature(feature))return {point:feature.worldPoint.clone(),feature,snapLabel:`${feature.displayId} ${featureLabel(feature)}`,shiftKey:event?.shiftKey===true};
+    }
+    if(this.mode==='FREE'&&this.start){
+      const result=event.altKey&&!this.axisLock?null:resolveScreenAxis(this.editor.sceneManager.camera,this.editor.sceneManager.renderer.domElement.getBoundingClientRect(),event,this.start.point,this.axisLock,event.shiftKey||this.axisLock?90:8);
+      // 屏幕只能确定二维方向：离轴的斜杆落在当前面；已锁轴不能退回斜向，防止误切。
+      if(!result&&this.axisLock)return null;
+      let point=result?.point||this.editor.sceneManager.worldPointOnPlane(event,planeNormal(this.options.plane),this.start.point);
+      if(!point)return null;
+      if(snapActive){
+        const nearest=this.editor.snapManager.findFeatureNearWorldPoint(point,{maxDistanceMm:Math.max(18,this.editor.snapManager.distance)});
+        if(nearest&&this.acceptFeature(nearest))return {point:nearest.worldPoint.clone(),feature:nearest,snapLabel:`${nearest.displayId} ${featureLabel(nearest)}`};
+      }
+      if(this.options.gridSnap!==false&&!event?.ctrlKey){
+        if(result){
+          const axis=result.axis.toLowerCase(),step=Math.max(1,Number(this.options.gridStepMm||10));
+          point=point.clone();point[axis]=this.start.point[axis]+Math.round((point[axis]-this.start.point[axis])/step)*step;
+        }else point=snapPointToGrid(point,this.options.gridStepMm,this.options.plane,this.start.point);
+      }
+      return {point,feature:null,snapLabel:result?`${result.axis} 轴方向`:'斜向定位',axis:result?.axis||null,shiftKey:event.shiftKey===true};
     }
     // 空白工作平面代表型材外表面；中心线抬高半个截面厚度。已有接头优先保持实际坐标。
     const halfHeight=Number(getDesignProfileDefinition(this.options.catalogId)?.sectionSize?.[1]||30)/2;
@@ -323,7 +389,7 @@ export default class ProfileDrawTool {
     if(!point)return null;
     if(snapActive){
       const nearest=this.editor.snapManager.findFeatureNearWorldPoint(point,{maxDistanceMm:Math.max(18,this.editor.snapManager.distance)});
-      if(nearest)return {point:nearest.worldPoint.clone(),feature:nearest,snapLabel:`${nearest.displayId} ${featureLabel(nearest)}`,shiftKey:event?.shiftKey===true};
+      if(nearest&&this.acceptFeature(nearest))return {point:nearest.worldPoint.clone(),feature:nearest,snapLabel:`${nearest.displayId} ${featureLabel(nearest)}`,shiftKey:event?.shiftKey===true};
     }
     if(this.options.gridSnap!==false&&!event?.ctrlKey)point=snapPointToGrid(point,this.options.gridStepMm,this.options.plane,planePoint);
     return {point,feature:null,snapLabel:this.options.gridSnap!==false&&!event?.ctrlKey?'网格':'自由定位',shiftKey:event?.shiftKey===true};
@@ -333,11 +399,51 @@ export default class ProfileDrawTool {
     if(!this.start)return candidate;
     if(candidate.feature)return candidate;
     let delta=candidate.point.clone().sub(this.start.point);
-    delta=projectToPlane(delta,this.options.plane);
-    if(this.options.orthogonal!==false||candidate.shiftKey===true)delta=orthogonalDelta(delta,this.options.plane);
+    if(this.mode==='FREE'){
+      if(this.axisLock||candidate.axis||candidate.shiftKey)delta=orthogonalDelta3d(delta,this.axisLock);
+    }
+    else {
+      delta=projectToPlane(delta,this.options.plane);
+      if((this.mode!=='DIAGONAL'&&this.options.orthogonal!==false)||candidate.shiftKey===true)delta=orthogonalDelta(delta,this.options.plane);
+    }
     const fixed=candidate.typed===true?0:Math.max(0,Number(this.options.fixedLengthMm||0));
     if(fixed>0&&delta.lengthSq()>1e-9)delta.normalize().multiplyScalar(fixed);
     return {...candidate,point:this.start.point.clone().add(delta)};
+  }
+
+  acceptFeature(feature){
+    if(this.mode!=='FREE'||!this.start||!this.axisLock)return true;
+    const delta=feature.worldPoint.clone().sub(this.start.point);
+    const axisDelta=orthogonalDelta3d(delta,this.axisLock);
+    // 显式锁轴时拒绝偏离该轴的接头；未锁定时允许直接吸附空间端点画斜杆。
+    return delta.distanceTo(axisDelta)<.5;
+  }
+
+  linearSegment(candidate){
+    // 右侧“按此长度绘制”也按真实切料长度处理，不因起点搭接扣掉半个截面。
+    if(this.mode==='FREE'&&this.start&&!candidate.typed&&Number(this.options.fixedLengthMm)>0)return this.linearSegment(this.typedCandidate(Number(this.options.fixedLengthMm),candidate));
+    const end=this.applyDraftRules(candidate);
+    let start=this.start?.point.clone()||end.point.clone();
+    let finish=end.point.clone();
+    if(this.mode==='POLYLINE'&&this.polylinePreviousMesh)start=continuationButtStart(this.polylinePreviousMesh,start,finish);
+    if(this.mode==='FREE'&&this.start){
+      if(this.start.feature?.type==='PROFILE_END'){
+        const host=this.editor.getMeshByPartId(this.start.feature.partId);
+        if(host)start=continuationButtStart(host,start,finish);
+      }else if(!this.start.feature){
+        const delta=finish.clone().sub(start);
+        const normal=workPlaneNormal(this.options.plane);
+        if(delta.lengthSq()>1e-8&&Math.abs(delta.clone().normalize().dot(normal))>.999){
+          const halfHeight=Number(getDesignProfileDefinition(this.options.catalogId)?.sectionSize?.[1]||30)/2;
+          start.addScaledVector(normal,-halfHeight);finish.addScaledVector(normal,-halfHeight);
+        }
+      }
+      if(end.feature?.type==='PROFILE_END'){
+        const host=this.editor.getMeshByPartId(end.feature.partId);
+        if(host)finish=continuationButtStart(host,finish,start);
+      }
+    }
+    return {start,end:finish,candidate:end};
   }
 
   createRectangle(a,b){
@@ -369,12 +475,15 @@ export default class ProfileDrawTool {
     if(candidate?.snapLabel)details.push(candidate.snapLabel);
     if(this.start){
       const end=this.mode==='RECTANGLE'?candidate:this.applyDraftRules(candidate);
-      const delta=end.point.clone().sub(this.start.point);
+      // 自由搭建等直线模式统一显示实体长度，不能把搭接预留量混进用户输入口径。
+      const segment=['FREE','DIAGONAL','LINE','POLYLINE'].includes(this.mode)?this.linearSegment(candidate):null;
+      const delta=segment?segment.end.clone().sub(segment.start):end.point.clone().sub(this.start.point);
       const length=delta.length();
       if(length>0.001){
         details.push(`${Number(length.toFixed(1))} mm`);
-        if((this.options.orthogonal!==false||candidate.shiftKey===true)&&!candidate.feature){
-          const axis=dominantAxis(delta,this.options.plane);
+        const axisAligned=this.mode==='FREE'?!!(this.axisLock||candidate.axis||candidate.shiftKey):((this.mode!=='DIAGONAL'&&this.options.orthogonal!==false)||candidate.shiftKey===true);
+        if(axisAligned&&!candidate.feature){
+          const axis=this.mode==='FREE'?dominantAxis3d(delta):dominantAxis(delta,this.options.plane);
           label=`${axis} 轴对齐`;
           details.unshift('正交锁定');
         }
@@ -400,11 +509,9 @@ export default class ProfileDrawTool {
       if(!corners)return null;
       segments.push(...closedButtJointSegments(corners,this.options.catalogId,this.options.plane));
     }else{
-      const end=this.applyDraftRules(candidate);
-      let start=this.start.point.clone();
-      if(this.mode==='POLYLINE'&&this.polylinePreviousMesh)start=continuationButtStart(this.polylinePreviousMesh,start,end.point);
-      if(start.distanceTo(end.point)<1)return null;
-      segments.push({start,end:end.point.clone()});
+      const segment=this.linearSegment(candidate);
+      if(segment.start.distanceTo(segment.end)<1)return null;
+      segments.push(segment);
     }
     const existing=(this.editor.parts||[]).filter(part=>part?.type==='PROFILE');
     let best=null;
@@ -426,6 +533,7 @@ export default class ProfileDrawTool {
   }
 
   updatePreview(candidate){
+    if(['FREE','DIAGONAL','LINE','POLYLINE'].includes(this.mode)){this.updateSolidPreview(candidate);return;}
     this.clearPreview();
     if(this.mode==='CONTOUR'){
       if(!this.contourPoints.length)return;
@@ -460,7 +568,32 @@ export default class ProfileDrawTool {
     this.previewGroup=group;this.editor.sceneManager.scene.add(group);
   }
 
+  updateSolidPreview(candidate){
+    if(!this.start){this.clearPreview();return;}
+    const segment=this.linearSegment(candidate),length=segment.start.distanceTo(segment.end);
+    if(length<1){this.clearPreview();return;}
+    if(!this.previewGroup){
+      const part=draftProfilePart(this.options.catalogId,segment.start,segment.end,this.options.plane);
+      part.dimensions.length=1;part.profilePath.length=1;
+      this.previewGroup=ProfileGeometryFactory.create(part);
+      this.previewGroup.name='__profile_draw_preview__';
+      this.previewGroup.traverse(object=>{
+        if(object.material){object.material.transparent=true;object.material.opacity=.72;object.material.depthWrite=false;}
+        object.castShadow=false;
+      });
+      this.editor.sceneManager.scene.add(this.previewGroup);
+    }
+    const direction=segment.end.clone().sub(segment.start).normalize();
+    this.previewGroup.position.copy(segment.start).add(segment.end).multiplyScalar(.5);
+    this.previewGroup.quaternion.copy(profileQuaternion(direction,workPlaneNormal(this.options.plane)));
+    this.previewGroup.scale.set(1,1,length);
+    const collision=this.previewCollision(candidate),color=collision?0xe24848:candidate.feature?0x36c978:0xc0c8d1;
+    this.previewGroup.traverse(object=>{if(object.isMesh)object.material.color.setHex(color);});
+    this.lengthOverlay?.update(segment.start,segment.end,length,this.typedLength);
+  }
+
   clearPreview(){
+    this.lengthOverlay?.hide();
     if(!this.previewGroup)return;
     this.editor.sceneManager.scene.remove(this.previewGroup);
     this.previewGroup.traverse(obj=>{obj.geometry?.dispose?.();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose?.());else obj.material.dispose?.();}});
@@ -491,6 +624,8 @@ function defaultPlaneDirection(plane){if(plane==='YZ')return new THREE.Vector3(0
 function planeNormal(plane){if(plane==='XY')return new THREE.Vector3(0,0,1);if(plane==='YZ')return new THREE.Vector3(1,0,0);return new THREE.Vector3(0,1,0);}
 function projectToPlane(v,plane){const out=v.clone();if(plane==='XY')out.z=0;else if(plane==='YZ')out.x=0;else out.y=0;return out;}
 function orthogonalDelta(v,plane){const out=new THREE.Vector3();const axes=plane==='XY'?['x','y']:plane==='YZ'?['y','z']:['x','z'];const axis=Math.abs(v[axes[0]])>=Math.abs(v[axes[1]])?axes[0]:axes[1];out[axis]=v[axis];return out;}
+function dominantAxis3d(v){return ['X','Y','Z'].sort((a,b)=>Math.abs(v[b.toLowerCase()])-Math.abs(v[a.toLowerCase()]))[0];}
+function orthogonalDelta3d(v,lockedAxis=null){const axis=(lockedAxis||dominantAxis3d(v)).toLowerCase();const out=new THREE.Vector3();out[axis]=v[axis];return out;}
 function snapPointToGrid(point,stepRaw,plane,origin){const step=Math.max(1,Number(stepRaw||10));const out=point.clone();const axes=plane==='XY'?['x','y']:plane==='YZ'?['y','z']:['x','z'];for(const axis of axes)out[axis]=Math.round(out[axis]/step)*step;const fixed=plane==='XY'?'z':plane==='YZ'?'x':'y';out[fixed]=origin[fixed];return out;}
 function rectangleCorners(a,b,plane){if(plane==='XY')return [new THREE.Vector3(a.x,a.y,a.z),new THREE.Vector3(b.x,a.y,a.z),new THREE.Vector3(b.x,b.y,a.z),new THREE.Vector3(a.x,b.y,a.z)];if(plane==='YZ')return [new THREE.Vector3(a.x,a.y,a.z),new THREE.Vector3(a.x,b.y,a.z),new THREE.Vector3(a.x,b.y,b.z),new THREE.Vector3(a.x,a.y,b.z)];return [new THREE.Vector3(a.x,a.y,a.z),new THREE.Vector3(b.x,a.y,a.z),new THREE.Vector3(b.x,a.y,b.z),new THREE.Vector3(a.x,a.y,b.z)];}
 function rectanglePreviewPoints(a,b,plane){const c=rectangleCorners(a,b,plane);return c?[...c,c[0]]:null;}
@@ -590,7 +725,7 @@ function draftProfilePart(catalogId,start,end,plane){
     position:{x:midpoint.x,y:midpoint.y,z:midpoint.z},
     rotation:{x:euler.x,y:euler.y,z:euler.z},
     dimensions:{length,size:Number(section[0]||30),sectionSize:[Number(section[0]||30),Number(section[1]||30)]},
-    profilePath:{type:'LINE',length}
+    profilePath:{type:'LINE',length},designProfile:{profileId:definition?.id||catalogId}
   };
 }
 

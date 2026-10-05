@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** 根据鼠标与三条世界轴的屏幕投影选择方向，玩家无需先切换 XY/XZ/YZ 工作面。 */
-export function resolveScreenAxis(camera,rect,event,origin,lockedAxis=null) {
+export function resolveScreenAxis(camera,rect,event,origin,lockedAxis=null,angleToleranceDeg=90) {
   if(!camera||!rect?.width||!rect?.height)return null;
   camera.updateMatrixWorld(true);
   const project=point=>{
@@ -29,5 +29,7 @@ export function resolveScreenAxis(camera,rect,event,origin,lockedAxis=null) {
     const score=Math.abs(cursor.x*screenDirection.y-cursor.y*screenDirection.x);
     if(!best||score<best.score)best={axis:axis.toUpperCase(),point:origin.clone().addScaledVector(direction,distance),score};
   }
+  // 自由绘制只在轴线附近吸附；偏离轴线时留给斜杆，而非无条件掰到最近轴。
+  if(best&&!lockedAxis&&cursor.length()>8&&best.score/cursor.length()>Math.sin(angleToleranceDeg*Math.PI/180))return null;
   return best;
 }

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "version": "0.65.0",
+    "version": "0.68.0",
     "generator": "DIY Web",
     "date": "2026-09-29T16:08:07.811Z",
     "schemaVersion": 62,
@@ -1551,7 +1551,7 @@
     "remainingMobilityVisible": true,
     "mobilitySubspaceIntersectionVersion": 2,
     "mobilityGizmoEnabled": true,
-    "profileDrawToolVersion": 3,
+    "profileDrawToolVersion": 7,
     "featureSnapVersion": 2,
     "drawingDefaults": {
       "catalogId": "DESIGN-3030",
@@ -1560,6 +1560,7 @@
       "gridSnap": true,
       "gridStepMm": 10,
       "fixedLengthMm": 0,
+      "continueDrawing": false,
       "boxWidthMm": 1000,
       "boxDepthMm": 600,
       "boxHeightMm": 1000
@@ -1594,7 +1595,6 @@
     "machiningPlacementVersion": 1,
     "contourFrameVersion": 5,
     "assemblyPlaybackVersion": 2,
-    "workbenchMode": "BEGINNER",
     "connectionInstallationDiagramVersion": 3,
     "assemblyInstructionVersion": 2,
     "contourRelationVisualizationVersion": 1,

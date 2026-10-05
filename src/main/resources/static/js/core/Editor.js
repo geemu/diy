@@ -98,7 +98,6 @@ export default class Editor {
     this.connectionManager = new ConnectionManager(this);
     this.snapManager = new SnapManager(this);
     this.autoConnectionEnabled = true;
-    this.workbenchMode = 'BEGINNER';
     this.autoConnectionResolver = new AutoConnectionResolver(this);
     this.historyManager = new HistoryManager(this);
     this.bomExporter = new BomExporter(this);
@@ -144,6 +143,10 @@ export default class Editor {
   }
 
   bind() {
+    this.sceneManager.secondaryClickHandler = () => {
+      if(!this.profileDrawTool.isActive())return false;
+      this.profileDrawTool.stop();return true;
+    };
     this.sceneManager.clickHandler = event => {
       if (this.sceneManager.transformControls.dragging) return;
       if (this.connectionPlacementManager.isActive()) { this.connectionPlacementManager.handleClick(event); return; }
@@ -1039,7 +1042,6 @@ export default class Editor {
     const current = loaded.project;
     this.projectSettings = {...this.projectSettings, ...(current.manufacturing || {})};
     this.setAutoConnectionEnabled(current.editorState?.autoConnectionEnabled !== false);
-    this.workbenchMode = current.editorState?.workbenchMode === 'EXPERT' ? 'EXPERT' : 'BEGINNER';
     this.annotationManager.setOptions(current.editorState?.annotations || {});
     this.profileDrawTool.configure(current.editorState?.drawingDefaults || {});
     this.profileGripEditor.configure(current.editorState?.profileGripDefaults || {});
@@ -1101,7 +1103,7 @@ export default class Editor {
       schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,
       coordinateSystem:createProjectCoordinateDescriptor(),
       manufacturing:structuredClone(this.projectSettings),
-      editorState:{autosaveEnabled:true,annotations:{...this.annotationManager.options},profileDrawToolVersion:4,featureSnapVersion:3,assemblySystemVersion:2,assemblyExplodedViewVersion:1,assemblyDiagnosticsVersion:1,connectorSystemVersion:3,slotCatalogVersion:1,hardwareBomVersion:2,bomReportVersion:1,profileCollisionCheckVersion:2,profileCatalogVersion:1,accessoryCatalogVersion:2,accessoryMountingVersion:2,placementSystemVersion:1,manufacturingIdentityVersion:1,assemblyInstructionVersion:2,taggedDrawingVersion:1,connectionInstallationDiagramVersion:4,contourFrameVersion:5,assemblyPlaybackVersion:2,interactionPolishVersion:5,contourRelationVisualizationVersion:2,assemblyGuideDocumentVersion:2,cadInteractionVersion:3,cadInteraction:{transformSpace:this.transformSpace,workPlane:this.workPlaneVisualizer.plane,workPlaneVisible:this.workPlaneVisualizer.visible,movementStepMm:this.movementStepMm,rotationStepDeg:this.rotationStepDeg,moveScope:this.transformMoveScope},autoConnectorRecommendation:true,autoConnectionSystemVersion:2,connectionQuickChangeVersion:1,panelDoorConfiguratorVersion:1,profileReplacementVersion:1,designModelVersion:1,manufacturingConfigurationVersion:1,connectionAnchorVersion:1,connectionPlacementVersion:2,machiningPlacementVersion:1,workbenchMode:this.workbenchMode,autoConnectionEnabled:this.autoConnectionEnabled,machiningFeatureSystemVersion:1,machiningReferenceVersion:1,machiningCollisionCheckVersion:1,machiningRectangularPatternVersion:1,dimensionSystemVersion:2,engineeringDrawingSystemVersion:2,engineeringDrawingDxfVersion:1,profileGripEditingVersion:1,profileGripDefaults:{...this.profileGripEditor.options},engineeringDrawing:{...this.drawingSettings},drawingDefaults:{...this.profileDrawTool.options}},
+      editorState:{autosaveEnabled:true,annotations:{...this.annotationManager.options},profileDrawToolVersion:7,featureSnapVersion:3,assemblySystemVersion:2,assemblyExplodedViewVersion:1,assemblyDiagnosticsVersion:1,connectorSystemVersion:3,slotCatalogVersion:1,hardwareBomVersion:2,bomReportVersion:1,profileCollisionCheckVersion:2,profileCatalogVersion:1,accessoryCatalogVersion:2,accessoryMountingVersion:2,placementSystemVersion:1,manufacturingIdentityVersion:1,assemblyInstructionVersion:2,taggedDrawingVersion:1,connectionInstallationDiagramVersion:4,contourFrameVersion:5,assemblyPlaybackVersion:2,interactionPolishVersion:5,contourRelationVisualizationVersion:2,assemblyGuideDocumentVersion:2,cadInteractionVersion:3,cadInteraction:{transformSpace:this.transformSpace,workPlane:this.workPlaneVisualizer.plane,workPlaneVisible:this.workPlaneVisualizer.visible,movementStepMm:this.movementStepMm,rotationStepDeg:this.rotationStepDeg,moveScope:this.transformMoveScope},autoConnectorRecommendation:true,autoConnectionSystemVersion:2,connectionQuickChangeVersion:1,panelDoorConfiguratorVersion:1,profileReplacementVersion:1,designModelVersion:1,manufacturingConfigurationVersion:1,connectionAnchorVersion:1,connectionPlacementVersion:2,machiningPlacementVersion:1,autoConnectionEnabled:this.autoConnectionEnabled,machiningFeatureSystemVersion:1,machiningReferenceVersion:1,machiningCollisionCheckVersion:1,machiningRectangularPatternVersion:1,dimensionSystemVersion:2,engineeringDrawingSystemVersion:2,engineeringDrawingDxfVersion:1,profileGripEditingVersion:1,profileGripDefaults:{...this.profileGripEditor.options},engineeringDrawing:{...this.drawingSettings},drawingDefaults:{...this.profileDrawTool.options}},
       metadata:{
         version:CURRENT_APP_VERSION,
         schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,

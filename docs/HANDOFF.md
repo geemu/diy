@@ -1,6 +1,40 @@
-# 项目交接文档 — v0.65.0
+# 项目交接文档 — v0.68.0
 
-## v0.65 当前重点
+## v0.68 当前重点
+
+- 用户要求不再区分简单/专业模式，统一样式并解决画完后退出不便。删除 Editor/app 中模式状态；Schema 当前工程规范化丢弃展示字段 workbenchMode，不新增历史迁移。
+- ProfileDrawTool.options.continueDrawing 默认 false。FREE 成功提交后 stop；开启连续添加才保持 FREE。退出清理 Ghost、Snap 和光标并恢复所选构件操作，不删除已提交件、不额外写历史。
+- Esc 在工具、就地长度输入和全局侧栏字段三处统一 stop。取消当前段仍走 cancelStep，保留等待起点状态；Enter 在 FREE 等待起点时结束。
+- SceneManager 非左键 pointerup 不进入 clickHandler；仅右键短距离单击调用 secondaryClickHandler。Editor 只在绘制活动时处理为 stop，并抑制随后的普通菜单；拖动右键仍由 OrbitControls 平移。
+- 画布 action HUD 不依赖左侧展开；确认按钮优先读取就地输入的实际值，避免已编辑输入被旧 typedLength 覆盖。其他工具与右侧页签通过统一取消临时放置入口切换。
+- 开始绘制显示右组件库；单次完成/主动结束后有选择则显示属性。不要用 UI 直接删改领域数组。
+- 统一主题在 app.css 的工作台主题区管理，浅色面板 + 单一橙色操作强调；红/绿仍是几何状态色。901–1100 px 侧栏预留轨道，更窄屏保留结束 HUD。
+- 当前 Schema 62、toolVersion 7。验证结果与浏览器边界见 docs/VALIDATION.md；未承诺一般非正交连接与自动斜切制造。
+
+## v0.67 历史能力
+
+- 用户确认单一自由绘制入口。FREE 同时覆盖三轴搭建与斜杆；不只是隐藏 DIAGONAL 按钮。
+- ScreenAxisResolver 可接收屏幕角度容差；FREE 使用 8° 近轴吸附，离轴通过当前面解析。Alt 绕过方向吸附，Shift 使用最近可投影轴，显式 X/Y/Z 锁轴优先于 Alt。
+- 候选 axis / shiftKey 决定是否正交；typedCandidate 不再对所有 FREE 候选强制正交。Feature 只在显式锁轴时拒绝偏轴，避免阻断直接取空间端点。
+- handleModifierChange 在按下/释放 Alt、Shift 时刷新当前鼠标候选。modifier 状态属于工具，不进入 Project。
+- 快捷搭建负责 RECTANGLE / BOX / CONTOUR 与 L/U/阶梯模板。startProfileDraw 根据 mode 选择左侧面板；单根绘制入口、右侧按长度绘制、右键和 E 均使用 FREE，独立 A 入口已移除。
+- 原有 LINE / POLYLINE / DIAGONAL 保留为底层能力，不为移除界面入口做无关架构重构。
+- Schema 62、工具版本 6；仍不承诺任意非正交接头或斜切制造自动化。检查结果见 docs/VALIDATION.md。
+- 已检查 125 个 JS/MJS、34 项回归和 JDK21 Maven clean test；实际浏览器确认 FREE 中 500 mm 斜杆、撤销/重做、静止鼠标下 Alt 切换、600 mm 搭接连接和快捷搭建面板入口，未验证独立 Tomcat/REST 服务现场启动。
+
+## v0.66 保留能力
+
+- 经登录实际观察嘉立创编辑器的独立临时草稿；原始参考工程未修改，登录信息只用于本次会话，不写入仓库。
+- 右侧选择型材进入 FREE 自由绘制，不立即创建零件。点击起点、鼠标确定 X/Y/Z 方向、输入真实切料长度、Enter 或点击确认；完成一根后重新选起点。
+- E = 自由绘制，A = 斜向绘制；FREE 内 X/Y/Z 可锁定/解除轴。DIAGONAL 使用当前工作平面，保留既有矩形、箱体、连续和闭合轮廓入口。
+- ScreenAxisResolver 使用屏幕投影及射线与轴的最近距离解析空间方向；投影退化的轴不参与自动竞争。ProfileDrawOverlay 只负责就地长度输入。
+- FREE/DIAGONAL/LINE/POLYLINE 预览复用实际型材截面挤出实体；Ghost 和输入不进入 Project、BOM 或历史。
+- linearSegment() 是预览与提交共同的实体搭接事实源。空白地面竖杆从地面起、从横梁端部转向立柱则从宿主实体表面起；用户输入仍表示新件真实长度。
+- 自由绘制的自动连接只调用现有 AutoConnectionResolver / ConnectionManager；候选集合包含新件和吸附宿主，否则 batch 扫描会漏掉接头。
+- Schema 保持 62，profileDrawToolVersion = 5。本版回归和浏览器观察见 docs/VALIDATION.md；参考站部分工具尚未开放，不宣称所有功能 1:1 对齐。
+- 本版交付检查：124 个 JS/MJS 语法检查、33/33 回归、JDK21 Maven clean test 通过；实际浏览器确认 600 mm 竖杆落地、撤销/重做、轴锁定、输入框取消、500 mm 斜杆和两根 600 mm 型材形成有效设计连接。静态预览不等价于独立 Tomcat/REST 现场验证。
+
+## v0.65 保留能力
 
 - 用户反馈导航过大后，缩为 96 px 卡片 / 88 px 画布；三维复位放到右上角，移除常驻“面·边·角”说明，26 方向菜单侧向展开，不撑大导航本体。CSS 缓存标记为 v0.65.0-ui2，本次仅调整尺寸/排版，未重新运行前版交互回归。
 
@@ -35,7 +69,7 @@
 
 ## 1. 当前基线
 
-- 应用版本：**v0.65.0**
+- 应用版本：**v0.67.0**
 - Project Schema：**62**
 - Schema 策略：**current-only；不维护历史兼容**
 - JDK：21
@@ -43,7 +77,7 @@
 - 数据库：SQLite
 - 持久层：MyBatis + XML
 - 前端：Vue 3 Global Build + Three.js + ES Modules
-- 当前主题：**基础 DIY：快速搭建 / 现有结构补连接 / 安全清除自动连接 / 连接状态总览**
+- 当前主题：**单一自由绘制入口 / 近轴吸附与离轴斜杆 / 整框快捷搭建**
 
 ## 1.0 v0.58 简单关系与安装示意基线
 
