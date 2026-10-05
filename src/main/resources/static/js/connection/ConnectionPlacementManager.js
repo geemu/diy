@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import {resolveProfileFeature,resolveProfileSurfaceFeature,profileFeatureWorldPoint,featureLabel} from '../model/ProfileFeatureCatalog.js';
 
 /**
@@ -20,8 +21,9 @@ export default class ConnectionPlacementManager {
 
   isActive(){return !!this.mode;}
 
-  begin(mode='ANGLE_BRACKET') {
+  begin(mode='ANGLE_BRACKET',options={}) {
     this.mode=String(mode || 'ANGLE_BRACKET').toUpperCase();
+    this.componentDefinition=options.componentDefinition?structuredClone(options.componentDefinition):null;
     this.first=null;
     this.hover=null;
     this.directPreview=null;
@@ -47,6 +49,7 @@ export default class ConnectionPlacementManager {
   cancel() {
     const wasActive=this.isActive();
     this.mode=null;
+    this.componentDefinition=null;
     this.first=null;
     this.hover=null;
     this.directPreview=null;
@@ -178,7 +181,8 @@ export default class ConnectionPlacementManager {
       const connection=this.editor.connectionManager.createConnection(sourceAnchor.mesh,targetAnchor.mesh,{
         sourceEnd:sourceAnchor.feature.end,
         targetFace:targetAnchor.feature.face,
-        designType
+        designType,
+        componentDefinition:this.componentDefinition
       });
       connection.placement={
         mode:this.mode,
@@ -196,6 +200,7 @@ export default class ConnectionPlacementManager {
       this.directPreview=null;
       this.clearPreview();
       this.emit(`已吸附安装：${current}`);
+      this.cancel();
       return connection;
     }catch(error){
       this.emit(error?.message || '连接安装失败');
@@ -240,7 +245,7 @@ export default class ConnectionPlacementManager {
       this.previewGroup.add(marker(source.point,0x24b36b,8));
       this.previewGroup.add(marker(target.point,0x24b36b,8));
       const center=source.point.clone().lerp(target.point,0.5);
-      this.previewGroup.add(connectorGhost(this.mode,center,0x24b36b));
+      this.previewGroup.add(connectorGhost(this.mode,center,0x24b36b,this.componentDefinition));
       return;
     }
     const anchor=this.hover || this.first;
@@ -252,15 +257,14 @@ export default class ConnectionPlacementManager {
       this.previewGroup.add(marker(this.first.point,valid?0x24b36b:0xd9534f,8));
       this.previewGroup.add(marker(this.hover.point,valid?0x24b36b:0xd9534f,8));
       const center=this.first.point.clone().lerp(this.hover.point,0.5);
-      this.previewGroup.add(connectorGhost(this.mode,center,valid?0x24b36b:0xd9534f));
+      this.previewGroup.add(connectorGhost(this.mode,center,valid?0x24b36b:0xd9534f,this.componentDefinition));
     }
   }
 
   clearPreview() {
     while(this.previewGroup.children.length){
       const child=this.previewGroup.children.pop();
-      child.geometry?.dispose?.();
-      child.material?.dispose?.();
+      child.traverse(object=>{object.geometry?.dispose?.();if(Array.isArray(object.material))object.material.forEach(m=>m.dispose());else object.material?.dispose?.();});
     }
   }
 
@@ -275,7 +279,11 @@ function marker(point,color,size){
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(size,16,16),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.88,depthTest:false}));
   mesh.position.copy(point);mesh.renderOrder=1400;return mesh;
 }
-function connectorGhost(mode,point,color){
+function connectorGhost(mode,point,color,definition=null){
+  if(definition){
+    const group=PrimitiveGeometryFactory.create({type:'ACCESSORY',accessoryType:definition.accessoryType,dimensions:definition.dimensions,color});
+    group.position.copy(point);group.traverse(object=>{if(object.isMesh){object.material.color.set(color);object.material.transparent=true;object.material.opacity=.42;object.material.depthTest=false;object.renderOrder=1399;}});return group;
+  }
   const dimensions=mode==='CONNECTION_PLATE'?[52,5,52]:mode==='INTERNAL_CONNECTOR'?[18,18,42]:[34,6,34];
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(...dimensions),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.28,depthTest:false}));
   mesh.position.copy(point);mesh.renderOrder=1399;return mesh;

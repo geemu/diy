@@ -16,6 +16,10 @@ import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from 
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
 import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.70.0';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
+import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
+  FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
+  connectionSpecs,shaftDiametersFor,fastenerThreads,fastenerLengths,closureFaces,connectionComponent,shaftComponent,accessoryComponent,componentPart} from './model/ComponentCatalog.js';
+import {PanelShapeFields,panelDefaults,panelDimensions} from './model/PanelShapeModel.js';
 import {
   getSectionDefinition,
   getSectionInfo,
@@ -59,7 +63,7 @@ createApp({
     const rightPanelMode = ref('create');
     const viewCubeViewport = ref(null);
     const viewDirections = VIEW_DIRECTIONS;
-    const resourceCategories = [{id:'profile',label:'型材',icon:'▤'},{id:'connection',label:'连接',icon:'∟'},{id:'shaft',label:'光轴',icon:'◯'},{id:'panel',label:'板材',icon:'▣'},{id:'accessory',label:'配件',icon:'◆'},{id:'machining',label:'加工',icon:'⊙'}];
+    const resourceCategories = [{id:'profile',label:'铝材',icon:'▤'},{id:'connection',label:'连接',icon:'∟'},{id:'shaft',label:'光轴',icon:'◯'},{id:'panel',label:'板材',icon:'▣'},{id:'accessory',label:'配件',icon:'◆'}];
     let viewCube = null;
     watch(activeLibrary,()=>{rightPanelMode.value='create';});
     watch([quickPanel,rightPanelMode],()=>nextTick(()=>window.dispatchEvent(new Event('resize'))));
@@ -172,13 +176,13 @@ createApp({
     const profileSystems = ProfileSystemOptions;
     const profileSectionTemplateOptions = ProfileSectionTemplateOptions;
     const nominalOptions = computed(() => [...new Set(designProfiles.map(item=>item.nominal))].sort((a,b)=>String(a).localeCompare(String(b),'zh-CN',{numeric:true})));
-    const shaftDiameters = Object.freeze([8,10,12,16,20,25,30,35]);
+    const shaftDiameters = computed(()=>shaftDiametersFor(newShaft.type));
     const connectionRules = DesignConnectionList;
     const hardwareCatalog = HardwareCatalogList;
 
     const newProfile = reactive({
-      nominal:'3030',
-      catalogId:getDefaultDesignProfileId('3030'),
+      nominal:'2040',
+      catalogId:getDefaultDesignProfileId('2040'),
       length:500,
       faceClosures:[],
       pathType:'LINE',
@@ -186,8 +190,30 @@ createApp({
       angleDeg:90,
       plane:'XZ'
     });
-    const newShaft = reactive({diameter:12,length:500,material:'45#钢'});
-    const newPanel = reactive({width:500,height:400,thickness:18,material:'木饰面板'});
+    const newShaft = reactive({type:'ROD',diameter:8,secondDiameter:6,mixed:false,length:100,free:false,material:'45#钢'});
+    const newPanel = reactive({shape:'rectangle',parameters:panelDefaults('rectangle'),edgeMode:false,free:true,width:400,height:400,thickness:5,material:'铝板'});
+    const catalogConnectionForm=reactive({type:'L_BRACKET',spec:'0',length:165,side:'right',free:false});
+    const catalogAccessoryForm=reactive({type:'SLIDE_RAIL',slideType:'THREE_SECTION',slideLength:500,head:'SHCS',thread:5,screwLength:20,elasticSeries:40,capMaterial:'PLASTIC',foot:'D40-M8-30',free:false});
+    const profileClosure=ref('');
+    const referenceProfiles=ProfileReferenceOptions.map(item=>({...getDesignProfileDefinition(item.id),label:item.label}));
+    const extensionProfiles=designProfiles.filter(item=>!ProfileReferenceOptions.some(x=>x.id===item.id));
+    const connectionSpecOptions=computed(()=>connectionSpecs(catalogConnectionForm.type));
+    const currentConnectionComponent=computed(()=>connectionComponent(catalogConnectionForm));
+    const currentShaftComponent=computed(()=>shaftComponent(newShaft));
+    const currentAccessoryComponent=computed(()=>accessoryComponent(catalogAccessoryForm,selectedPart.value?.type==='PROFILE'?getDesignProfileDefinition(selectedPart.value.designProfile.profileId):selectedDesignProfile.value));
+    const secondShaftDiameters=computed(()=>shaftDiameters.value.filter(d=>d<newShaft.diameter));
+    const fastenerThreadOptions=computed(()=>fastenerThreads(catalogAccessoryForm.head));
+    const fastenerLengthOptions=computed(()=>fastenerLengths(catalogAccessoryForm.head,catalogAccessoryForm.thread));
+    const panelFields=computed(()=>PanelShapeFields[newPanel.shape]);
+    const panelShapeLabel=computed(()=>PanelShapeOptions.find(x=>x.value===newPanel.shape)?.label);
+    const currentPanelDimensions=computed(()=>{try{return panelDimensions(newPanel.shape,newPanel.parameters,newPanel.edgeMode);}catch{return null;}});
+    watch(()=>catalogConnectionForm.type,()=>{catalogConnectionForm.spec=connectionSpecOptions.value[0]?.value;});
+    watch(()=>newShaft.type,()=>{if(!shaftDiameters.value.includes(newShaft.diameter))newShaft.diameter=shaftDiameters.value[0];newShaft.mixed=false;});
+    watch(()=>newShaft.diameter,()=>{if(!secondShaftDiameters.value.length)newShaft.mixed=false;if(!secondShaftDiameters.value.includes(newShaft.secondDiameter))newShaft.secondDiameter=secondShaftDiameters.value.at(-1);});
+    watch(()=>newPanel.shape,shape=>{newPanel.parameters=panelDefaults(shape);newPanel.edgeMode=false;});
+    watch(()=>catalogAccessoryForm.head,()=>{if(catalogAccessoryForm.head==='ELASTIC_NUT')return;catalogAccessoryForm.thread=fastenerThreadOptions.value[0];});
+    watch([()=>catalogAccessoryForm.head,()=>catalogAccessoryForm.thread],()=>{if(catalogAccessoryForm.head!=='ELASTIC_NUT'&&!fastenerLengthOptions.value.includes(catalogAccessoryForm.screwLength))catalogAccessoryForm.screwLength=fastenerLengthOptions.value[0];});
+    watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
     const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#c4ccd5','钢板':'#8b959f'});
     const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',normalOffsetMm:0});
     const doorForm = reactive({frameCatalogId:getDefaultDesignProfileId('2020'),gapMm:3,panelGapMm:2,panelThickness:5,panelMaterial:'亚克力',hingeSide:'LEFT',includeHinges:true,includeHandle:true});
@@ -211,16 +237,13 @@ createApp({
       }
       catalogProfilePreview.resize();
       if(activeLibrary.value==='profile'){
-        catalogProfilePreview.setSection(getSectionDefinition(newProfile.catalogId),{lengthRatio:3.5,presentation:'catalog'});
+        catalogProfilePreview.setSection(getSectionDefinition(newProfile.catalogId,newProfile.faceClosures),{lengthRatio:3.5,presentation:'catalog'});
       } else {
         let previewSpec;
-        if(activeLibrary.value==='shaft')previewSpec={type:'SHAFT',dimensions:{diameter:Number(newShaft.diameter),length:Number(newShaft.diameter)*9}};
-        if(activeLibrary.value==='panel')previewSpec={type:'PANEL',dimensions:{...newPanel},color:panelMaterialColors[newPanel.material]};
-        if(activeLibrary.value==='connection')previewSpec={type:'ACCESSORY',accessoryType:connectionRuleId.value==='END_SCREW'?'SOCKET_SCREW':connectionRuleId.value,dimensions:{size:30}};
-        if(activeLibrary.value==='accessory' && selectedCatalogAccessory.value){
-          const definition=accessoryDefinition(selectedCatalogAccessory.value);
-          previewSpec={type:'ACCESSORY',accessoryType:definition.accessoryType,dimensions:{...definition}};
-        }
+        if(activeLibrary.value==='shaft')previewSpec=newShaft.type==='ROD'?{type:'SHAFT',dimensions:{diameter:Number(newShaft.diameter),length:Number(newShaft.length)}}:componentPart(currentShaftComponent.value);
+        if(activeLibrary.value==='panel'&&currentPanelDimensions.value)previewSpec={type:'PANEL',dimensions:currentPanelDimensions.value,color:panelMaterialColors[newPanel.material]};
+        if(activeLibrary.value==='connection')previewSpec=componentPart(currentConnectionComponent.value);
+        if(activeLibrary.value==='accessory')previewSpec=componentPart(currentAccessoryComponent.value);
         catalogProfilePreview.setObject(previewSpec?PrimitiveGeometryFactory.create(previewSpec):null);
       }
     }
@@ -333,9 +356,12 @@ createApp({
       if(accessoryPlacementState.active&&(!item||accessoryPlacementState.definitionId!==accessoryDefinition(item).id))cancelAccessoryPlacement();
     });
     // 只有可见目录和选中的规格变化才重建预览；切换分类立即释放旧 WebGL 上下文。
-    watch([()=>newProfile.catalogId,activeLibrary,rightPanelMode,()=>newShaft.diameter,
-      ()=>newPanel.width,()=>newPanel.height,()=>newPanel.thickness,()=>newPanel.material,
-      connectionRuleId,selectedCatalogAccessory],refreshCatalogPreview,{flush:'post'});
+    watch([()=>newProfile.catalogId,()=>newProfile.faceClosures,activeLibrary,rightPanelMode,
+      ()=>JSON.stringify(newShaft),()=>JSON.stringify(newPanel),currentConnectionComponent,currentAccessoryComponent],()=>{
+      if(accessoryPlacementState.active)cancelAccessoryPlacement();
+      if(connectionPlacementState.active)cancelConnectionPlacement();
+      refreshCatalogPreview();
+    },{flush:'post'});
     const accessoryManagerRows = computed(() => {
       const keyword=accessoryCatalogManagerSearch.value.trim().toLowerCase();
       if(!keyword)return databaseAccessoryRows;
@@ -1109,6 +1135,7 @@ createApp({
       if (!definition) return;
       newProfile.nominal = definition.nominal;
       newProfile.faceClosures = [...(definition.defaultFaceClosures || [])];
+      profileClosure.value='';
       hasChosenProfile.value=true;
       syncDrawProfile(definition.id);
     }
@@ -1232,6 +1259,38 @@ createApp({
       notify(`已添加 Ø${newShaft.diameter} 光轴`);
     }
 
+    function beginCatalogPlacement(definition,free=false) {
+      try {
+        cancelPlacementTools();
+        const spec=structuredClone(definition);if(free)spec.mountRule={target:'FREE'};
+        editor.accessoryPlacementManager.begin(spec);
+        notify(`${definition.label}：到画布选择位置，单击确认，Esc 取消`);
+      }catch(error){notify(error.message||'无法开始放置','warning');}
+    }
+    function placeShaftComponent() {
+      if(newShaft.type!=='ROD')return beginCatalogPlacement(currentShaftComponent.value,newShaft.free);
+      if(!Number.isFinite(Number(newShaft.length))||Number(newShaft.length)<=0)return notify('光轴长度必须大于 0','warning');
+      beginCatalogPlacement({id:'DIY-SHAFT',label:`光轴杆件 Φ${newShaft.diameter}mm L=${newShaft.length}`,mountRule:{target:'FREE'},
+        partSpec:{type:'SHAFT',dimensions:{diameter:newShaft.diameter,length:newShaft.length},color:'#bfc7ce',material:newShaft.material}});
+    }
+    function placePanelComponent() {
+      try {
+        const dimensions=panelDimensions(newPanel.shape,newPanel.parameters,newPanel.edgeMode);
+        if(!newPanel.free){if(newPanel.shape!=='rectangle')return notify('框口填板目前支持矩形；其他形状请选择自由添加','warning');return createPanelFromOpening();}
+        beginCatalogPlacement({id:`DIY-PANEL-${newPanel.shape}`,label:panelShapeLabel.value,dimensions,mountRule:{target:'FREE'},
+          partSpec:{type:'PANEL',dimensions,color:panelMaterialColors[newPanel.material],material:newPanel.material}});
+      }catch(error){notify(error.message,'warning');}
+    }
+    function placeConnectionComponent() {
+      const definition=currentConnectionComponent.value;
+      const designType=({L_BRACKET:'ANGLE_BRACKET',ANGLE_BRACKET:'ANGLE_BRACKET',INNER_BRACKET:'INTERNAL_CONNECTOR',
+        FLAT_PLATE:'CONNECTION_PLATE',T_PLATE:'CONNECTION_PLATE',L_PLATE:'CONNECTION_PLATE',CROSS_PLATE:'CONNECTION_PLATE'})[catalogConnectionForm.type];
+      if(catalogConnectionForm.free||!designType||definition.dimensions.size===15)return beginCatalogPlacement(definition,true);
+      cancelPlacementTools();editor.connectionPlacementManager.begin(designType,{componentDefinition:structuredClone(definition)});
+      notify('到型材接头附近选择安装位置；单击确认，Esc 取消');
+    }
+    function placeAccessoryComponent() {beginCatalogPlacement(currentAccessoryComponent.value,catalogAccessoryForm.free);}
+
     function addPanel() {
       if(![newPanel.width,newPanel.height,newPanel.thickness].every(value=>Number.isFinite(Number(value))&&Number(value)>0))return notify('请输入大于 0 的板材宽、高和厚度','warning');
       editor.addPanel(Number(newPanel.width),Number(newPanel.height),Number(newPanel.thickness),{material:newPanel.material,color:panelMaterialColors[newPanel.material]});
@@ -1241,6 +1300,7 @@ createApp({
     function applyPanelPreset(thickness, material) {
       newPanel.thickness = thickness;
       newPanel.material = material;
+      if(newPanel.parameters.thickness!==undefined)newPanel.parameters.thickness=thickness;
     }
 
     function createPanelFromOpening() {
@@ -1371,6 +1431,12 @@ createApp({
     function primitiveChanged() {
       if (!selectedPart.value || selectedIsProfile.value) return;
       editor.updateSelectedPrimitiveDimensions(selectedPart.value.dimensions);
+    }
+
+    function updatePanelShapeParameter(key,value) {
+      const dimensions=selectedPart.value?.dimensions;
+      try{editor.updateSelectedPrimitiveDimensions(panelDimensions(dimensions.panelShape,{...dimensions.shapeParameters,[key]:Number(value)}));}
+      catch(error){notify(error.message,'warning');projectRevision.value++;}
     }
 
     function importSectionDxf() {
@@ -3108,6 +3174,10 @@ createApp({
 
     return {
       quickPanel,rightPanelMode,resourceCategories,workbenchIcon,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
+      ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
+      catalogConnectionForm,catalogAccessoryForm,profileClosure,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,currentPanelDimensions,
+      placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
+      PanelShapeFields,updatePanelShapeParameter,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
       catalogProfileCanvas,selectedDesignProfile,newProject,renameProject,activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,

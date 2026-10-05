@@ -15,7 +15,7 @@ export default class EngineeringDrawingSvgExporter {
     out.push(`<g data-view="${view.viewType}">`);
     out.push(`<text x="${fmt(cell.x+2)}" y="${fmt(cell.y+4)}" font-size="3.6" font-weight="700">${esc(view.label)}</text>`);
     for(const entity of view.entities){
-      const path=entity.polygon.map((p,i)=>`${i?'L':'M'} ${fmt(origin.x+p.x*scale)} ${fmt(origin.y-p.y*scale)}`).join(' ')+' Z';
+      const path=(entity.rings?.length?entity.rings:[entity.polygon]).map(ring=>ring.map((p,i)=>`${i?'L':'M'} ${fmt(origin.x+p.x*scale)} ${fmt(origin.y-p.y*scale)}`).join(' ')+' Z').join(' ');
       out.push(`<path d="${path}" fill="none" stroke="#111" stroke-width="0.42" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
     }
     for(const line of view.centerLines){const a=map(line.from),b=map(line.to);out.push(`<line x1="${fmt(a.x)}" y1="${fmt(a.y)}" x2="${fmt(b.x)}" y2="${fmt(b.y)}" stroke="#777" stroke-width="0.24" stroke-dasharray="2,1.2" vector-effect="non-scaling-stroke"/>`);}

@@ -2,7 +2,7 @@
  * 设计阶段型材目录。
  *
  * 这里只描述“玩家搭结构时必须知道的几何语义”：截面尺寸、槽宽、槽面和封边。
- * 欧标/国标、壁厚、米重、合金、供应商等制造属性不允许进入本目录。
+ * 欧标名称仅用作用户要求的截面系列展示；壁厚、米重、合金和供应商仍在制造阶段配置。
  */
 function designProfile(id, width, height, series, slotWidth, options = {}) {
   const nominal = `${Number(width)}${Number(height)}`;
@@ -15,7 +15,7 @@ function designProfile(id, width, height, series, slotWidth, options = {}) {
     sectionSize:Object.freeze([Number(width),Number(height)]),
     series:String(series),
     slotWidth:Number(slotWidth),
-    slotDefinitions:Object.freeze(buildSlots(Number(width),Number(height),Number(series),Number(slotWidth))),
+    slotDefinitions:Object.freeze((options.shape==='U_CHANNEL'?[]:buildSlots(Number(width),Number(height),Number(series),Number(slotWidth))).filter(slot=>!(options.defaultFaceClosures||[]).includes(slot.face))),
     defaultFaceClosures:Object.freeze([...(options.defaultFaceClosures || [])]),
     shape:options.shape || 'T_SLOT',
     sectionStyle:options.sectionStyle || 'DESIGN_REFERENCE'
@@ -45,6 +45,7 @@ function buildSlots(width,height,series,slotWidth) {
 }
 
 const profiles=[
+  designProfile('DESIGN-1515',15,15,15,3,{name:'欧标15x15'}),
   designProfile('DESIGN-2020',20,20,20,6),
   designProfile('DESIGN-2040',20,40,20,6),
   designProfile('DESIGN-2060',20,60,20,6),
@@ -64,9 +65,14 @@ const profiles=[
   designProfile('DESIGN-60120',60,120,60,10),
   designProfile('DESIGN-8080',80,80,80,10)
 ];
+for(const size of [20,30,40])profiles.push(designProfile(`DESIGN-${size}${size}R`,size,size,size,size===20?6:8,
+  {name:`欧标${size}x${size}R`,shape:'ROUND_CORNER',defaultFaceClosures:['FRONT','RIGHT']}));
+profiles.push(designProfile('DESIGN-U88',8,8,8,0,{name:'A柱 U型 8x8',shape:'U_CHANNEL',defaultFaceClosures:['FRONT','BACK','LEFT','RIGHT']}));
+const referenceNominals=new Set(['2020','2040','2060','3030','3060','3090','4040','4080','40120','6060','8080']);
+const namedProfiles=profiles.map(item=>referenceNominals.has(item.nominal)?Object.freeze({...item,name:`欧标${item.width}x${item.height}`}):item);
 
-export const DesignProfileList=Object.freeze(profiles);
-export const DesignProfileCatalog=Object.freeze(Object.fromEntries(profiles.map(item=>[item.id,item])));
+export const DesignProfileList=Object.freeze(namedProfiles);
+export const DesignProfileCatalog=Object.freeze(Object.fromEntries(namedProfiles.map(item=>[item.id,item])));
 
 export function getDesignProfileDefinition(id) {
   if(!id)return null;
@@ -111,6 +117,6 @@ export function profileDisplayName(part) {
 }
 
 export function isProfileFaceClosed(part,face) {
-  const closed=new Set((part?.designProfile?.faceClosures || []).map(value=>String(value).toUpperCase()));
+  const closed=new Set([...(profileDesignDefinition(part)?.defaultFaceClosures||[]),...(part?.designProfile?.faceClosures || [])].map(value=>String(value).toUpperCase()));
   return closed.has(String(face).toUpperCase());
 }

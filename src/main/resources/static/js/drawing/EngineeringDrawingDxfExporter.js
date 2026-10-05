@@ -44,8 +44,7 @@ export default class EngineeringDrawingDxfExporter {
     this.textPaper(cell.x+2,cell.y+4,3.6,view.label,'VIEW');
 
     for (const entity of view.entities) {
-      const points=entity.polygon.map(p=>this.modelToPaper(view,p));
-      this.polylinePaper(points,'PROFILE',true);
+      for(const ring of entity.rings?.length?entity.rings:[entity.polygon])this.polylinePaper(ring.map(p=>this.modelToPaper(view,p)),'PROFILE',true);
     }
 
     for (const centerLine of view.centerLines||[]) {

@@ -61,6 +61,8 @@ export default class AccessoryMountManager {
       transform = this.resolveProfileEnd(part,targetMesh,{targetType,end:reference.end});
     } else if (targetType === 'PANEL_SIDE') {
       transform = this.resolvePanelSide(part,targetMesh,{side:reference.side});
+    } else if(targetType==='SHAFT_AXIS') {
+      transform=this.resolveShaftAxis(part,targetMesh,{stationS:reference.stationS});
     }
     if (!transform) return false;
 
@@ -139,6 +141,16 @@ export default class AccessoryMountManager {
         side
       }
     };
+  }
+
+  /** 固定夹沿光轴中心线安装；位置保存为从 A 端量起的站位，随宿主姿态更新。 */
+  resolveShaftAxis(source,targetMesh,options={}) {
+    const part=targetMesh?.userData?.part;if(part?.type!=='SHAFT')return null;
+    const length=Number(part.dimensions.length),stationS=Math.max(0,Math.min(length,Number(options.stationS??length/2)));
+    const d=source.dimensions||source,offset=d.geometryKind==='SHAFT_LIMIT_RING'?0:Number(d.diameter||part.dimensions.diameter)*1.2;
+    const position=targetMesh.localToWorld(new THREE.Vector3(0,offset,stationS-length/2));
+    const quaternion=targetMesh.getWorldQuaternion(new THREE.Quaternion());
+    return {position:this.toPlainPoint(position),rotation:this.toPlainEuler(quaternion),mountReference:{targetType:'SHAFT_AXIS',targetPartId:part.id,stationS}};
   }
 
   applyTransform(mesh,transform) {

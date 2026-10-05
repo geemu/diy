@@ -20,7 +20,7 @@ export default class ProfileGeometryFactory {
   static createLine(part,path) {
     const group = new THREE.Group();
     group.userData.part = part;
-    const section = getSectionDefinition(part.designProfile?.profileId);
+    const section = getSectionDefinition(part.designProfile?.profileId,part.designProfile?.faceClosures||[]);
     const mesh = this.createSectionMesh(section,Number(path.length),this.material(part));
     this.applyEndCuts(mesh.geometry,part,Number(path.length));
     mesh.castShadow = true;
@@ -40,7 +40,7 @@ export default class ProfileGeometryFactory {
       group.remove(child);
       this.disposeObject(child);
     }
-    const section = getSectionDefinition(part.designProfile?.profileId);
+    const section = getSectionDefinition(part.designProfile?.profileId,part.designProfile?.faceClosures||[]);
     const mesh = this.createSectionMesh(section,Number(path.length),this.material(part));
     this.applyEndCuts(mesh.geometry,part,Number(path.length));
     mesh.castShadow = true;
@@ -65,7 +65,7 @@ export default class ProfileGeometryFactory {
   static createArc(part,path) {
     const group = new THREE.Group();
     group.userData.part = part;
-    const section = getSectionDefinition(part.designProfile?.profileId);
+    const section = getSectionDefinition(part.designProfile?.profileId,part.designProfile?.faceClosures||[]);
     const total = Number(path.angleDeg) * Math.PI / 180;
     const segments = Math.max(12,Math.min(144,Math.ceil(Math.abs(path.angleDeg)/2.5)));
     const step = total / segments;

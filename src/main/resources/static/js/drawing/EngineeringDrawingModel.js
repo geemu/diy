@@ -5,6 +5,7 @@
  * The output is renderer-agnostic and is intentionally reusable by SVG/DXF exporters.
  */
 export const ENGINEERING_DRAWING_MODEL_VERSION = 1;
+import {panelContours,SolidPanelShapes,solidPanelPoints} from '../model/PanelShapeModel.js';
 
 export const DRAWING_VIEWS = Object.freeze({
   FRONT:'FRONT', BACK:'BACK', TOP:'TOP', BOTTOM:'BOTTOM', LEFT:'LEFT', RIGHT:'RIGHT', ISO:'ISO'
@@ -68,7 +69,7 @@ export default class EngineeringDrawingModel {
       entities.push({
         entityType:'PART_OUTLINE', partId:item.part.id, displayId:item.part.displayId || '', manufacturingCode:item.part.manufacturingCode || item.part.displayId || '', tag:item.part.manufacturingCode || item.part.displayId || '',
         partType:item.part.type, name:item.part.name || item.part.displayId || '',
-        polygon:hull, center, bounds:bounds2d(hull), lineType:'VISIBLE'
+        polygon:hull, rings:panelDrawingRings(item.part,type), center, bounds:bounds2d(hull), lineType:'VISIBLE'
       });
     }
     const bounds = bounds2d(entities.flatMap(entity => entity.polygon));
@@ -96,6 +97,17 @@ export function partWorldPoints(part) {
   });
 }
 
+function panelDrawingRings(part,type) {
+  const d=part.dimensions||{},shape=d.panelShape;
+  if(part.type!=='PANEL'||!shape||SolidPanelShapes.includes(shape))return null;
+  const contours=panelContours(shape,d.shapeParameters),rings=[contours.outer,...contours.holes];
+  const p=part.position||{},r=part.rotation||{};
+  return rings.map(ring=>ring.map(point=>{
+    const rotated=rotateXYZ({x:point.x,y:point.y,z:d.thickness/2},Number(r.x||0),Number(r.y||0),Number(r.z||0));
+    return projectPoint(type,{x:rotated.x+Number(p.x||0),y:rotated.y+Number(p.y||0),z:rotated.z+Number(p.z||0)});
+  })).filter(ring=>Math.abs(ring.reduce((sum,p,i)=>{const q=ring[(i+1)%ring.length];return sum+p.x*q.y-q.x*p.y;},0))>.001);
+}
+
 function partLocalPoints(part) {
   if (part.type === 'PROFILE') {
     const section = part.dimensions?.sectionSize || [30,30];
@@ -120,7 +132,12 @@ function partLocalPoints(part) {
     const rr=Number(part.dimensions?.diameter||12)/2;
     return boxPoints(rr,rr,Number(part.dimensions?.length||500)/2);
   }
-  if (part.type === 'PANEL') return boxPoints(Number(part.dimensions?.width||400)/2,Number(part.dimensions?.height||400)/2,Number(part.dimensions?.thickness||18)/2);
+  if (part.type === 'PANEL') {
+    const d=part.dimensions||{},shape=d.panelShape;
+    if(shape&&!SolidPanelShapes.includes(shape))return panelContours(shape,d.shapeParameters).outer.flatMap(p=>[{...p,z:-d.thickness/2},{...p,z:d.thickness/2}]);
+    if(shape)return solidPanelPoints(shape,d.shapeParameters);
+    return boxPoints(Number(d.width||400)/2,Number(d.height||400)/2,Number(d.thickness||18)/2);
+  }
   const d=part.dimensions || {};
   const sx=Number(d.width||d.footDiameter||d.wheelDiameter||d.size||30),sy=Number(d.height||d.stemLength||d.size||30),sz=Number(d.length||d.width||d.size||30);
   return boxPoints(Math.max(1,sx/2),Math.max(1,sy/2),Math.max(1,sz/2));

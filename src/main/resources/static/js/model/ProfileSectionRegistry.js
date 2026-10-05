@@ -1,21 +1,23 @@
 import {getProfileDefinition} from './ProfileCatalog.js';
 import {getDesignProfileDefinition} from './DesignProfileCatalog.js';
+import {buildDesignProfileSection} from './DesignProfileSection.js';
 
 const customSections = new Map();
 const catalogSections = new Map();
 const referenceSections = new Map();
 
-export function getSectionDefinition(catalogId) {
+export function getSectionDefinition(catalogId,faceClosures=[]) {
   const custom = customSections.get(catalogId);
   if (custom) return custom;
   const catalog = catalogSections.get(catalogId);
   if (catalog) return catalog;
-  const cached = referenceSections.get(catalogId);
+  const cacheKey=`${catalogId}:${[...faceClosures].sort().join(',')}`;
+  const cached = referenceSections.get(cacheKey);
   if (cached) return cached;
   const profile = getDesignProfileDefinition(catalogId) || getProfileDefinition(catalogId);
   if (!profile) return null;
-  const reference = buildReferenceSection(profile);
-  referenceSections.set(catalogId,reference);
+  const reference = buildReferenceSection(profile,faceClosures);
+  referenceSections.set(cacheKey,reference);
   return reference;
 }
 
@@ -137,14 +139,15 @@ function fmt(value) {
   return Number(Number(value).toFixed(4));
 }
 
-function buildReferenceSection(profile) {
+function buildReferenceSection(profile,faceClosures=[]) {
   const [width,height] = profile.sectionSize;
   const slotWidth = Math.min(Number(profile.slotWidth || Math.min(width,height) * 0.25), Math.min(width,height) * 0.45);
   const minSize = Math.min(width,height);
   const slotDepth = Math.max(1.6, Math.min(minSize * 0.17, 5));
   const variant = String(profile.variant || profile.nominal || profile.id || '').toUpperCase();
-  const outer = buildNotchedOuter(width,height,slotWidth,slotDepth);
-  const holes = buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
+  const designSection=getDesignProfileDefinition(profile.id)?buildDesignProfileSection(profile,faceClosures):null;
+  const outer = designSection?.outer || buildNotchedOuter(width,height,slotWidth,slotDepth);
+  const holes = designSection?.holes || buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
   return normalizeSection({
     id: `REF-${profile.id}`,
     catalogId: profile.id,

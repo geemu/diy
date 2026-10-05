@@ -1,0 +1,73 @@
+import {ComponentCatalogData as data} from './ComponentCatalogData.js';
+
+/** 玩家组件目录：选项、规格与几何参数共用一份事实，预览与实际添加不得各自猜尺寸。 */
+const category = name => data.categories[name];
+export const ConnectionComponentOptions = category('连接').selects[0].options.filter(x=>!x.disabled);
+export const ShaftComponentOptions = category('光轴').selects[0].options;
+export const PanelShapeOptions = category('板材').selects[0].options;
+export const AccessoryComponentOptions = category('配件').selects[0].options;
+export const ProfileReferenceOptions = category('铝材').selects[0].options.map((x,index)=>({...x,id:profileId(x.label),index}));
+export const ProfileClosureOptions = category('铝材').variants.find(x=>x.selects.length>1).selects[1].options;
+export const FastenerHeadOptions = category('配件').variants.find(x=>x.selects[0].value==='FASTENING').selects[1].options;
+export const FootCupOptions = category('配件').variants.find(x=>x.selects[0].value==='FOOT_CUP').selects[1].options;
+export const SlideTypeOptions = category('配件').variants[0].selects[1].options;
+export const SlideLengthOptions = category('配件').variants[0].selects[2].options;
+export const EndCapMaterialOptions = category('配件').variants.find(x=>x.selects[0].value==='END_CAP').selects[1].options;
+export const APillarLengthOptions = category('连接').variants.at(-1).selects[2].options;
+export const APillarSideOptions = category('连接').variants.at(-1).selects[3].options;
+export function profileId(label) { return label.includes('A柱')?'DESIGN-U88':`DESIGN-${label.replace('欧标','').replace('x','')}`; }
+export function connectionSpecs(type) { return category('连接').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []; }
+export function shaftDiametersFor(type) { return (category('光轴').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []).map(x=>Number(x.value)); }
+export function fastenerThreads(head) { return Object.keys(data.fasteners[head] || {}).map(Number); }
+export function fastenerLengths(head,diameter) { return data.fasteners[head]?.[diameter] || []; }
+export function closureFaces(value) { return String(value||'').split('+').filter(Boolean).map(x=>({A:'FRONT',B:'RIGHT',C:'BACK',D:'LEFT'})[x]); }
+
+/** 此处尺寸描述通用设计几何，不是供应商料号或制造认证。 */
+function definition(kind,label,dimensions,options={}) {
+  const key=Object.entries(dimensions).map(([k,v])=>`${k}:${v}`).join('-');
+  return {id:`DIY-${kind}-${key}`,label,model:label,accessoryType:options.accessoryType || 'CATALOG_COMPONENT',
+    category:options.category || '连接件',source:'DIY_COMPONENT_CATALOG',material:options.material||'设计参考件',
+    color:options.color||'#a8aaad',note:'通用参数化设计模型；制造前核对实际尺寸和安装方案',
+    dimensions:{geometryKind:kind,...dimensions},mountRule:options.mountRule||{target:'FREE'},...options};
+}
+export function connectionComponent(form) {
+  const type=form.type,option=connectionSpecs(type).find(x=>x.value===String(form.spec)) || connectionSpecs(type)[0];
+  const label=option?.label||'',numbers=label.match(/\d+/g)?.map(Number)||[20,20];
+  const size=label.includes('A柱')?8:numbers[0];
+  const p={size,width:size,height:numbers[1]||size,thickness:Math.max(2,size*.12),length:size,
+    holeCount:label.includes('4孔')?4:label.includes('3孔')?3:2,angle:Number(label.match(/-(\d+)°/)?.[1]||90)};
+  if(type==='HEAVY_CORNER')p.length=80;
+  if(type==='SHELF_BRACKET')p.length=Number(label.match(/-(\d+)(?:\(|$)/)?.[1]||20);
+  if(type==='PANEL_FIX_CONNECTOR'){p.size=p.width=p.height=numbers[0];p.rounded=label.startsWith('半圆');}
+  if(type==='A_PILLAR_BRACKET'){p.length=Number(form.length||165);p.side=form.side||'right';}
+  const name=ConnectionComponentOptions.find(x=>x.value===type)?.label||type;
+  return definition(type,`${name} ${label}${type==='A_PILLAR_BRACKET'?` ${p.length}mm ${p.side==='left'?'左':'右'}`:''}`,p,{color:type==='L_BRACKET'?'#b3001b':'#a8aaad'});
+}
+export function shaftComponent(form) {
+  const type=form.type,d=Number(form.diameter),name=ShaftComponentOptions.find(x=>x.value===type)?.label||type;
+  const dimensions={size:d*3,diameter:d,secondDiameter:form.mixed?Number(form.secondDiameter):d,length:d*5,
+    width:d*3,height:d*5,thickness:d*2,spacing:type.endsWith('_35')?35:type.endsWith('_40')?40:d*2};
+  if(type==='LIMIT_RING')Object.assign(dimensions,{size:d*1.9,width:d*1.9,height:d*1.9,thickness:d*.65});
+  return definition(`SHAFT_${type}`,`${name} ${form.mixed?`异径Φ${dimensions.secondDiameter}-${d}`:`Φ${d}`}mm`,dimensions,{category:'光轴配件',mountRule:{target:'SHAFT_AXIS',diameter:d}});
+}
+export function accessoryComponent(form,profile) {
+  if(form.type==='SLIDE_RAIL')return definition('SLIDE_RAIL',`${SlideTypeOptions.find(x=>x.value===form.slideType)?.label} ${form.slideLength}mm`,
+    {length:Number(form.slideLength),width:12,height:45,black:form.slideType==='THREE_SECTION_BLACK'},
+    {category:'导轨',accessoryType:'DRAWER_SLIDE',mountRule:{target:'PANEL_SIDE'},color:form.slideType==='THREE_SECTION_BLACK'?'#282a2d':'#b8bec3'});
+  if(form.type==='FASTENING') {
+    if(form.head==='ELASTIC_NUT')return definition('ELASTIC_NUT',`${form.elasticSeries}×${form.elasticSeries}-M${Number(form.elasticSeries)===20?6:8}`,
+      {size:Number(form.elasticSeries),diameter:Number(form.elasticSeries)===20?6:8},{category:'紧固件'});
+    return definition(`SCREW_${form.head}`,`${FastenerHeadOptions.find(x=>x.value===form.head)?.label} M${form.thread}*${form.screwLength}`,
+      {diameter:Number(form.thread),length:Number(form.screwLength),headDiameter:Number(form.thread)*1.65},{category:'紧固件',thread:`M${form.thread}`,accessoryType:'SOCKET_SCREW',color:'#282b2f'});
+  }
+  if(form.type==='END_CAP')return definition('END_CAP',EndCapMaterialOptions.find(x=>x.value===form.capMaterial)?.label||'端盖',
+    {size:Number(profile?.width||20),width:Number(profile?.width||20),height:Number(profile?.height||20),thickness:form.capMaterial==='PLASTIC'?3:2,
+      capMaterial:form.capMaterial,profileId:profile?.id||'DESIGN-2020'},
+    {category:'端盖',accessoryType:'END_CAP',color:form.capMaterial==='ALUMINUM'?'#a8aaad':'#222326',mountRule:{target:'PROFILE_END',profileNominal:profile?.nominal||'2020'}});
+  const [footDiameter,stemDiameter,stemLength]=String(form.foot).match(/\d+/g).map(Number);
+  return definition('FOOT_CUP',`脚杯 ${form.foot}`,{size:footDiameter,footDiameter,stemDiameter,stemLength,footThickness:8},
+    {category:'底脚',accessoryType:'LEVELING_FOOT',thread:`M${stemDiameter}`,mountRule:{target:'PROFILE_BOTTOM'}});
+}
+export function componentPart(definition) {
+  return {type:'ACCESSORY',accessoryType:definition.accessoryType,color:definition.color,dimensions:{...definition.dimensions}};
+}

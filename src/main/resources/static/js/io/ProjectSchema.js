@@ -1,5 +1,6 @@
 import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSystem.js';
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
+import {panelDimensions} from '../model/PanelShapeModel.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
 export const CURRENT_APP_VERSION = '0.70.0';
@@ -38,6 +39,10 @@ export default class ProjectSchema {
       if (!part || typeof part !== 'object') throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 存在无效构件数据`);
       if (!allowed.has(part.type)) throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 不支持构件类型：${part.type || '空'}`);
       if (!part.id) throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 构件缺少 id`);
+      if(part.type==='PANEL'&&part.dimensions?.panelShape) {
+        const expected=panelDimensions(part.dimensions.panelShape,part.dimensions.shapeParameters||{});
+        for(const key of ['width','height','thickness'])if(Math.abs(Number(part.dimensions[key])-expected[key])>.01||!Number.isFinite(Number(part.dimensions[key])))throw new Error(`板材 ${part.id} 的 ${key} 与形状参数不一致`);
+      }
       if (part.type === 'PROFILE' && !part.designProfile?.profileId) {
         throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 型材 ${part.displayId || part.id} 缺少 designProfile.profileId`);
       }

@@ -147,9 +147,10 @@
         <div class="resource-category-tabs" aria-label="组件类别"><button v-for="item in resourceCategories" :key="item.id" :class="{active:activeLibrary===item.id}" @click="openResource(item.id)" :title="item.id==='machining'?'打孔、攻丝和开槽':item.label"><span class="workbench-icon" v-html="workbenchIcon(item.id)"></span>{{item.label}}</button></div>
         <template v-if="activeLibrary==='profile'">
           <div class="profile-catalog-content">
-            <div class="field-stack"><label for="design-profile-choice">规格尺寸</label><select id="design-profile-choice" v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in designProfiles" :key="item.id" :value="item.id">{{item.name}} · 槽宽 {{item.slotWidth}} mm</option></select></div>
+            <div class="field-stack"><label for="design-profile-choice">规格尺寸</label><select id="design-profile-choice" v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in referenceProfiles" :key="item.id" :value="item.id">{{item.label}}</option><optgroup label="扩展规格"><option v-for="item in extensionProfiles" :key="item.id" :value="item.id">{{item.name}}</option></optgroup></select></div>
+            <div class="field-stack" v-if="['DESIGN-2020','DESIGN-3030','DESIGN-4040','DESIGN-2020R','DESIGN-3030R','DESIGN-4040R'].includes(newProfile.catalogId)"><label for="profile-closure">封边</label><select id="profile-closure" v-model="profileClosure"><option v-for="item in ProfileClosureOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
             <button class="catalog-profile-preview profile-asset-row" :class="{'selected-profile':drawState.active}" @click="quickAddProfile(newProfile.catalogId)" draggable="true" @dragstart="startProfileDrag(newProfile.catalogId,$event)" :aria-label="'选择 '+selectedDesignProfile?.name+' 并自由绘制'">
-              <div class="catalog-preview-head"><span>型材预览</span><strong>{{selectedDesignProfile?.name}}</strong></div>
+              <div class="catalog-preview-head"><span>出料口</span><strong>{{selectedDesignProfile?.name}}</strong></div>
               <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
               <div class="catalog-preview-foot"><span>{{selectedDesignProfile?.width}}×{{selectedDesignProfile?.height}} mm · 槽宽 {{selectedDesignProfile?.slotWidth}} mm</span><strong>{{drawState.active?'绘制中 · 点击重新起笔':'点击选中'}}</strong></div>
             </button>
@@ -171,32 +172,31 @@
           </div>
         </template>
 
+
         <template v-else-if="activeLibrary==='shaft'">
           <div class="catalog-component-content">
-            <div class="field-stack"><label for="shaft-diameter">光轴规格（直径）</label><select id="shaft-diameter" v-model.number="newShaft.diameter"><option v-for="d in shaftDiameters" :key="d" :value="d">Φ{{d}} mm 光轴</option></select></div>
-            <div class="field-stack"><label for="shaft-material">材质</label><select id="shaft-material" v-model="newShaft.material"><option>45#钢</option><option>304不锈钢</option><option>铝合金</option></select></div>
-            <button class="catalog-profile-preview" @click="addShaft" :aria-label="'添加 Φ'+newShaft.diameter+' mm 光轴'">
-              <span class="catalog-preview-head"><span>光轴预览</span><strong>Φ{{newShaft.diameter}} mm 光轴</strong></span>
-              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
-              <span class="catalog-preview-foot"><span>{{newShaft.material}} · 长 {{newShaft.length}} mm</span><strong>点击添加</strong></span>
-            </button>
-            <p class="catalog-draw-hint">选择规格和长度，点击预览添加到画布，再用移动工具调整位置。</p>
-            <div class="field-stack"><label for="shaft-length">长度（mm）</label><input id="shaft-length" type="number" min="10" v-model.number="newShaft.length"></div>
+            <div class="field-stack"><label for="shaft-type">构件类型</label><select id="shaft-type" v-model="newShaft.type" ><option v-for="item in ShaftComponentOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <div class="field-stack"><label for="shaft-diameter">光轴规格 (直径)</label><select id="shaft-diameter" v-model.number="newShaft.diameter"><option v-for="d in shaftDiameters" :key="d" :value="d">Φ{{d}}mm</option><optgroup v-if="newShaft.type==='ROD'" label="扩展规格"><option v-for="d in [25,30,35]" :key="d" :value="d">Φ{{d}}mm</option></optgroup></select></div>
+            <template v-if="newShaft.type==='CROSS_FIX'"><label class="inline-check"><input type="checkbox" v-model="newShaft.mixed" :disabled="!secondShaftDiameters.length">异径十字光轴夹</label><div v-if="newShaft.mixed" class="field-stack"><label for="shaft-second-diameter">第二个孔径 (必须小于主孔径)</label><select id="shaft-second-diameter" v-model.number="newShaft.secondDiameter"><option v-for="d in secondShaftDiameters" :key="d" :value="d">Φ{{d}}mm</option></select></div></template>
+            <button class="catalog-profile-preview" @click="placeShaftComponent" :aria-label="'选择 '+(newShaft.type==='ROD'?'光轴杆件':currentShaftComponent.label)"><span class="catalog-preview-head"><span>出料口</span><strong>{{newShaft.type==='ROD'?'光轴杆件 Φ'+newShaft.diameter+'mm L='+newShaft.length:currentShaftComponent.label}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
+            <div v-if="newShaft.type==='ROD'" class="field-stack"><label for="shaft-length">长度 (mm)</label><input id="shaft-length" type="number" min="1" v-model.number="newShaft.length"></div>
+            <label v-else class="inline-check"><input type="checkbox" v-model="newShaft.free">自由添加</label>
+            <p class="catalog-draw-hint">{{newShaft.type==='ROD'||newShaft.free?'点击预览后，在工作面选择位置。':'点击预览后，移到同孔径光轴上选择安装位置。'}}单击确认，Esc 或右键取消。</p>
+            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
           </div>
         </template>
 
         <template v-else-if="activeLibrary==='panel'">
           <div class="catalog-component-content">
-            <div class="field-stack"><label>板材形状</label><select aria-label="板材形状"><option>矩形板材</option></select></div>
-            <div class="field-stack"><label for="panel-material">材质</label><select id="panel-material" v-model="newPanel.material"><option>木饰面板</option><option>亚克力</option><option>铝板</option><option>钢板</option></select></div>
-            <div class="field-pair"><div><label for="panel-width">宽（mm）</label><input id="panel-width" type="number" min="1" v-model.number="newPanel.width"></div><div><label for="panel-height">高（mm）</label><input id="panel-height" type="number" min="1" v-model.number="newPanel.height"></div></div>
-            <div class="field-stack"><label for="panel-thickness">厚（mm）</label><input id="panel-thickness" type="number" min="0.5" step="0.5" v-model.number="newPanel.thickness"></div>
-            <button class="catalog-profile-preview" @click="addPanel" aria-label="添加自由板材">
-              <span class="catalog-preview-head"><span>板材预览</span><strong>{{newPanel.width}}×{{newPanel.height}}×{{newPanel.thickness}} mm</strong></span>
-              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
-              <span class="catalog-preview-foot"><span>{{newPanel.material}} · 矩形</span><strong>点击添加</strong></span>
-            </button>
-            <p class="catalog-draw-hint">按尺寸添加独立板材；需要填充框口或生成门组件时，展开下面的框口工具。</p>
+
+            <div class="field-stack"><label for="panel-shape">形状</label><select id="panel-shape" v-model="newPanel.shape" ><option v-for="item in PanelShapeOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <label class="inline-check"><input type="checkbox" v-model="newPanel.free">自由添加</label>
+            <div class="catalog-parameter-grid"><div class="field-stack" v-for="field in panelFields" :key="newPanel.shape+'-'+field[0]"><label :for="'panel-'+field[0]">{{field[0]==='radius'&&newPanel.shape==='polygon'&&newPanel.edgeMode?'多边形边长 (mm)':field[1]}}</label><input :id="'panel-'+field[0]" type="number" :min="field[3]" :max="field[4]" :step="['sides','segments','radialSegments','tubularSegments'].includes(field[0])?1:'any'" v-model.number="newPanel.parameters[field[0]]"></div></div>
+            <div v-if="newPanel.shape==='polygon'" class="catalog-radio-row"><label><input type="radio" :value="false" v-model="newPanel.edgeMode">按外接圆半径</label><label><input type="radio" :value="true" v-model="newPanel.edgeMode">按多边形边长</label></div>
+            <button class="catalog-profile-preview" @click="placePanelComponent" :aria-label="'选择 '+panelShapeLabel"><span class="catalog-preview-head"><span>出料口</span><strong>{{panelShapeLabel}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
+            <p class="catalog-draw-hint">{{currentPanelDimensions?'点击预览后，在画布选择位置；单击确认，Esc 或右键取消。':'尺寸无效，请检查内外径、切角或半径。'}}</p>
+            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
+            <details class="advanced-options"><summary>材料设置</summary><div class="field-stack"><label for="panel-material">材质</label><select id="panel-material" v-model="newPanel.material"><option>木饰面板</option><option>亚克力</option><option>铝板</option><option>钢板</option></select></div></details>
             <details class="advanced-options"><summary>框口填板 / 门组件</summary>
           <div class="form-card">
             <div class="generator-title compact"><span>▣</span><div><strong>框口自动填板</strong><p>控制键 / 换挡键 选择围成矩形的 4 根直线型材</p></div></div>
@@ -217,35 +217,52 @@
           </div>
         </template>
 
+
         <template v-else-if="activeLibrary==='accessory'">
           <div class="catalog-component-content">
-            <div class="field-stack"><label for="accessory-category">配件类型</label><select id="accessory-category" v-model="accessoryCategory"><option v-for="item in accessoryCategoryOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
-            <div class="field-stack"><label for="accessory-search">搜索配件</label><input id="accessory-search" v-model.trim="accessorySearch" placeholder="搜索型号 / 名称"></div>
-            <div class="field-stack"><label for="accessory-choice">配件规格</label><select id="accessory-choice" :value="selectedCatalogAccessory?.id" @change="catalogAccessoryId=Number($event.target.value)" :disabled="!visibleAccessories.length"><option v-for="item in visibleAccessories" :key="item.id" :value="item.id">{{item.name}}</option></select></div>
-            <button v-if="selectedCatalogAccessory" class="catalog-profile-preview" title="点位置安装" @click="mountCatalogAccessory(selectedCatalogAccessory)" :aria-label="'放置 '+selectedCatalogAccessory.name">
-              <span class="catalog-preview-head"><span>配件预览</span><strong>{{selectedCatalogAccessory.name}}</strong></span>
-              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
-              <span class="catalog-preview-foot"><span>{{accessoryCategoryLabel(selectedCatalogAccessory.category)}}</span><strong>{{accessoryPlacementState.active?'重新选中':'点击选中'}}</strong></span>
-            </button>
-            <div v-else class="empty-library"><p>{{accessoryCatalogLoading?'正在加载配件…':'没有匹配的配件，试试其他分类或关键词'}}</p></div>
-            <p class="catalog-draw-hint">点击预览后，移到型材或板材上预览安装位置；绿色表示可安装，单击确认，Esc 取消。</p>
-            <div class="catalog-secondary-actions"><button class="soft-button" :disabled="!selectedCatalogAccessory" @click="addCatalogAccessory(selectedCatalogAccessory)">自由添加</button><button class="soft-button" @click="openAccessoryCatalogManager">管理配件</button><button class="soft-button" :disabled="accessoryCatalogLoading" @click="loadAccessoryCatalog()">刷新</button></div>
-            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">退出配件放置</button>
+            <div class="field-stack"><label for="accessory-type">配件类型</label><select id="accessory-type" v-model="catalogAccessoryForm.type" ><option v-for="item in AccessoryComponentOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <template v-if="catalogAccessoryForm.type==='SLIDE_RAIL'">
+              <div class="field-stack"><label for="slide-type">轨道类型</label><select id="slide-type" v-model="catalogAccessoryForm.slideType" ><option v-for="item in SlideTypeOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+              <div class="field-stack"><label for="slide-length">长度</label><select id="slide-length" v-model="catalogAccessoryForm.slideLength" ><option v-for="item in SlideLengthOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            </template>
+            <template v-else-if="catalogAccessoryForm.type==='FASTENING'">
+              <div class="field-stack"><label for="fastener-head">头型</label><select id="fastener-head" v-model="catalogAccessoryForm.head" ><option v-for="item in FastenerHeadOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+              <template v-if="catalogAccessoryForm.head!=='ELASTIC_NUT'">
+                <div class="field-stack"><label for="fastener-thread">螺纹径</label><select id="fastener-thread" v-model.number="catalogAccessoryForm.thread"><option v-for="d in fastenerThreadOptions" :key="d" :value="d">M{{d}}</option></select></div>
+                <div class="field-stack"><label for="fastener-length">规格</label><select id="fastener-length" v-model.number="catalogAccessoryForm.screwLength"><option v-for="l in fastenerLengthOptions" :key="l" :value="l">M{{catalogAccessoryForm.thread}}*{{l}}</option></select></div>
+              </template>
+              <div v-else class="field-stack"><label for="elastic-spec">规格</label><select id="elastic-spec" v-model.number="catalogAccessoryForm.elasticSeries"><option :value="40">40×40-M8</option><option :value="30">30×30-M8</option><option :value="20">20×20-M6</option></select></div>
+            </template>
+            <template v-else-if="catalogAccessoryForm.type==='END_CAP'"><div class="field-stack"><label for="cap-material">端盖材质</label><select id="cap-material" v-model="catalogAccessoryForm.capMaterial" ><option v-for="item in EndCapMaterialOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div></template>
+            <template v-else-if="catalogAccessoryForm.type==='FOOT_CUP'"><div class="field-stack"><label for="foot-spec">脚杯规格</label><select id="foot-spec" v-model="catalogAccessoryForm.foot" ><option v-for="item in FootCupOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div></template>
+            <button class="catalog-profile-preview" @click="placeAccessoryComponent" :aria-label="'选择 '+currentAccessoryComponent.label"><span class="catalog-preview-head"><span>出料口</span><strong>{{currentAccessoryComponent.label}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
+            <label class="inline-check"><input type="checkbox" v-model="catalogAccessoryForm.free">自由添加</label>
+            <p class="catalog-draw-hint">{{accessoryPlacementState.active?accessoryPlacementState.message:'点击预览选择组件，在画布单击确认；Esc 或右键取消。'}}</p>
+            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
+            <details class="advanced-options"><summary>扩展配件 / 自定义目录</summary>
+              <div class="field-stack"><label for="accessory-category">分类</label><select id="accessory-category" v-model="accessoryCategory" ><option v-for="item in accessoryCategoryOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+              <div class="field-stack"><label for="accessory-search">搜索配件</label><input id="accessory-search" v-model.trim="accessorySearch" placeholder="搜索型号 / 名称"></div>
+              <div class="field-stack"><label for="accessory-choice">配件规格</label><select id="accessory-choice" :value="selectedCatalogAccessory?.id" @change="catalogAccessoryId=Number($event.target.value)" :disabled="!visibleAccessories.length"><option v-for="item in visibleAccessories" :key="item.id" :value="item.id">{{item.name}}</option></select></div>
+              <div class="catalog-secondary-actions"><button class="soft-button" :disabled="!selectedCatalogAccessory" @click="mountCatalogAccessory(selectedCatalogAccessory)">选中安装</button><button class="soft-button" :disabled="!selectedCatalogAccessory" @click="addCatalogAccessory(selectedCatalogAccessory)">自由添加</button><button class="soft-button" @click="openAccessoryCatalogManager">管理配件</button><button class="soft-button" :disabled="accessoryCatalogLoading" @click="loadAccessoryCatalog()">刷新</button></div>
+            </details>
           </div>
         </template>
 
-
         <template v-else-if="activeLibrary==='connection'">
           <div class="catalog-component-content">
-            <div class="field-stack"><label for="connection-choice">连接件类型</label><select id="connection-choice" v-model="connectionRuleId"><option v-for="rule in connectionRules" :key="rule.id" :value="rule.id">{{rule.label}}</option></select></div>
-            <button class="catalog-profile-preview" @click="startConnectionPlacement(connectionRuleId)" :aria-label="'放置 '+selectedConnectionPreview?.label">
-              <span class="catalog-preview-head"><span>连接示意</span><strong>{{selectedConnectionPreview?.label}}</strong></span>
-              <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
-              <span class="catalog-preview-foot"><span>按实际接头自动匹配</span><strong>点击选中</strong></span>
-            </button>
-            <p class="catalog-draw-hint">{{connectionPlacementState.active?connectionPlacementState.message:selectedConnectionPreview?.summary}}。点击预览选择一种方式后，直接点击接头附近；Esc 取消。</p>
-            <p class="catalog-draw-hint">此处选择连接方式，不指定实际料号；具体五金和加工在制造阶段配置。</p>
-            <button v-if="connectionPlacementState.active" class="soft-button full" @click="cancelConnectionPlacement">退出连接放置</button>
+
+            <div class="field-stack"><label for="connection-choice">连接件类型</label><select id="connection-choice" v-model="catalogConnectionForm.type" ><option v-for="item in ConnectionComponentOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <div class="field-stack"><label for="connection-spec">适用规格</label><select id="connection-spec" v-model="catalogConnectionForm.spec" ><option v-for="item in connectionSpecOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <template v-if="catalogConnectionForm.type==='A_PILLAR_BRACKET'">
+              <div class="field-stack"><label for="pillar-length">托架规格(长度)</label><select id="pillar-length" v-model="catalogConnectionForm.length" ><option v-for="item in APillarLengthOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+              <div class="field-stack"><label for="pillar-side">左右(面对墙面)</label><select id="pillar-side" v-model="catalogConnectionForm.side" ><option v-for="item in APillarSideOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            </template>
+            <button class="catalog-profile-preview" @click="placeConnectionComponent" :aria-label="'选择 '+currentConnectionComponent.label"><span class="catalog-preview-head"><span>出料口</span><strong>{{currentConnectionComponent.label}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
+            <label class="inline-check"><input type="checkbox" v-model="catalogConnectionForm.free">自由添加</label>
+            <p class="catalog-draw-hint">{{connectionPlacementState.active?connectionPlacementState.message:accessoryPlacementState.active?accessoryPlacementState.message:'点击预览后到画布选位置；角槽、直角、内置和连接板支持接头安装，其他类型自由放置。'}}</p>
+            <p class="catalog-draw-hint">组件为通用设计参考；制造阶段需核对实际规格和安装方案。</p>
+            <button v-if="connectionPlacementState.active" class="soft-button full" @click="cancelConnectionPlacement">取消连接放置 · Esc</button>
+            <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
             <details class="advanced-options"><summary>结构连接管理</summary>
           <div class="connection-overview-card">
             <div class="connection-overview-stats">
@@ -612,9 +629,12 @@
 
             <template v-else-if="selectedPart.type==='PANEL'">
               <div class="inspector-section-title">板材</div>
+              <template v-if="selectedPart.dimensions.panelShape"><div class="property-row" v-for="field in PanelShapeFields[selectedPart.dimensions.panelShape]" :key="field[0]"><label>{{field[1]}}</label><input type="number" :value="selectedPart.dimensions.shapeParameters[field[0]]" :min="field[3]" :max="field[4]" @change="updatePanelShapeParameter(field[0],$event.target.value)"></div></template>
+              <template v-else>
               <div class="property-row"><label>宽</label><div class="number-unit"><input type="number" v-model.number="selectedPart.dimensions.width" @change="primitiveChanged"><span>mm</span></div></div>
               <div class="property-row"><label>高</label><div class="number-unit"><input type="number" v-model.number="selectedPart.dimensions.height" @change="primitiveChanged"><span>mm</span></div></div>
               <div class="property-row"><label>厚</label><div class="number-unit"><input type="number" v-model.number="selectedPart.dimensions.thickness" @change="primitiveChanged"><span>mm</span></div></div>
+              </template>
               <div class="property-row"><label>材质</label><input v-model="selectedPart.materialSpec.material" @change="propertyChanged"></div>
               <div v-if="selectedPart.panelSpec?.configurator==='FRAME_OPENING_PANEL'" class="configurator-refit-card">
                 <strong>框口关联板材</strong><span>源型材 {{selectedPart.panelSpec.sourcePartIds?.length||0}} 根 · 间隙 {{selectedPart.panelSpec.clearanceMm||0}} mm</span>

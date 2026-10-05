@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import ComponentGeometryFactory from './ComponentGeometryFactory.js';
 
 export default class PrimitiveGeometryFactory {
   static create(part) {
+    if(part.dimensions?.geometryKind||part.dimensions?.panelShape)return ComponentGeometryFactory.create(part);
     if (part.type === 'SHAFT') return this.createShaft(part);
     if (part.type === 'PANEL') return this.createPanel(part);
     if (part.type === 'ACCESSORY') return this.createAccessory(part);

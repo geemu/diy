@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {hardwareDimensions} from '../model/HardwareCatalog.js';
 import {getLocalEndpoints} from '../model/ProfilePath.js';
+import {workPlaneNormal} from '../geometry/ProfileOrientation.js';
 
 /**
  * 玩家式配件放置器。
@@ -71,15 +72,15 @@ export default class AccessoryPlacementManager {
     }
     try {
       const definition = structuredClone(this.definition);
-      const mesh = this.editor.mountHardware(definition.id,target.targetPart.id,{
+      const mesh = target.free ? this.editor.addCatalogComponent(definition,{...target.transform}) : this.editor.mountHardware(definition.id,target.targetPart.id,{
         definition,
         end:target.end || undefined,
-        side:target.side || undefined
+        side:target.side || undefined,
+        stationS:target.stationS
       });
       this.editor.interferenceFeedbackManager.requestRefresh();
       this.emit(`已安装：${definition.label || definition.model || '配件'}`);
-      this.hover = null;
-      this.clearPreview();
+      this.cancel();
       return mesh;
     } catch (error) {
       this.emit(error?.message || '配件安装失败');
@@ -89,6 +90,7 @@ export default class AccessoryPlacementManager {
 
   resolveEvent(event) {
     const targetType = mountTarget(this.definition);
+    if(targetType==='FREE')return this.resolveFree(event);
     const meshes = this.targetMeshes(targetType);
     const hit = this.editor.sceneManager.pickHit(event,meshes);
     if (!hit?.object || !hit?.point) return null;
@@ -104,12 +106,28 @@ export default class AccessoryPlacementManager {
     return this.resolveTarget(mesh,point,targetType,{end:seed.end,side:seed.side});
   }
 
+  /** 自由添加仍是 hover -> click；截面最低点落在当前工作面，不把构件中心埋在网格里。 */
+  resolveFree(event) {
+    const plane=this.editor.workPlaneVisualizer?.plane||'XZ',normal=workPlaneNormal(plane);
+    const point=this.editor.sceneManager.worldPointOnPlane(event,normal);
+    if(!point)return null;
+    const rotation=this.definition.partSpec?.type==='PANEL'&&!['sphere','cylinder','cone','torus'].includes(this.definition.dimensions?.panelShape)
+      ?(plane==='XZ'?{x:-Math.PI/2,y:0,z:0}:plane==='YZ'?{x:0,y:Math.PI/2,z:0}:{x:0,y:0,z:0}):{x:0,y:0,z:0};
+    const transform={position:{x:0,y:0,z:0},rotation};
+    const ghost=this.createGhostMesh(transform,0x24b36b,.5),box=new THREE.Box3().setFromObject(ghost);
+    const axis=plane==='XZ'?'y':plane==='XY'?'z':'x';point[axis]-=box.min[axis];disposeObject(ghost);
+    transform.position={x:point.x,y:point.y,z:point.z};
+    const collision=this.previewCollision(transform,null);
+    return {free:true,targetPart:{displayId:'工作面'},transform,valid:!collision.blocked,reason:collision.blocked?`与 ${collision.label} 干涉`:''};
+  }
+
   resolveTarget(mesh,worldPoint,targetType,preferred = {}) {
     const targetPart = mesh?.userData?.part;
     if (!targetPart) return null;
     let transform = null;
     let end = preferred.end || null;
     let side = preferred.side || null;
+    let stationS;
 
     if (['PROFILE_END','PROFILE_BOTTOM'].includes(targetType)) {
       if (targetPart.type !== 'PROFILE') return null;
@@ -119,6 +137,11 @@ export default class AccessoryPlacementManager {
       if (targetPart.type !== 'PANEL') return null;
       if (!side) side = this.panelSide(mesh,worldPoint);
       transform = this.editor.accessoryMountManager.resolvePanelSide(this.definition,mesh,{side});
+    } else if(targetType==='SHAFT_AXIS') {
+      if(targetPart.type!=='SHAFT')return null;
+      const local=worldPoint?mesh.worldToLocal(worldPoint.clone()):new THREE.Vector3();
+      stationS=local.z+Number(targetPart.dimensions.length)/2;
+      transform=this.editor.accessoryMountManager.resolveShaftAxis(this.definition,mesh,{stationS});
     } else {
       return {targetMesh:mesh,targetPart,valid:false,reason:'该配件还没有配置可吸附的安装位置'};
     }
@@ -135,6 +158,7 @@ export default class AccessoryPlacementManager {
       targetType,
       end,
       side,
+      stationS,
       transform,
       valid:!collision.blocked,
       collision,
@@ -144,6 +168,7 @@ export default class AccessoryPlacementManager {
 
   validateCompatibility(targetPart) {
     const rule = this.definition?.mountRule || {};
+    if(rule.target==='SHAFT_AXIS'&&Math.abs(Number(rule.diameter)-Number(targetPart.dimensions?.diameter))>.01)return {valid:false,reason:'固定夹孔径与光轴直径不匹配'};
     const nominal = String(rule.profileNominal || '').trim();
     if (nominal && targetPart?.type === 'PROFILE') {
       const designNominal = String(targetPart.designProfile?.nominal || targetPart.designProfile?.name || '').replace(/[^0-9]/g,'');
@@ -196,9 +221,10 @@ export default class AccessoryPlacementManager {
       id:'__preview_accessory__',
       displayId:'',
       name:this.definition.label || '配件预览',
-      type:'ACCESSORY',
+      ...(this.definition.partSpec||{}),
+      type:this.definition.partSpec?.type||'ACCESSORY',
       accessoryType:this.definition.accessoryType || 'ACCESSORY',
-      dimensions:{...hardwareDimensions(this.definition)},
+      dimensions:{...(this.definition.partSpec?.dimensions||hardwareDimensions(this.definition))},
       position:{...transform.position},
       rotation:{...transform.rotation},
       color:'#ffffff',
@@ -260,6 +286,7 @@ export default class AccessoryPlacementManager {
     const type = mesh?.userData?.part?.type;
     if (['PROFILE_END','PROFILE_BOTTOM'].includes(targetType)) return type === 'PROFILE';
     if (targetType === 'PANEL_SIDE') return type === 'PANEL';
+    if(targetType==='SHAFT_AXIS')return type==='SHAFT';
     return false;
   }
 
@@ -267,6 +294,8 @@ export default class AccessoryPlacementManager {
     const target = mountTarget(this.definition);
     if (['PROFILE_END','PROFILE_BOTTOM'].includes(target)) return '请把鼠标移到型材端部附近';
     if (target === 'PANEL_SIDE') return '请把鼠标移到板材需要安装的侧面';
+    if(target==='SHAFT_AXIS')return '请把鼠标移到相同孔径的光轴上';
+    if(target==='FREE')return '在工作面上选择位置';
     return '该配件暂不支持吸附安装';
   }
 

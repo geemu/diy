@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import {isLinearProfile} from '../model/ProfilePath.js';
 import {
   buildConnectionParameters,
@@ -37,12 +38,14 @@ export default class ConnectionManager {
     const candidate=this.recommendDesignFor(source,target,{sourceEnd,targetFace}).find(item=>item.type===designType);
     if(!candidate?.valid)throw new Error(candidate?.error || `当前位置不支持${designConnectionLabel(designType)}`);
     const validation=candidate.geometry;
+    const component=options.componentDefinition?structuredClone(options.componentDefinition):null;
+    if(component&&Number(component.dimensions?.size)!==Number(designProfileSeries(source.userData.part)))throw new Error('所选连接件规格与源型材系列不匹配，请调整适用规格');
     const connection={
       id:crypto.randomUUID(),designType,type:designType,manufacturingRuleId:null,
       sourceProfileId:source.userData.part.id,targetProfileId:target.userData.part.id,
       sourceEnd,targetFace,sourceMountFace:validation.sourceMountFace,
       sourceSlot:validation.sourceSlot,targetSlot:validation.targetSlot,
-      orientationMode:'AUTO_INNER',validation,status:'DESIGN_VALID',generatedHardwareIds:[]
+      orientationMode:'AUTO_INNER',validation,status:'DESIGN_VALID',generatedHardwareIds:[],designComponent:component
     };
     this.connections.push(connection);
     this.rebuild(connection);
@@ -100,6 +103,7 @@ export default class ConnectionManager {
     if(!option?.valid)throw new Error(option?.error || '当前几何关系不支持该连接方式');
     const previousType=connection.designType;
     connection.designType=designType;
+    connection.designComponent=null;
     connection.type=designType;
     connection.manufacturingRuleId=null;
     if(options.userOverride!==false){
@@ -243,6 +247,7 @@ export default class ConnectionManager {
       rule=getConnectionRule(representative.representativeRuleId);
     }
     const validation=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace});
+    if(connection.designComponent&&Number(connection.designComponent.dimensions?.size)!==Number(designProfileSeries(source.userData.part))){validation.ok=false;validation.errors.push({code:'DESIGN_COMPONENT_SERIES_MISMATCH',message:'所选连接件规格与变更后的型材系列不匹配'});}
     connection.validation=validation;
     connection.status=validation.ok?(connection.manufacturingRuleId?'VALID':'DESIGN_VALID'):'INVALID';
     connection.sourceMountFace=validation.sourceMountFace;
@@ -470,6 +475,14 @@ export default class ConnectionManager {
     const normal=slotWorldNormal(target,connection.targetFace);
     const sourceFace=connection.sourceMountFace||pickSourceMountFace(source,target,worldEnd);
     const sourceNormal=slotWorldNormal(source,sourceFace);
+    if(connection.designComponent){
+      const spec=connection.designComponent;
+      const object=PrimitiveGeometryFactory.create({type:'ACCESSORY',accessoryType:spec.accessoryType,dimensions:spec.dimensions,color:spec.color});
+      const y=normal.clone().normalize(),z=sourceNormal.clone().normalize(),x=y.clone().cross(z);
+      if(x.lengthSq()>1e-6){x.normalize();z.copy(x.clone().cross(y)).normalize();object.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));}
+      object.position.copy(worldEnd);group.add(object);material.dispose();
+      this.editor.sceneManager.scene.add(group);this.helperMeshes.set(connection.id,group);return;
+    }
     const makeBox=(x,y,z,pos)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(x,y,z),material.clone());mesh.position.copy(pos);mesh.castShadow=true;group.add(mesh);return mesh;};
     const size=Math.max(18,Number(designProfileSeries(source.userData.part)||30)*0.9);
     if(connection.designType==='ANGLE_BRACKET'){

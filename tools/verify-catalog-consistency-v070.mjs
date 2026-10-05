@@ -16,7 +16,7 @@ for(const category of ['shaft','panel','accessory','connection']){
   const section=html.slice(start,html.indexOf('\n        </template>',start));
   assert.ok(section.includes('catalog-component-content')&&section.includes('catalog-profile-preview')&&section.includes('ref="catalogProfileCanvas"'),`${category} 应使用一致的规格和预览布局`);
 }
-for(const command of ['addShaft','addPanel','mountCatalogAccessory(selectedCatalogAccessory)','startConnectionPlacement(connectionRuleId)','createPanelFromOpening','createDoorFromOpening','clearAutoConnections'])assert.ok(html.includes(command));
+for(const command of ['placeShaftComponent','placePanelComponent','placeAccessoryComponent','placeConnectionComponent','mountCatalogAccessory(selectedCatalogAccessory)','createPanelFromOpening','createDoorFromOpening','clearAutoConnections'])assert.ok(html.includes(command));
 assert.ok(app.includes('PrimitiveGeometryFactory.create(previewSpec)'));
 assert.ok(app.includes('watch(connectionRuleId,()=>{if(connectionPlacementState.active)cancelConnectionPlacement();})'));
 assert.ok(app.includes('accessoryPlacementState.definitionId!==accessoryDefinition(item).id'),'换规格必须退出旧配件放置，不能误安装旧件');

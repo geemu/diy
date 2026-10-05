@@ -587,7 +587,7 @@ export default class Editor {
       position:normalizeVector(options.position, {x:0,y:300,z:0}),
       rotation:normalizeVector(options.rotation),
       color:options.color || '#d7b889',
-      dimensions:{width:Number(width), height:Number(height), thickness:Number(thickness)},
+      dimensions:{width:Number(width), height:Number(height), thickness:Number(thickness),...(options.shapeDimensions||{})},
       materialSpec:{material:options.material || '木饰面板'},
       assemblyId:options.assemblyId || null,
       hidden:false,
@@ -639,7 +639,7 @@ export default class Editor {
       materialSpec:{material:definition.material || ''},
       position:normalizeVector(options.position),
       rotation:normalizeVector(options.rotation),
-      color:options.color || '#6f7780',
+      color:options.color || definition.color || '#6f7780',
       dimensions:{...hardwareDimensions(definition)},
       assemblyId:options.assemblyId || null,
       hidden:false,
@@ -649,6 +649,14 @@ export default class Editor {
       mountReference:options.mountReference ? structuredClone(options.mountReference) : null
     };
     return this.insertPart(part, options);
+  }
+
+  /** 组件库统一提交入口；预览规格仍是普通描述对象，只有单击确认才创建业务构件。 */
+  addCatalogComponent(definition,options={}) {
+    const spec=definition?.partSpec,d=spec?.dimensions||{};
+    if(spec?.type==='PANEL')return this.addPanel(d.width,d.height,d.thickness,{...options,name:definition.label,color:spec.color,material:spec.material,shapeDimensions:d});
+    if(spec?.type==='SHAFT')return this.addShaft(d.diameter,d.length,{...options,name:definition.label,color:spec.color,material:spec.material});
+    return this.addHardware(definition.id,{...options,definition});
   }
 
 
@@ -681,6 +689,12 @@ export default class Editor {
       if (targetPart.type !== 'PANEL') throw new Error('该配件需要安装到板材侧面，请先选择板材');
       const side = options.side || (String(rule.side || '').toUpperCase() === 'BACK' ? 'BACK' : 'FRONT');
       return this.mountHardwareToPanelSide(definition,targetMesh,{...options,side});
+    }
+    if(targetType==='SHAFT_AXIS') {
+      if(targetPart.type!=='SHAFT')throw new Error('固定夹需要安装到相同孔径的光轴');
+      if(Math.abs(Number(targetPart.dimensions.diameter)-Number(rule.diameter))>.01)throw new Error('固定夹孔径与光轴不匹配');
+      const transform=this.accessoryMountManager.resolveShaftAxis(definition,targetMesh,options);
+      return this.addHardware(definition.id,{...options,definition,...transform,assemblyId:targetPart.assemblyId||null});
     }
 
     throw new Error(`当前配件暂不支持自动安装：${rule.target || '未配置安装规则'}`);

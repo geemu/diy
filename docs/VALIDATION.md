@@ -1,6 +1,24 @@
-# Validation / Regression — v0.69
+# Validation / Regression — v0.70
 
-## v0.69 当前检查范围
+## v0.70 当前检查范围
+
+2026-10-05 最终本地结果：129 个 JS/MJS 语法检查全部通过，37/37 回归通过，git diff --check 通过；新增 tools/verify-catalog-consistency-v070.mjs。JDK 21.0.11 Maven clean test 成功，1 项静态资源/Catalog MockMvc 检查，0 失败/0 错误。
+
+实际 Chromium 与参考页检查：
+
+- 实际打开 LewanDIY 编辑器并逐一切换型材、连接、光轴、板材、配件：页面只加载站点 favicon 图片，主场景与右侧产品预览均为 canvas，未发现可直接复用的独立产品图片或 CSS 背景图。因此本项目使用自己的 Section/Primitive Geometry 生成预览，不依赖远程资源。
+- 五类本地组件库均显示“规格选择 + 黑底三维预览 + 点击使用”。型材可看到完整挤出长度和端面槽；连接、光轴、板材、配件复用实际几何工厂。15 组长宽比/构件尺寸的包围球适配均未裁切，重复适配不累计缩放。
+- 连接/光轴/板材/配件切换时各只有一个 catalogProfileCanvas。连续切换 20 次没有 WebGL 上下文过多警告；五类创建/修改反复切换后 WebGL contextLost 均为 false。修复了 v-show 复用 canvas 时错误 forceContextLoss 导致预览白屏的问题。
+- 实际检查五类表单 28 个 hover/focus 状态，最低文字对比度 14.80:1，没有白底浅字。型材选择器聚焦为 rgb(26,26,26) 深底、rgb(243,244,246) 亮字、橙色边框。
+- 左轨选中态 ::before 为 none、box-shadow 为 none；显示菜单所有状态项保持透明深色行，勾选右对齐且 aria-pressed 与真实值一致。快捷搭建可见区域未发现残留浅色卡片。
+- 非法光轴长度 -1 不创建构件；随后实际添加 Ø20 × 720 mm 光轴。实际添加 450 × 300 × 5 mm 亚克力板，工程构件的 materialSpec 和 #b4d7e9 配色与预览一致。
+- 配件“3030 黑色端盖”进入放置时不新增构件，Esc 后 active=false 且构件数不变；自由添加后新增 1 个 ACCESSORY。END_SCREW 进入连接放置后 Esc 退出，未产生连接。放置中更换连接方式或配件规格会先退出旧放置状态。
+- 实际点击型材预览，画布取起点与斜向候选，输入 600 并 Enter；生成 PROFILE dimensions.length/profilePath.length 均为 600，FREE 自动结束。返回组件库后预览仍正常，页面无 JS 异常。
+- 880 × 700 下页面无横向溢出，主工具条 6 个本地 SVG 图标均保留 16 px 可见；1600 × 1000 下五类右库、显示菜单、左轨和快捷面板完成截图复核。
+
+边界：参考站核对为匿名、只读界面观察；未复制品牌素材、账号功能或商业入口。连接预览只表达设计连接意图，不代表最终制造料号；实际料号仍在制造配置阶段绑定。
+
+## v0.69 历史检查范围
 
 2026-10-05 最终本地结果：128 个 JS/MJS 语法检查全部通过，36/36 回归通过，git diff --check 通过；新增 tools/verify-catalog-workbench-v069.mjs。JDK 21.0.11 Maven clean test 成功，1 项静态资源/Catalog MockMvc 检查，0 失败/0 错误。
 

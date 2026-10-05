@@ -6,6 +6,7 @@ import {getConnectionRule} from '../model/ConnectionRuleCatalog.js';
 import {effectiveDiameter, featureFootprint, isEndMachiningFeature, normalizeMachiningFeature} from '../machining/MachiningFeatureCatalog.js';
 import PartCollisionDetector from './PartCollisionDetector.js';
 import ConnectionCompletenessInspector from './ConnectionCompletenessInspector.js';
+import {panelDimensions,SolidPanelShapes} from '../model/PanelShapeModel.js';
 
 export default class FactoryValidator {
   constructor(editor) {
@@ -27,6 +28,11 @@ export default class FactoryValidator {
     }
     for (const part of this.editor.parts.filter(item => item?.type === 'ACCESSORY')) {
       this.validateAccessoryMount(part, errors, warnings);
+      if(part.hardwareSpec?.source==='DIY_COMPONENT_CATALOG')warnings.push(issue('COMPONENT_REFERENCE_MODEL','WARNING',part.displayId||part.name,'组件为通用设计参考，生产前需核对实际尺寸与安装方案',{partIds:[part.id],category:'ASSEMBLY'}));
+    }
+    for(const part of this.editor.parts.filter(item=>item?.type==='PANEL'&&item.dimensions?.panelShape)){
+      try{panelDimensions(part.dimensions.panelShape,part.dimensions.shapeParameters);}catch(error){errors.push(issue('INVALID_PANEL_SHAPE','ERROR',part.displayId||part.name,error.message,{partIds:[part.id]}));}
+      if(SolidPanelShapes.includes(part.dimensions.panelShape))warnings.push(issue('SOLID_REFERENCE_MODEL','WARNING',part.displayId||part.name,'该构件为三维设计几何体，不是板材切割件；需另行确认制造工艺',{partIds:[part.id]}));
     }
 
     for (const connection of this.editor.connectionManager.connections) {
@@ -274,12 +280,13 @@ export default class FactoryValidator {
    * 引用的宿主构件必须存在且类型必须符合目录 mountRule。</p>
    */
   validateAccessoryMount(part, errors, warnings) {
-    if (part.hardwareSpec?.source !== 'ACCESSORY_CATALOG') return;
+    if (!['ACCESSORY_CATALOG','DIY_COMPONENT_CATALOG'].includes(part.hardwareSpec?.source)) return;
 
     const label = part.displayId || part.name || part.id || '配件';
     const rule = part.mountRule || {};
     const reference = part.mountReference || null;
     if (!reference?.targetPartId) {
+      if(rule.target==='FREE')return;
       warnings.push(issue('ACCESSORY_NOT_MOUNTED','WARNING',label,'标准配件尚未绑定安装宿主；如为正式装配，请使用配件库“安装”操作',{partIds:[part.id],category:'ASSEMBLY'}));
       return;
     }
@@ -300,6 +307,7 @@ export default class FactoryValidator {
       errors.push(issue('ACCESSORY_MOUNT_TARGET_TYPE','ERROR',label,'该配件要求安装到板材侧面，但当前宿主不是板材',{partIds:[part.id,target.id],category:'ASSEMBLY'}));
       return;
     }
+    if(targetType==='SHAFT_AXIS'&&(target.type!=='SHAFT'||Math.abs(Number(part.mountRule?.diameter)-Number(target.dimensions?.diameter))>.01))errors.push(issue('SHAFT_CLAMP_MISMATCH','ERROR',label,'固定夹宿主类型或孔径不匹配',{partIds:[part.id,target.id],category:'ASSEMBLY'}));
 
     const requiredNominal = String(rule.profileNominal || '').trim();
     if (requiredNominal && target.type === 'PROFILE' && String(profileNominal(target) || '') !== requiredNominal) {

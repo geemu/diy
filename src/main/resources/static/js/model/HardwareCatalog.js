@@ -55,6 +55,7 @@ export function getHardwareDefinition(id) {
 
 export function hardwareDimensions(definition) {
   if (!definition) return {size:30};
+  if(definition.dimensions)return structuredClone(definition.dimensions);
   if (definition.accessoryType === 'DRAWER_SLIDE') return {length:Number(definition.length),width:Number(definition.width),height:Number(definition.height)};
   if (definition.accessoryType === 'SOCKET_SCREW') return {diameter:Number(definition.diameter),length:Number(definition.length),headDiameter:Number(definition.headDiameter)};
   if (definition.accessoryType === 'WASHER') return {outerDiameter:Number(definition.outerDiameter),innerDiameter:Number(definition.innerDiameter),thickness:Number(definition.thickness)};

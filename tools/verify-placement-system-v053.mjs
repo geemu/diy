@@ -16,7 +16,7 @@ const schema=read('src/main/resources/static/js/io/ProjectSchema.js');
 for(const token of ['AccessoryPlacementManager','accessoryPlacementManager.handleClick','accessoryPlacementManager.handlePointerMove']) assert.ok(editor.includes(token),`missing editor ${token}`);
 for(const token of ['begin(definition','createGhostMesh','previewCollision','PROFILE_END','PANEL_SIDE','0x24b36b','0xe54848']) assert.ok(placement.includes(token),`missing placement ${token}`);
 for(const token of ['accessoryPlacementState','accessoryPlacementSeed','cancelAccessoryPlacement','已记住右键位置']) assert.ok(app.includes(token),`missing app ${token}`);
-for(const token of ['配件放置','点位置安装','绿色表示可安装','<summary>模型库</summary>']) assert.ok(html.includes(token),`missing ui ${token}`);
+for(const token of ['配件放置','placeAccessoryComponent','取消放置 · Esc','<summary>模型库</summary>']) assert.ok(html.includes(token),`missing ui ${token}`);
 assert.ok(html.includes('<summary>视图</summary>'));
 assert.ok(html.includes('<summary>帮助</summary>')&&html.includes('快捷键与操作说明'));
 assert.ok(css.includes('.accessory-placement-hud'));

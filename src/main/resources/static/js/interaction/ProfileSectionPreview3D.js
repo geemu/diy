@@ -92,8 +92,16 @@ export default class ProfileSectionPreview3D {
     const radius=Math.max(1,box.getSize(new THREE.Vector3()).length()/2);
     const halfFov=THREE.MathUtils.degToRad(this.camera.fov/2);
     const limitingFov=Math.min(halfFov,Math.atan(Math.tan(halfFov)*this.camera.aspect));
-    const distance=radius/Math.sin(limitingFov)*1.12;
-    this.camera.position.copy(new THREE.Vector3(5,4,6).normalize().multiplyScalar(distance));
+    const direction=new THREE.Vector3(-5,4,-6).normalize();
+    const right=new THREE.Vector3(0,1,0).cross(direction).normalize(),up=direction.clone().cross(right).normalize();
+    const centered=box.clone().translate(center.clone().negate());
+    // 按相机空间的八个边界点适配，长型材不再因包围球而缩成一小块。
+    let distance=radius*1.1;
+    for(const x of [centered.min.x,centered.max.x])for(const y of [centered.min.y,centered.max.y])for(const z of [centered.min.z,centered.max.z]){
+      const point=new THREE.Vector3(x,y,z),depth=point.dot(direction);
+      distance=Math.max(distance,depth+Math.abs(point.dot(right))/Math.tan(halfFov)/this.camera.aspect*1.22,depth+Math.abs(point.dot(up))/Math.tan(halfFov)*1.22);
+    }
+    this.camera.position.copy(direction.multiplyScalar(distance));
     this.camera.near=Math.max(.1,distance-radius*2);
     this.camera.far=distance+radius*4;
     this.camera.updateProjectionMatrix();
