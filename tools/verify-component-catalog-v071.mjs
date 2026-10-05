@@ -44,6 +44,20 @@ assert.equal(getDesignProfileDefinition('DESIGN-2040').slotDefinitions.length,6)
 assert.equal(getDesignProfileDefinition('DESIGN-2020R').slotDefinitions.length,2);
 assert.equal(getDesignProfileDefinition('DESIGN-U88').slotDefinitions.length,0);
 assert.notDeepEqual(getSectionDefinition('DESIGN-2020').outer,getSectionDefinition('DESIGN-2020',['FRONT']).outer);
+assert.deepEqual(catalog.closureFaces('A',getDesignProfileDefinition('DESIGN-2020R')),['BACK']);
+const {default:MountManager}=await import(moduleUrl(path.join(js,'model/AccessoryMountManager.js')));
+const host=new THREE.Group();host.userData.part={id:'rod',type:'SHAFT',dimensions:{diameter:8,length:100}};
+host.position.set(25,40,60);host.rotation.set(.2,.4,.1);host.updateMatrixWorld(true);
+const mounts=new MountManager({});
+for(const type of catalog.ShaftComponentOptions.filter(x=>x.value!=='ROD')){
+  const definition=catalog.shaftComponent({type:type.value,diameter:8,mixed:false});
+  const transform=mounts.resolveShaftAxis(definition,host,{stationS:30});
+  const clip=new THREE.Group();clip.position.set(transform.position.x,transform.position.y,transform.position.z);clip.rotation.set(transform.rotation.x,transform.rotation.y,transform.rotation.z);clip.updateMatrixWorld(true);
+  const mainBore=clip.localToWorld(new THREE.Vector3(0,-definition.dimensions.axisOffsetY,0));
+  const rodStation=host.localToWorld(new THREE.Vector3(0,0,-20));
+  assert.ok(mainBore.distanceTo(rodStation)<1e-8,`${type.value} 主轴孔必须对齐光轴站位`);
+  assert.equal(transform.mountReference.stationS,30);
+}
 const parts=[];
 for(const shape of catalog.PanelShapeOptions){const d=model.panelDimensions(shape.value,model.panelDefaults(shape.value));const part={id:shape.value,type:'PANEL',name:shape.label,dimensions:d};checkMesh(part);parts.push(part);}
 assert.throws(()=>model.panelDimensions('ring',{outerDiameter:50,innerDiameter:60,thickness:5}));assert.throws(()=>model.panelDimensions('cross',{width:100,height:100,cutWidth:60,cutHeight:10,thickness:5}));assert.throws(()=>model.panelDimensions('torus',{radius:10,tubeRadius:20,radialSegments:16,tubularSegments:100}));

@@ -147,7 +147,7 @@ export default class AccessoryMountManager {
   resolveShaftAxis(source,targetMesh,options={}) {
     const part=targetMesh?.userData?.part;if(part?.type!=='SHAFT')return null;
     const length=Number(part.dimensions.length),stationS=Math.max(0,Math.min(length,Number(options.stationS??length/2)));
-    const d=source.dimensions||source,offset=d.geometryKind==='SHAFT_LIMIT_RING'?0:Number(d.diameter||part.dimensions.diameter)*1.2;
+    const d=source.dimensions||source,offset=Number(d.axisOffsetY||0);
     const position=targetMesh.localToWorld(new THREE.Vector3(0,offset,stationS-length/2));
     const quaternion=targetMesh.getWorldQuaternion(new THREE.Quaternion());
     return {position:this.toPlainPoint(position),rotation:this.toPlainEuler(quaternion),mountReference:{targetType:'SHAFT_AXIS',targetPartId:part.id,stationS}};

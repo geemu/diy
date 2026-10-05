@@ -1,6 +1,17 @@
-# 项目交接文档 — v0.70.0
+# 项目交接文档 — v0.71.0
 
-## v0.70 当前重点
+## v0.71 当前重点
+
+- 用户要求五类组件不只是样式相同，还要类型、下拉项、级联规格和预览形状对应。原始匿名页面观察记录位于 reference/lewan-component-options-2026-10-05-v071.json；只保存选项和尺寸控件事实，不保存凭据、会话或参考站代码/模型。
+- ComponentCatalogData / ComponentCatalog 共用选项与规格，ComponentGeometryFactory 复用预览及实际构件；几何为本地独立参数化参考模型，不宣称专有网格或制造级尺寸一致。16 个参考型材另加 7 个扩展；连接 18 类 / 134 规格；光轴 10 类；板材/几何体 11 类；配件 4 类，脚杯 42 规格。
+- 型材仍从右侧预览进入 FREE；U88 自由添加在选定长度后使用同一放置器，关闭自由添加才绘制。R 圆弧面天然关闭，封边从其剩余可安装面起算。封边截面必须传 faceClosures 给 ProfileSectionRegistry，不能只改连接标志不改实体。
+- 七个连接目录类型映射已有设计连接 Manager；15 系列与其他复杂组件目前自由放置，UI 明确限制。designComponent 是本地几何描述，不是 manufacturingRuleId；切换设计类型清除描述，制造绑定仍经过既有规则。
+- 新板材 shapeParameters 保存在 PANEL.dimensions；PanelShapeModel 是尺寸/轮廓单一来源，ProjectSchema 校验一致性，属性编辑用 Editor API。薄板 SVG/DXF 保留轮廓和内孔，曲面实体只是设计参考，暂不是完整机械制图。
+- 光轴夹 mountReference 使用 SHAFT_AXIS + stationS，dimensions.axisOffsetY 与真实主轴孔中心一致；随宿主变换重算，非同径拒绝安装。自由放置最低点落工作面，Ghost 不进入业务数组。
+- 五类主目录之外，数据库配件/管理折叠保留，加工仍从顶部模型库进入。单次确认结束，Esc / 右键短单击 / 切换类别取消；右键拖动保持平移。切换规格取消旧 Ghost，释放克隆前后的材质。
+- 当前版本 0.71.0 / Schema 62 / drawToolVersion 7；不要为了参考目录引入价格、真实供应商料号或历史迁移。浏览器与回归范围见 docs/VALIDATION.md。
+
+## v0.70 历史重点
 
 - 深色控件必须覆盖 hover / focus / disabled / option，不能再被 app.css 前面的浅色规则覆盖。包括侧栏、快捷面板和弹窗，原生选择器采用 color-scheme:dark，控件聚焦不叠加厚 outline。
 - rail-tool.active 清除 ::before 和 inset 双指示；菜单 active 不使用浅底，右侧 menu-state 表示勾选，aria-pressed 表示真实开关状态。View / Display / Step 共享同一行尺寸与悬停风格。

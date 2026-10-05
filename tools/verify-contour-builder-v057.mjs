@@ -15,7 +15,7 @@ const html=read('src/main/resources/static/index.html');
 const css=read('src/main/resources/static/css/app.css');
 const app=read('src/main/resources/static/js/app.js');
 
-assert.equal(CURRENT_APP_VERSION,'0.70.0');
+assert.equal(CURRENT_APP_VERSION,'0.71.0');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 for(const kind of ['L','U','STAIR']){
   const points=buildContourPreset(kind,{widthMm:1000,depthMm:600,notchMm:240,plane:'XZ',center:{x:0,y:0,z:0}});

@@ -14,7 +14,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.70.0';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.71.0';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -184,6 +184,7 @@ createApp({
       nominal:'2040',
       catalogId:getDefaultDesignProfileId('2040'),
       length:500,
+      free:true,
       faceClosures:[],
       pathType:'LINE',
       radius:1000,
@@ -213,7 +214,7 @@ createApp({
     watch(()=>newPanel.shape,shape=>{newPanel.parameters=panelDefaults(shape);newPanel.edgeMode=false;});
     watch(()=>catalogAccessoryForm.head,()=>{if(catalogAccessoryForm.head==='ELASTIC_NUT')return;catalogAccessoryForm.thread=fastenerThreadOptions.value[0];});
     watch([()=>catalogAccessoryForm.head,()=>catalogAccessoryForm.thread],()=>{if(catalogAccessoryForm.head!=='ELASTIC_NUT'&&!fastenerLengthOptions.value.includes(catalogAccessoryForm.screwLength))catalogAccessoryForm.screwLength=fastenerLengthOptions.value[0];});
-    watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
+    watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value,selectedDesignProfile.value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
     const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#c4ccd5','钢板':'#8b959f'});
     const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',normalOffsetMm:0});
     const doorForm = reactive({frameCatalogId:getDefaultDesignProfileId('2020'),gapMm:3,panelGapMm:2,panelThickness:5,panelMaterial:'亚克力',hingeSide:'LEFT',includeHinges:true,includeHandle:true});
@@ -356,7 +357,7 @@ createApp({
       if(accessoryPlacementState.active&&(!item||accessoryPlacementState.definitionId!==accessoryDefinition(item).id))cancelAccessoryPlacement();
     });
     // 只有可见目录和选中的规格变化才重建预览；切换分类立即释放旧 WebGL 上下文。
-    watch([()=>newProfile.catalogId,()=>newProfile.faceClosures,activeLibrary,rightPanelMode,
+    watch([()=>newProfile.catalogId,()=>newProfile.faceClosures,()=>newProfile.length,()=>newProfile.free,activeLibrary,rightPanelMode,
       ()=>JSON.stringify(newShaft),()=>JSON.stringify(newPanel),currentConnectionComponent,currentAccessoryComponent],()=>{
       if(accessoryPlacementState.active)cancelAccessoryPlacement();
       if(connectionPlacementState.active)cancelConnectionPlacement();
@@ -730,6 +731,7 @@ createApp({
     }
 
     function mountPositionLabel(reference) {
+      if(reference?.targetType==='SHAFT_AXIS')return `光轴站位 · 距 A 端 ${Number(reference.stationS||0).toFixed(1)} mm`;
       const value=reference?.end || reference?.side || reference?.targetType || '';
       return ({START:'A端',END:'B端',FRONT:'正面',BACK:'背面',PROFILE_END:'型材端部',PROFILE_BOTTOM:'型材底端',PANEL_SIDE:'板材侧面'})[value] || value || '-';
     }
@@ -1031,6 +1033,10 @@ createApp({
       }
       // 模态窗口期间不能用背景快捷键创建、删除或变换工程构件。
       if(document.querySelector('.modal-backdrop'))return;
+      // Esc 退出放置也必须在规格框聚焦时生效，不能要求玩家先点一次画布。
+      if(event.key==='Escape'&&(connectionPlacementState.active||accessoryPlacementState.active||machiningPlacementState.active)){
+        event.preventDefault();cancelPlacementTools();return;
+      }
       // 绘制中的退出不能被表单焦点吞掉；已打开的模态窗口保留自己的 Esc 语义。
       if(event.key==='Escape'&&drawState.active&&!document.querySelector('.modal-backdrop,.engineering-center-backdrop')){
         event.preventDefault();stopProfileDraw();return;
@@ -1136,6 +1142,7 @@ createApp({
       newProfile.nominal = definition.nominal;
       newProfile.faceClosures = [...(definition.defaultFaceClosures || [])];
       profileClosure.value='';
+      if(definition.id==='DESIGN-U88')newProfile.length=1800;
       hasChosenProfile.value=true;
       syncDrawProfile(definition.id);
     }
@@ -1182,6 +1189,11 @@ createApp({
       newProfile.nominal = definition.nominal;
       newProfile.catalogId = definition.id;
       hasChosenProfile.value=true;
+      if(definition.id==='DESIGN-U88'&&newProfile.free){
+        const length=Number(newProfile.length);
+        if(!Number.isFinite(length)||length<10||length>3000)return notify('A 柱长度应为 10–3000 mm','warning');
+        return beginCatalogPlacement({id:'DIY-U88',label:`A柱 U型 8x8 L=${length}`,mountRule:{target:'FREE'},partSpec:{type:'PROFILE',dimensions:{length,sectionSize:[...definition.sectionSize]},designProfile:{profileId:definition.id,faceClosures:[...newProfile.faceClosures]},color:'#d9d9d9'}});
+      }
       startProfileDraw('FREE');
       notify(`已选 ${definition.name} · 到画布点击起点，再定方向和长度`);
     }
@@ -1276,7 +1288,7 @@ createApp({
     function placePanelComponent() {
       try {
         const dimensions=panelDimensions(newPanel.shape,newPanel.parameters,newPanel.edgeMode);
-        if(!newPanel.free){if(newPanel.shape!=='rectangle')return notify('框口填板目前支持矩形；其他形状请选择自由添加','warning');return createPanelFromOpening();}
+        if(!newPanel.free){if(newPanel.shape!=='rectangle')return notify('框口填板目前支持矩形；其他形状请选择自由添加','warning');panelFitForm.thickness=dimensions.thickness;panelFitForm.material=newPanel.material;return createPanelFromOpening();}
         beginCatalogPlacement({id:`DIY-PANEL-${newPanel.shape}`,label:panelShapeLabel.value,dimensions,mountRule:{target:'FREE'},
           partSpec:{type:'PANEL',dimensions,color:panelMaterialColors[newPanel.material],material:newPanel.material}});
       }catch(error){notify(error.message,'warning');}

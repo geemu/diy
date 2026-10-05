@@ -38,4 +38,4 @@ assert.equal(rack.createdPartCount,3);
 assert.equal(calls[0][0],'FRAME');
 assert.equal(calls[1][0],'LAYERED_RACK');
 
-console.log(JSON.stringify({ok:true,version:'0.70.0',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.71.0',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));

@@ -75,11 +75,13 @@ export default class ComponentGeometryFactory {
       if(kind==='CROSS_PLATE'){outline=[point(-a,-b),point(a,-b),point(a,-a),point(b,-a),point(b,a),point(a,a),point(a,b),point(-a,b),point(-a,a),point(-b,a),point(-b,-a),point(-a,-a)];holes=[circle(0,0,r),circle(-s,0,r),circle(s,0,r),circle(0,-s,r),circle(0,s,r)];}
       plate(span,span,t,holes,[0,0,0],[0,0,(d.angle-90)*Math.PI/180],outline);
     } else if(['CORNER_CUBE','THREE_WAY','TWO_WAY','THREE_D_CONNECTOR','THREE_WAY_RADIAL'].includes(kind)) {
-      box(s,s,s);
+      if(kind==='THREE_WAY_RADIAL') {
+        const outline=[point(-s/2,-s/2),point(s/2,-s/2),...Array.from({length:25},(_,i)=>{const a=i*Math.PI/48;return point(-s/2+s*Math.cos(a),-s/2+s*Math.sin(a));})];
+        plate(s,s,s,[],[0,0,0],[0,0,0],outline);
+      } else box(s,s,s);
       for(const rot of [[0,0,0],[0,Math.PI/2,0],[-Math.PI/2,0,0]]){
         const m=add(new THREE.CircleGeometry(s*.24,48),[0,0,0],rot,'#66686b');m.position.copy(new THREE.Vector3(0,0,s/2+.025).applyEuler(m.rotation));
       }
-      if(kind==='THREE_WAY_RADIAL')add(new THREE.CylinderGeometry(s*.5,s*.5,s,32,1,false,0,Math.PI/2),[0,0,0],[Math.PI/2,0,0]);
     } else if(kind==='UNIVERSAL_JOINT') {
       plate(s,s*1.3,t,[circle(0,s*.2,r)],[0,s*.65,0]);plate(s,s*1.3,t,[circle(0,-s*.2,r)],[0,-s*.65,t*2],[0,Math.PI/10,0]);
       add(new THREE.CylinderGeometry(s*.28,s*.28,s*1.2,32),[0,0,t],[0,0,Math.PI/2]);
@@ -91,9 +93,10 @@ export default class ComponentGeometryFactory {
       plate(len,42,3,[],[0,-1,0],[0,0,0],[point(0,0),point(len*.8,0),point(0,-42)]);
     } else {
       const leg=kind==='SHELF_BRACKET'?d.length:s,w=kind==='L_BRACKET'?s*.45:s,depth=kind==='HEAVY_CORNER'?d.length:leg;
-      const holes=d.holeCount===4?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const holes=d.holeCount>=3?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
       plate(w,depth,t,holes,[0,t/2,depth/2],[Math.PI/2,0,0]);
-      const angle=(d.angle||90)*Math.PI/180;plate(w,s,t,[circle(0,0,r)],[0,s*Math.sin(angle)/2,s*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
+      const uprightHoles=d.holeCount===4?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const angle=(d.angle||90)*Math.PI/180;plate(w,s,t,uprightHoles,[0,s*Math.sin(angle)/2,s*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
       if(kind==='HEAVY_CORNER')for(const x of [-w*.4,w*.4])plate(s,s,t,[],[x,0,0],[0,Math.PI/2,0],[point(0,0),point(s*.8,0),point(0,s*.8)]);
       if(kind==='PANEL_FIX_CONNECTOR'&&d.rounded)add(new THREE.CylinderGeometry(w/2,w/2,t,32),[0,s/2,0],[Math.PI/2,0,0]);
     }

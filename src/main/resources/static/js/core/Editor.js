@@ -144,6 +144,10 @@ export default class Editor {
 
   bind() {
     this.sceneManager.secondaryClickHandler = () => {
+      // 短右键统一退出放置；右键拖动仍由 SceneManager / OrbitControls 处理平移。
+      if(this.accessoryPlacementManager.isActive()){this.accessoryPlacementManager.cancel();return true;}
+      if(this.connectionPlacementManager.isActive()){this.connectionPlacementManager.cancel();return true;}
+      if(this.machiningPlacementManager.isActive()){this.machiningPlacementManager.cancel();return true;}
       if(!this.profileDrawTool.isActive())return false;
       this.profileDrawTool.stop();return true;
     };
@@ -656,6 +660,7 @@ export default class Editor {
     const spec=definition?.partSpec,d=spec?.dimensions||{};
     if(spec?.type==='PANEL')return this.addPanel(d.width,d.height,d.thickness,{...options,name:definition.label,color:spec.color,material:spec.material,shapeDimensions:d});
     if(spec?.type==='SHAFT')return this.addShaft(d.diameter,d.length,{...options,name:definition.label,color:spec.color,material:spec.material});
+    if(spec?.type==='PROFILE')return this.addProfile(spec.designProfile.profileId,d.length,{...options,name:definition.label,color:spec.color,faceClosures:spec.designProfile.faceClosures});
     return this.addHardware(definition.id,{...options,definition});
   }
 

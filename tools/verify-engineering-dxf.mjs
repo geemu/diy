@@ -43,4 +43,4 @@ for(const token of ['EngineeringDrawingDxfExporter','exportDxf','downloadDxf']) 
 for(const token of ['总装工程图_${drawingPaper}.dxf','DXF图层说明.json','sheet.dxf']) assert.ok(factoryText.includes(token),`factory missing ${token}`);
 assert.ok(html.includes('导出 DXF 制图文件'));
 
-console.log(JSON.stringify({ok:true,version:'0.70.0',schema:62,dxfVersion:1,layers:Object.keys(ENGINEERING_DXF_LAYERS),sheetUnits:'mm',svgDxfSharedModel:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.71.0',schema:62,dxfVersion:1,layers:Object.keys(ENGINEERING_DXF_LAYERS),sheetUnits:'mm',svgDxfSharedModel:true},null,2));

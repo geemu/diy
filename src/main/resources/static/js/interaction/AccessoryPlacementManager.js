@@ -232,10 +232,12 @@ export default class AccessoryPlacementManager {
       locked:true
     };
     const mesh = this.editor.createPartMesh(part);
+    const originalMaterials=new Set();
     mesh.traverse(child => {
       if (!child.isMesh) return;
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       const mapped = materials.map(material => {
+        if(material)originalMaterials.add(material);
         const next = material?.clone?.() || new THREE.MeshBasicMaterial();
         next.color?.setHex?.(color);
         next.transparent = true;
@@ -247,6 +249,7 @@ export default class AccessoryPlacementManager {
       child.material = Array.isArray(child.material) ? mapped : mapped[0];
       child.renderOrder = 1501;
     });
+    originalMaterials.forEach(material=>material.dispose());
     mesh.userData.__placementPreview = true;
     return mesh;
   }

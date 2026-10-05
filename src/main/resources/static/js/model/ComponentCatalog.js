@@ -20,7 +20,11 @@ export function connectionSpecs(type) { return category('连接').variants.find(
 export function shaftDiametersFor(type) { return (category('光轴').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []).map(x=>Number(x.value)); }
 export function fastenerThreads(head) { return Object.keys(data.fasteners[head] || {}).map(Number); }
 export function fastenerLengths(head,diameter) { return data.fasteners[head]?.[diameter] || []; }
-export function closureFaces(value) { return String(value||'').split('+').filter(Boolean).map(x=>({A:'FRONT',B:'RIGHT',C:'BACK',D:'LEFT'})[x]); }
+export function closureFaces(value,profile=null) {
+  // R 截面的圆弧侧天然无槽，封边从剩余两个可安装面起算，避免“一面封边”没有变化。
+  const faces=profile?.shape==='ROUND_CORNER'?{A:'BACK',B:'LEFT',C:'FRONT',D:'RIGHT'}:{A:'FRONT',B:'RIGHT',C:'BACK',D:'LEFT'};
+  return String(value||'').split('+').filter(Boolean).map(x=>faces[x]);
+}
 
 /** 此处尺寸描述通用设计几何，不是供应商料号或制造认证。 */
 function definition(kind,label,dimensions,options={}) {
@@ -47,6 +51,8 @@ export function shaftComponent(form) {
   const type=form.type,d=Number(form.diameter),name=ShaftComponentOptions.find(x=>x.value===type)?.label||type;
   const dimensions={size:d*3,diameter:d,secondDiameter:form.mixed?Number(form.secondDiameter):d,length:d*5,
     width:d*3,height:d*5,thickness:d*2,spacing:type.endsWith('_35')?35:type.endsWith('_40')?40:d*2};
+  // 安装偏移必须使用实际主轴孔中心，不能让所有夹具沿用十字夹的偏移。
+  dimensions.axisOffsetY=type.startsWith('PARALLEL')?dimensions.spacing/2:type==='VERTICAL_SK'?d*.25:type==='HORIZONTAL_SHF'||type==='LIMIT_RING'?0:d*1.2;
   if(type==='LIMIT_RING')Object.assign(dimensions,{size:d*1.9,width:d*1.9,height:d*1.9,thickness:d*.65});
   return definition(`SHAFT_${type}`,`${name} ${form.mixed?`异径Φ${dimensions.secondDiameter}-${d}`:`Φ${d}`}mm`,dimensions,{category:'光轴配件',mountRule:{target:'SHAFT_AXIS',diameter:d}});
 }

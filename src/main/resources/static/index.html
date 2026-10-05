@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>DIY 铝型材设计器</title>
-  <link rel="stylesheet" href="./css/app.css?v=0.70.0">
+  <link rel="stylesheet" href="./css/app.css?v=0.71.0">
   <script src="./vendor/vue/vue.global.js"></script>
   <script src="./vendor/jszip/jszip.min.js"></script>
-  <script src="./js/boot.js?v=0.70.0"></script>
+  <script src="./js/boot.js?v=0.71.0"></script>
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/controls/OrbitControls.js":"./vendor/three/examples/jsm/controls/OrbitControls.js","three/addons/controls/TransformControls.js":"./vendor/three/examples/jsm/controls/TransformControls.js"}}
   </script>
@@ -46,7 +46,7 @@
         </div></details>
         <details class="cad-menu"><summary>帮助</summary><div class="cad-menu-popover"><button @click="showShortcutHelp=true">快捷键与操作说明</button><button @click="resetWorkbenchLayout">复位工作台布局</button></div></details>
       </nav>
-      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.70.0</span></div>
+      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.71.0</span></div>
       <div class="topbar-actions compact"><button class="icon-button" title="撤销 控制键+Z" @click="undo">↶</button><button class="icon-button" title="重做 控制键+Y" @click="redo">↷</button><button class="top-action primary" @click="exportFactoryPackage">制造输出</button></div>
       <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="handleFile">
       <input ref="sectionDxfInput" type="file" accept=".dxf,application/dxf,text/plain" hidden @change="handleSectionDxf">
@@ -149,15 +149,17 @@
           <div class="profile-catalog-content">
             <div class="field-stack"><label for="design-profile-choice">规格尺寸</label><select id="design-profile-choice" v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in referenceProfiles" :key="item.id" :value="item.id">{{item.label}}</option><optgroup label="扩展规格"><option v-for="item in extensionProfiles" :key="item.id" :value="item.id">{{item.name}}</option></optgroup></select></div>
             <div class="field-stack" v-if="['DESIGN-2020','DESIGN-3030','DESIGN-4040','DESIGN-2020R','DESIGN-3030R','DESIGN-4040R'].includes(newProfile.catalogId)"><label for="profile-closure">封边</label><select id="profile-closure" v-model="profileClosure"><option v-for="item in ProfileClosureOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
+            <template v-if="newProfile.catalogId==='DESIGN-U88'"><label class="inline-check"><input type="checkbox" v-model="newProfile.free">自由添加</label><div class="field-row"><label>长度</label><input type="number" min="10" max="3000" v-model.number="newProfile.length"><em>mm</em></div><div class="draw-toggle-row"><button class="soft-button" v-for="length in [800,1000,1200,1500,2000,2400]" :key="length" @click="newProfile.length=length">{{length}}</button></div></template>
             <button class="catalog-profile-preview profile-asset-row" :class="{'selected-profile':drawState.active}" @click="quickAddProfile(newProfile.catalogId)" draggable="true" @dragstart="startProfileDrag(newProfile.catalogId,$event)" :aria-label="'选择 '+selectedDesignProfile?.name+' 并自由绘制'">
               <div class="catalog-preview-head"><span>出料口</span><strong>{{selectedDesignProfile?.name}}</strong></div>
               <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
               <div class="catalog-preview-foot"><span>{{selectedDesignProfile?.width}}×{{selectedDesignProfile?.height}} mm · 槽宽 {{selectedDesignProfile?.slotWidth}} mm</span><strong>{{drawState.active?'绘制中 · 点击重新起笔':'点击选中'}}</strong></div>
             </button>
-            <p class="catalog-draw-hint">{{drawState.active?'到画布点击起点，确定方向和长度。Esc 或右键结束。':'先选规格，再点击预览开始绘制。'}}默认完成一根后返回选择。</p>
+            <p class="catalog-draw-hint">{{newProfile.catalogId==='DESIGN-U88'&&newProfile.free?'选择长度后点击预览，在工作面单击添加；Esc 或右键取消。':drawState.active?'到画布点击起点，确定方向和长度。Esc 或右键结束。':'先选规格，再点击预览开始绘制。默认完成一根后返回选择。'}}</p>
+            <button v-if="newProfile.catalogId==='DESIGN-U88'&&accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
           </div>
           <div class="library-footer-form">
-            <div class="field-row"><label>默认长度</label><input type="number" min="10" v-model.number="newProfile.length"><em>mm</em></div>
+            <div v-if="newProfile.catalogId!=='DESIGN-U88'" class="field-row"><label>默认长度</label><input type="number" min="10" v-model.number="newProfile.length"><em>mm</em></div>
             <details class="free-draw-options"><summary>绘制设置</summary><div class="field-stack"><label>斜杆所在面</label><select v-model="drawForm.plane" @change="drawOptionsChanged"><option value="XZ">水平面</option><option value="XY">正面</option><option value="YZ">侧面</option></select></div><label class="inline-check"><input type="checkbox" v-model="drawForm.gridSnap" @change="drawOptionsChanged">网格 {{drawForm.gridStepMm}} mm</label><div class="field-stack"><label>固定长度（0 表示不限）</label><input type="number" min="0" v-model.number="drawForm.fixedLengthMm" @change="drawOptionsChanged"></div><p class="muted-note">X/Y/Z 锁轴 · Alt 斜向 · Shift 正交 · Ctrl 临时不吸附</p></details>
             <button class="soft-button full" @click="openInspectorForNewProfile">{{profileAdvanced ? '收起截面设置' : '封边 / 弯型设置'}}</button>
             <div v-if="profileAdvanced" class="advanced-profile">
@@ -453,7 +455,7 @@
 
       <main class="canvas-shell" @dragover.prevent @drop="dropAsset">
         <div ref="viewport" class="viewport"></div>
-        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.70.0</span></div>
+        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.71.0</span></div>
 
         <div class="canvas-transform-bar">
           <button class="floating-drag-handle" data-floating-drag="toolbar" title="拖动工具条；双击恢复默认位置">⠿</button>
@@ -647,7 +649,7 @@
               <div class="property-row"><label>分类</label><span class="property-readonly">{{selectedPart.hardwareSpec?.category || '配件'}}</span></div>
               <div class="property-row"><label>名称</label><span class="property-readonly">{{selectedPart.name || '配件'}}</span></div>
               <div class="property-row"><label>材质</label><span class="property-readonly">{{selectedPart.hardwareSpec?.material || selectedPart.materialSpec?.material || '-'}}</span></div>
-              <div class="property-row"><label>来源</label><span class="property-readonly">{{selectedPart.hardwareSpec?.source==='ACCESSORY_CATALOG'?'标准配件库':'内置五金'}}</span></div>
+              <div class="property-row"><label>来源</label><span class="property-readonly">{{selectedPart.hardwareSpec?.source==='ACCESSORY_CATALOG'?'标准配件库':selectedPart.hardwareSpec?.source==='DIY_COMPONENT_CATALOG'?'组件参考库':'内置五金'}}</span></div>
               <div v-if="selectedPart.mountReference" class="mount-reference-card">
                 <div class="mount-reference-head"><strong>安装关系</strong><button class="mini-link" @click="detachSelectedAccessory">解除安装</button></div>
                 <span>目标构件：{{mountedTargetLabel(selectedPart.mountReference)}}</span>
@@ -1056,6 +1058,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./js/app.js?v=0.70.0"></script>
+<script type="module" src="./js/app.js?v=0.71.0"></script>
 </body>
 </html>

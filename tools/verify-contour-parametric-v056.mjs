@@ -15,7 +15,7 @@ const app=read('src/main/resources/static/js/app.js');
 const html=read('src/main/resources/static/index.html');
 const css=read('src/main/resources/static/css/app.css');
 
-assert.equal(CURRENT_APP_VERSION,'0.70.0');
+assert.equal(CURRENT_APP_VERSION,'0.71.0');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 for(const token of ['CONTOUR_FRAME','parameters={','edgeLengths','orthogonal:options.orthogonal ??']) assert.ok(draw.includes(token),`轮廓元数据缺少 ${token}`);
 for(const token of ['class ContourFrameManager','setEdgeLength','updatePoint','rebuild(points','pointerdown','pointermove','validateContour']) assert.ok(manager.includes(token),`参数化轮廓缺少 ${token}`);
