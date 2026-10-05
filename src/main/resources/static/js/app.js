@@ -97,6 +97,8 @@ createApp({
     const customProfileVisible = ref(false);
     const customProfileMode = ref('create');
     const profileSectionPreviewCanvas = ref(null);
+    const catalogProfileCanvas = ref(null);
+    let catalogProfilePreview = null;
     const customProfileForm = reactive({id:'',nominal:'3030',variant:'CUSTOM3030',name:'自定义 3030',series:'30',system:'自定义',width:30,height:30,slotWidth:8,wallThicknessOptions:'1.8,2.0',defaultWallThickness:2,alloy:'A6063-T5',note:'',sectionTemplate:'T_SLOT',centerHoleDiameter:5,cornerChamfer:3,sectionJson:'',enabled:true,sortOrder:1000});
     const lastSnap = ref(null);
     const measureMode = ref(false);
@@ -192,6 +194,19 @@ createApp({
     const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const frameForm = reactive({catalogId:getDefaultDesignProfileId('3030'),width:1000,depth:600,height:1000});
     const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
+    const selectedDesignProfile = computed(()=>getDesignProfileDefinition(newProfile.catalogId));
+    const hasChosenProfile = ref(false);
+    async function refreshCatalogPreview() {
+      await nextTick();
+      if(!catalogProfileCanvas.value || rightPanelMode.value!=='create' || activeLibrary.value!=='profile')return;
+      if(catalogProfilePreview?.canvas!==catalogProfileCanvas.value){
+        catalogProfilePreview?.dispose();
+        catalogProfilePreview=new ProfileSectionPreview3D(catalogProfileCanvas.value);
+      }
+      catalogProfilePreview.resize();
+      catalogProfilePreview.setSection(getSectionDefinition(newProfile.catalogId),{lengthRatio:3.5});
+    }
+    watch([()=>newProfile.catalogId,activeLibrary,rightPanelMode],refreshCatalogPreview,{flush:'post'});
     const drawerForm = reactive({width:500,depth:450,height:600,count:3,gap:3,frontMode:'INSET',includeSlides:true,slideLength:450});
     const arrayForm = reactive({axis:'X',count:3,spacing:100});
     const mirrorForm = reactive({axis:'X',copy:true,planeMode:'WORLD_ORIGIN'});
@@ -736,6 +751,7 @@ createApp({
     onMounted(async () => {
       await nextTick();
       editor = new Editor(viewport.value);
+      refreshCatalogPreview();
       diyGenerator = new DiyGenerator(editor);
       layoutManager = new WorkbenchLayoutManager().init();
       viewCube = new ViewCube(viewCubeViewport.value,editor.sceneManager,direction=>editor.viewDirection(direction));
@@ -926,6 +942,7 @@ createApp({
       autosaveTimer = setInterval(saveAutosave,8000);
       window.addEventListener('pointerdown',closeContextMenu,true);
       window.addEventListener('pointerdown',handleCadMenuPointerDown,true);
+      window.addEventListener('click',handleCadMenuClick,true);
       editor.updateDimensions();
       editor.emitStats();
       window.addEventListener('keydown', handleKeyboard);
@@ -938,8 +955,10 @@ createApp({
       window.removeEventListener('keyup', handleKeyboardUp);
       window.removeEventListener('pointerdown',closeContextMenu,true);
       window.removeEventListener('pointerdown',handleCadMenuPointerDown,true);
+      window.removeEventListener('click',handleCadMenuClick,true);
       if (autosaveTimer) clearInterval(autosaveTimer);
       profileSectionPreview3d?.dispose();
+      catalogProfilePreview?.dispose();
       profileSectionPreview3d=null;
       layoutManager?.destroy();
       layoutManager=null;
@@ -1054,6 +1073,7 @@ createApp({
       if (!definition) return;
       newProfile.nominal = definition.nominal;
       newProfile.faceClosures = [...(definition.defaultFaceClosures || [])];
+      hasChosenProfile.value=true;
       syncDrawProfile(definition.id);
     }
 
@@ -1098,6 +1118,7 @@ createApp({
       newProfile.nominal = definition.nominal;
       newProfile.catalogId = definition.id;
       newProfile.faceClosures=[...(definition.defaultFaceClosures||[])];
+      hasChosenProfile.value=true;
       startProfileDraw('FREE');
       notify(`已选 ${definition.name} · 到画布点击起点，再定方向和长度`);
     }
@@ -1122,15 +1143,18 @@ createApp({
 
     function startProfileDraw(mode='FREE',options={}) {
       if (!editor) return;
+      if(mode==='FREE'&&!hasChosenProfile.value){
+        quickPanel.value='';openResource('profile');notify('请先在右侧选择型材，再点击预览开始绘制','warning');return;
+      }
       if (measureMode.value) toggleMeasure();
       if (dimensionMode.value) toggleDimensionMode();
       if (boxSelectMode.value) toggleBoxSelect();
       if (lassoSelectMode.value) toggleLassoSelect();
       if (featureSelectMode.value) toggleFeatureSelectMode();
       editor.connectionPlacementManager.cancel();editor.machiningPlacementManager.cancel();editor.accessoryPlacementManager.cancel();
-      quickPanel.value=['RECTANGLE','BOX','CONTOUR'].includes(mode)?'build':'draw';
+      quickPanel.value=['RECTANGLE','BOX','CONTOUR'].includes(mode)?'build':'';
       rightPanelMode.value='create';activeLibrary.value='profile';
-      drawForm.fixedLengthMm=Number(options.fixedLengthMm||0);
+      if(Object.hasOwn(options,'fixedLengthMm'))drawForm.fixedLengthMm=Number(options.fixedLengthMm||0);
       editor.profileDrawTool.begin(mode,{...drawForm,faceClosures:[...(newProfile.faceClosures||[])]});
       if(mode!=='FREE')notify('快捷搭建：点击画布定位并生成框架','warning');
     }
@@ -1382,6 +1406,11 @@ createApp({
     function handleCadMenuPointerDown(event) {
       const current=event.target?.closest?.('details.cad-menu') || null;
       closeCadMenus(current);
+    }
+
+    function handleCadMenuClick(event) {
+      const current=event.target?.closest?.('details.cad-menu') || null;
+      // 必须等 click 处理完再收起；pointerdown 就隐藏会让 pointerup 落到画布。
       if(current && event.target?.closest?.('.cad-menu-popover button')) {
         queueMicrotask(()=>{ current.open=false; });
       }
@@ -2326,6 +2355,7 @@ createApp({
       if (!file) return;
       try {
         editor.loadProject(await ProjectIO.read(file));
+        Object.assign(engineeringDrawingForm,editor.drawingSettings);
         syncManufacturingForm();
         sectionRevision.value++; dirty.value=false; projectRevision.value++;
         notify('工程已打开');
@@ -2335,7 +2365,34 @@ createApp({
       event.target.value = '';
     }
 
-    const exportJson = () => ProjectIO.download(editor.exportProject(),'铝型材工程.json');
+    function exportJson() {
+      if(!editor)return;
+      ProjectIO.download(editor.exportProject(),`${editor.drawingSettings.projectName||'铝型材工程'}.json`);
+      dirty.value=false;notify('工程文件已导出，请保留下载的 JSON 文件');
+    }
+
+    function renameProject() {
+      const name=prompt('工程名称',engineeringDrawingForm.projectName);
+      if(!name?.trim())return;
+      engineeringDrawingForm.projectName=name.trim();
+      engineeringDrawingChanged();
+    }
+
+    function newProject() {
+      if(!editor)return;
+      if(dirty.value&&editor.parts.length&&!confirm('当前工程有未保存的修改。确定新建空白工程？建议先保存。'))return;
+      returnToSelection();
+      // 新建走 Editor 清理领域模型，不在 UI 删改领域数组；示例另设明确入口。
+      editor.clear();
+      editor.historyManager.reset();
+      editor.drawingSettings={projectName:'未命名工程',revision:'A',paper:'A3',sideView:'RIGHT'};
+      Object.assign(engineeringDrawingForm,editor.drawingSettings);
+      quickPanel.value='';rightPanelMode.value='create';activeLibrary.value='profile';
+      hasChosenProfile.value=false;drawForm.fixedLengthMm=0;drawForm.continueDrawing=false;
+      editor.profileDrawTool.configure({...drawForm});syncManufacturingForm();
+      sectionRevision.value++;projectRevision.value++;dirty.value=false;
+      editor.viewIso();notify('已新建空白工程');
+    }
 
     async function loadSample() {
       try {
@@ -2999,7 +3056,7 @@ createApp({
       quickPanel,rightPanelMode,resourceCategories,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
-      activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
+      catalogProfileCanvas,selectedDesignProfile,newProject,renameProject,activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
       designProfiles,profileCatalog,profileSystems,nominalOptions,newVariants,selectedVariants,visibleProfileVariants,frameProfileOptions,connectionRules,connectionRuleId,hardwareCatalog,databaseAccessories,databaseAccessoryRows,visibleAccessories,accessoryManagerRows,accessoryCategoryOptions,
       newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyTemplates,diyTemplateId,diyForm,selectedDiyTemplate,frameForm,drawForm,drawerForm,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,
       sectionTargetVariant,sectionInfo,sectionSvg,sectionIsCustom,canSmartConnect,

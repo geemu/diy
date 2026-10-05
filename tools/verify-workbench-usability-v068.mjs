@@ -50,6 +50,9 @@ const html=read('index.html'),app=read('js/app.js'),core=read('js/core/Editor.js
 assert.ok(!html.includes('workbenchMode')&&!app.includes('setWorkbenchMode')&&!core.includes('workbenchMode'));
 for(const label of ['连续添加','结束绘制','取消当前段','确认这一根','精确连接与配合','更多加工','端部斜切','几何关系'])assert.ok(html.includes(label),label);
 assert.ok(html.includes('@click="returnToSelection"'));
+assert.ok(html.includes('class="cad-menu toolbar-more"')&&html.includes('aria-label="更多操作"'),'低频工具需按需展开，不挤占主工具条');
+assert.ok(app.includes("window.addEventListener('click',handleCadMenuClick,true)"),'菜单只能在 click 后收起，不能在 pointerdown 吞掉操作');
+assert.ok(!app.slice(app.indexOf('function handleCadMenuPointerDown'),app.indexOf('function handleCadMenuClick')).includes('queueMicrotask'));
 assert.ok(scene.includes('if(event.button!==0)')&&scene.includes('secondaryClickHandler'),'右键不得通过左键提交链');
 assert.ok(overlay.includes('event.preventDefault();tool.stop();'),'长度输入聚焦时 Esc 也结束');
 console.log(JSON.stringify({ok:true,version:'0.68.0',oneShotDefault:true,explicitRepeat:true,oneEscapeExit:true,cancelKeepsCommitted:true,noModeSplit:true}));

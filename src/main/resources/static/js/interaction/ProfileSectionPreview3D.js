@@ -26,7 +26,7 @@ export default class ProfileSectionPreview3D {
     this.resize();
   }
 
-  setSection(section) {
+  setSection(section,options={}) {
     this.clearMesh();
     if(!section?.outer?.length) {
       this.render();
@@ -35,10 +35,12 @@ export default class ProfileSectionPreview3D {
     const bounds=getSectionBounds(section);
     const span=Math.max(bounds.width,bounds.height,10);
     const material=new THREE.MeshStandardMaterial({color:0xcfd5dc,metalness:0.55,roughness:0.28,side:THREE.DoubleSide});
-    this.mesh=ProfileGeometryFactory.createSectionMesh(section,span*1.5,material);
+    const lengthRatio=Math.max(1,Number(options.lengthRatio)||1.5);
+    this.mesh=ProfileGeometryFactory.createSectionMesh(section,span*lengthRatio,material);
     ProfileGeometryFactory.addCadEdges(this.mesh);
     this.root.add(this.mesh);
-    this.camera.position.set(span*2.6,span*2.1,span*3.4);
+    const fitScale=Math.max(1,lengthRatio/2.2);
+    this.camera.position.set(span*2.6*fitScale,span*2.1*fitScale,span*3.4*fitScale);
     this.camera.lookAt(0,0,0);
     this.render();
   }

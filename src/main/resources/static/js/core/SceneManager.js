@@ -6,7 +6,7 @@ export default class SceneManager {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf4f6f8);
+    this.scene.background = new THREE.Color(0xe0f2fe);
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.clickHandler = null;
@@ -88,7 +88,7 @@ export default class SceneManager {
     fill.position.set(-1200, 900, -800);
     this.scene.add(fill);
 
-    this.grid = new THREE.GridHelper(10000, 200, 0xb7bdc5, 0xdde1e6);
+    this.grid = new THREE.GridHelper(10000, 200, 0x93aabb, 0xc3d8e7);
     this.grid.position.y = 0;
     this.scene.add(this.grid);
 

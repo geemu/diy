@@ -24,8 +24,8 @@ export default class WorkbenchLayoutManager {
 
   init() {
     if (!this.workspace || !this.canvas) return this;
-    this.bindPanel('library','.library-panel','right',318);
-    this.bindPanel('inspector','.inspector-panel','right',318);
+    this.bindPanel('library','.library-panel','right',344);
+    this.bindPanel('inspector','.inspector-panel','right',344);
     this.bindFloater('toolbar','.canvas-transform-bar');
     this.bindFloater('viewCube','.view-cube');
     this.applyStoredLayout();
