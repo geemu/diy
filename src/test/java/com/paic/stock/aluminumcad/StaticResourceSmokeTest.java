@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @SpringBootTest
 class StaticResourceSmokeTest {
@@ -80,6 +81,17 @@ class StaticResourceSmokeTest {
         assertResource("/vendor/three/examples/jsm/controls/OrbitControls.js", "OrbitControls");
         assertResource("/vendor/three/examples/jsm/controls/TransformControls.js", "TransformControls");
         assertResource("/samples/型材架子_610x670_H2050.json", "parts");
+    }
+
+    /** 浏览器不能仅更新页面版本号却继续使用旧的内部模块。 */
+    @Test
+    void browserModulesMustRevalidate() throws Exception {
+        mockMvc.perform(get("/js/ui/ViewCube.js"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-cache"));
+        mockMvc.perform(get("/css/app.css"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-cache"));
     }
 
     private void assertResource(String path, String expectedText) throws Exception {

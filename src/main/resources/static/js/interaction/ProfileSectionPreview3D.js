@@ -95,7 +95,15 @@ export default class ProfileSectionPreview3D {
     });
     for(const material of converted.keys())material.dispose();
     object?.traverse(child=>{
-      if(child.isMesh&&!child.material?.isMeshBasicMaterial)ProfileGeometryFactory.addCadEdges(child);
+      if(child.isMesh&&!child.material?.isMeshBasicMaterial){
+        ProfileGeometryFactory.addCadEdges(child);
+        // 黑色紧固件和端盖不能与出料口背景融在一起；只加强预览边线，不修改实体颜色。
+        const color=child.material?.color;
+        if(color&&Math.max(color.r,color.g,color.b)<.08){
+          const edge=child.children.find(item=>item.isLineSegments&&item.userData.helper);
+          if(edge){edge.material.color.set(0x8d949c);edge.material.opacity=.6;}
+        }
+      }
     });
     // 长条连接片在预览中横向呈现；这只是展示姿态，不修改构件参数或安装坐标。
     this.root.rotation.set(...style.rotation);

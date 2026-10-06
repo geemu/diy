@@ -192,6 +192,7 @@ export default class SceneManager {
       if (this.contextMenuHandler) this.contextMenuHandler(event);
     });
 
+    this.applyViewportAnchor(width,height);
     this.resetInitialView();
     this.animate();
   }
@@ -231,7 +232,15 @@ export default class SceneManager {
     this.orthographicCamera.top = vertical / 2;
     this.orthographicCamera.bottom = -vertical / 2;
     this.orthographicCamera.updateProjectionMatrix();
+    this.applyViewportAnchor(width,height);
     this.renderer.setSize(width, height);
+  }
+
+  /** 用户标记的搭建中心略高于画布中线（47% 高度）；只调整投影，不移动原点/模型/旋转中心。 */
+  applyViewportAnchor(width,height) {
+    for(const camera of [this.perspectiveCamera,this.orthographicCamera]) {
+      camera.setViewOffset(width,height,0,height*.03,width,height);
+    }
   }
 
   setMarqueeMode(enabled) {

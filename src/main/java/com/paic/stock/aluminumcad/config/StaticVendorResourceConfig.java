@@ -2,6 +2,7 @@ package com.paic.stock.aluminumcad.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -27,6 +28,13 @@ public class StaticVendorResourceConfig implements WebMvcConfigurer {
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // 页面版本更新后，普通相对导入的旧模块也必须重新校验，避免新 HTML 混用旧相机或配件几何。
+        registry.addResourceHandler("/js/**")
+                .addResourceLocations("classpath:/static/js/")
+                .setCacheControl(CacheControl.noCache());
+        registry.addResourceHandler("/css/**")
+                .addResourceLocations("classpath:/static/css/")
+                .setCacheControl(CacheControl.noCache());
         registry.addResourceHandler("/vendor/three/**")
                 .addResourceLocations(
                         "classpath:/static/vendor/three/",

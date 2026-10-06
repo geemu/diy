@@ -1,4 +1,20 @@
-# 项目交接文档 — v0.75.5
+# 项目交接文档 — v0.75.7
+
+## v0.75.7 当前重点
+
+- 用户指出点击后模型孔为黑色而参考亮色。定位到 ComponentGeometryFactory 的两条路径：plate 对已经含孔壁的挤出额外覆盖黑色 MeshBasic 圆筒；boredBlock 正交通孔另用纯黑 MeshBasic。前者删除冗余覆盖，后者复用实体受光材质。内壁不封盖、不改尺寸，相交孔裁剪与安装坐标保持。
+- 孔口能透出背景，不能保证在所有方向/背景下都是白色；参照页实际出料口仍有黑孔口。用户当前截图只有类别页签，尚缺其所指白孔的完整状态截图，不能宣称全部模型 1:1 或所有选中状态一致。
+- 灯光由预览/场景负责；通孔不能强制染黑，也不能用白圆片替代。黑色螺钉盲槽底与黑色配件保留，合法/不合法 Ghost 仍按绿/红状态，领域模型不改。
+- verify-bore-material-v0757 检查 95 组夹具主孔、134 组连接规格、2 种金属端盖与 3 组弹性螺母，有限坐标/受光材质/孔贯通/不重复圆筒/保留盲槽。既有 461 组预览与提交一致检查保留。版本 importmap 全量同步。
+
+## v0.75.6 当前重点
+
+- 用户标记位置为画布中央略上方。SceneManager.applyViewportAnchor 用 setViewOffset(width,height,0,height*.03,width,height) 同时设置透视/正交投影，原点/观察目标仍是 (0,0,0)，投影位置为 (50%,47%)；init 和 resize 都调用。不得通过移动构件或伪造红绿轴坐标满足截图。
+- index importmap 对 js 下全部 101 个文件做规范 URL→当前版本 query 映射。相对 import 的解析仍由浏览器完成，所有引用归于同一版本模块实例；bare three/vendor 映射保持。build-module-importmap 只输出 apply_patch，不写文件；verify-static-delivery 检查新增文件/当前版本覆盖，版本交付必须更新整张映射。
+- StaticVendorResourceConfig 为 /js/**、/css/** 设置 CacheControl.noCache。此 Java 配置需后端重启才在已有服务生效；静态 importmap 本身无需 Java 重启即可解决旧内部模块缓存。不能将普通 HTTP 接口检查误写成用户当前 Chrome 的相机状态。
+- 临时只读 HTTP 镜像以 max-age=3600 缓存旧未版本化 SceneManager，实测旧 target=(0,500,0) / 交点 65.309%；更新 HTML 后普通 reload 请求 100 个当前版本 JS，target=(0,0,0) / 交点 47%。镜像和独立浏览器均需关闭。
+- CatalogPresentation 滑轨 direction=(5,4,8)、margin=2.2，面向 +X 翻边开放侧。ComponentGeometryFactory 脚杯 MeshPhong / 金属 shininess=40，橡胶克隆材质 shininess=8，不改几何参数；黑色件仅加亮预览 CAD 边线。端盖 footer 显示实际适配尺寸，不强行显示泛用方形图。
+- verify-accessory-preview 执行真实 addHardware 构件组装并哈希实际 Three.js 网格/材质，覆盖 461 组脚杯、全部紧固件长度、16 参考截面三种端盖和滑轨。与参考站外观更接近，不宣称其专有模型或制造精度被完全复制。
 
 ## v0.75.5 当前重点
 

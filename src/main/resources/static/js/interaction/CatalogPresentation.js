@@ -30,7 +30,8 @@ export function catalogPresentation(part={}) {
   if(kind==='FLAT_PLATE')style.rotation=[0,0,Math.PI/2];
   if(kind==='T_PLATE')style.rotation=[0,0,Math.PI];
   if(kind==='ELASTIC_NUT')style.rotation=[-Math.PI/2,0,0];
-  if(kind==='SLIDE_RAIL')return {...style,direction:[-5,4,-8],margin:1.55};
+  // 三节槽轨的翻边朝 +X，必须从开放侧看，不能把封闭背板当作整个滑轨。
+  if(kind==='SLIDE_RAIL')return {...style,direction:[5,4,8],margin:2.2};
   if(kind.startsWith('SCREW_'))return {...style,referenceSpan:32,margin:1.2};
   if(kind==='FOOT_CUP')return {...style,margin:1.15};
   if(kind==='END_CAP')return {...style,margin:1.25};

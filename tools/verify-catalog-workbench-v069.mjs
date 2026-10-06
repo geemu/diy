@@ -47,6 +47,7 @@ const THREE=await import(pathToFileURL(path.join(root,'target/classes/static/ven
 const editorSource=read('js/core/Editor.js'),sceneSource=read('js/core/SceneManager.js');
 const fit=new Function('THREE',editorSource.match(/\n  fitView\(\) \{([\s\S]*?)\n  \}/)[1]);
 const resize=new Function(sceneSource.match(/\n  resize\(\) \{([\s\S]*?)\n  \}/)[1]);
+const applyViewportAnchor=new Function('width','height',sceneSource.match(/\n  applyViewportAnchor\([^\n]*\) \{([\s\S]*?)\n  \}/)[1]);
 const setView=new Function('THREE','direction','center','distance','options',sceneSource.match(/\n  setView\([^\n]+\) \{([\s\S]*?)\n  \}/)[1]);
 let fitCases=0;
 for(const [width,height] of [[1192,952],[616,720],[336,720]])for(const size of [[1000,1000,600],[2000,40,30],[30,2500,30]])for(const kind of ['perspective','orthographic']){
@@ -55,6 +56,8 @@ for(const [width,height] of [[1192,952],[616,720],[336,720]])for(const size of [
   const o=new THREE.OrthographicCamera(-1100,1100,1100,-1100,1,50000);
   const manager={container:{clientWidth:width,clientHeight:height},perspectiveCamera:p,orthographicCamera:o,camera:kind==='perspective'?p:o,renderer:{setSize(){}},orbitControls:{target:new THREE.Vector3(),update(){}}};
   manager.resize=()=>resize.call(manager);
+  manager.applyViewportAnchor=(width,height)=>applyViewportAnchor.call(manager,width,height);
+  manager.applyViewportAnchor(width,height);
   manager.setView=(direction,target,distance)=>setView.call(manager,THREE,direction,target,distance,{immediate:true});
   fit.call({sceneManager:manager,getCenterAndSize:()=>({center,max:Math.max(...size,500),radius:half.length()})},THREE);
   manager.camera.updateMatrixWorld(true);
@@ -69,4 +72,4 @@ for(const [width,height] of [[1192,952],[616,720],[336,720]])for(const size of [
   }
   fitCases++;
 }
-console.log(JSON.stringify({ok:true,version:'0.75.5',singleCatalogSelector:true,noLeftDrawPanel:true,localVectorIcons:true,topMenus:8,blankNewProject:true,unsavedGuard:true,darkShellBlueCanvas:true,fitCases,schema:62}));
+console.log(JSON.stringify({ok:true,version:'0.75.7',singleCatalogSelector:true,noLeftDrawPanel:true,localVectorIcons:true,topMenus:8,blankNewProject:true,unsavedGuard:true,darkShellBlueCanvas:true,fitCases,schema:62}));

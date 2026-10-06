@@ -8,26 +8,20 @@ export default class ComponentGeometryFactory {
   static create(part) {
     const group=new THREE.Group(),d=part.dimensions||{},kind=d.geometryKind;
     group.userData.part=part;
-    const material=new THREE.MeshLambertMaterial({color:part.color||'#808080',side:THREE.DoubleSide});
+    // 脚杯保留金属高光；预览与画布共用材质，不把展示明暗写成新的制造参数。
+    const material=kind==='FOOT_CUP'
+      ?new THREE.MeshPhongMaterial({color:part.color||'#808080',specular:0x999999,shininess:40,side:THREE.DoubleSide})
+      :new THREE.MeshLambertMaterial({color:part.color||'#808080',side:THREE.DoubleSide});
     const add=(geometry,pos=[0,0,0],rot=[0,0,0],color=null)=>{
-      const m=color?material.clone():material;if(color)m.color.set(color);
+      const m=color?material.clone():material;
+      if(color){m.color.set(color);if(m.isMeshPhongMaterial){m.specular.set(0x111111);m.shininess=8;}}
       const mesh=new THREE.Mesh(geometry,m);mesh.position.set(...pos);mesh.rotation.set(...rot);mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;
     };
     const box=(w,h,t,pos=[0,0,0],color=null)=>add(new THREE.BoxGeometry(w,h,t),pos,[0,0,0],color);
     const cyl=(r,h,pos=[0,0,0],color=null)=>add(new THREE.CylinderGeometry(r,r,h,48),pos,[0,0,0],color);
     const plate=(w,h,t,holes=[],pos=[0,0,0],rot=[0,0,0],outline=null)=>{
-      const mesh=add(extrude(outline||rectangle(w,h),holes,t),pos,rot);
-      // 圆孔保留实体内壁并使用暗色孔壁；没有投影阴影时也不能看成浅灰色实心圆。
-      for(const ring of holes){
-        const cx=ring.reduce((n,p)=>n+p.x,0)/ring.length,cy=ring.reduce((n,p)=>n+p.y,0)/ring.length;
-        const radius=Math.hypot(ring[0].x-cx,ring[0].y-cy);
-        if(ring.length<16||ring.some(p=>Math.abs(Math.hypot(p.x-cx,p.y-cy)-radius)>radius*.01))continue;
-        const geometry=new THREE.CylinderGeometry(radius*.999,radius*.999,t,48,1,true);
-        geometry.rotateX(Math.PI/2);geometry.translate(cx,cy,0);
-        geometry.applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)));geometry.translate(...pos);
-        group.add(new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:'#08090a',side:THREE.DoubleSide})));
-      }
-      return mesh;
+      // 带孔挤出已经包含真实内壁；沿用金属材质受光，不再叠加纯黑圆筒遮住孔壁。
+      return add(extrude(outline||rectangle(w,h),holes,t),pos,rot);
     };
     const s=Number(d.size||20),t=Number(d.thickness||Math.max(2,s*.12)),r=s*.12;
     if(part.type==='PANEL') {
@@ -224,7 +218,6 @@ function boredBlock(width,height,depth,bores,material) {
     const matrix=new THREE.Matrix4().makeBasis(u,v,normal).setPosition(normal.clone().multiplyScalar(size[axis]/2));
     geometry.applyMatrix4(matrix);meshes.push(new THREE.Mesh(geometry,material));
   }
-  const innerMaterial=new THREE.MeshBasicMaterial({color:'#08090a',side:THREE.DoubleSide});
   for(const bore of bores) {
     const direction=new THREE.Vector3().setComponent(bore.axis,1);
     const tube=new THREE.CylinderGeometry(bore.radius,bore.radius,size[bore.axis],48,24,true);
@@ -244,7 +237,8 @@ function boredBlock(width,height,depth,bores,material) {
       });
       if(!insideOther)kept.push(index[i],index[i+1],index[i+2]);
     }
-    tube.setIndex(kept);meshes.push(new THREE.Mesh(tube,innerMaterial));
+    // 孔壁与外表面共用受光材质，亮面/背光面由法线决定；黑色背景只从真实孔口透出。
+    tube.setIndex(kept);meshes.push(new THREE.Mesh(tube,material));
   }
   return meshes;
 }
