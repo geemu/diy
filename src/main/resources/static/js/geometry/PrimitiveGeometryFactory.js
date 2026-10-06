@@ -62,12 +62,22 @@ export default class PrimitiveGeometryFactory {
 
     if (part.accessoryType === 'ANGLE_BRACKET') {
       const t = Math.max(3, size * 0.12);
-      const a = new THREE.Mesh(new THREE.BoxGeometry(size, t, size), material.clone());
-      const b = new THREE.Mesh(new THREE.BoxGeometry(t, size, size), material.clone());
-      // 原点就是两条腿的贴合角点：连接求解器只需把本地 X/Y 对齐两个安装面。
-      a.position.set(size / 2, t / 2, 0);
-      b.position.set(t / 2, size / 2, 0);
+      // 保持原来的贴合角点和 X/Y 安装轴，仅把实心方块示意细化为通孔和侧肋。
+      // 孔径是设计预览比例，不替代制造规则的螺钉/孔径事实。
+      const plate=(holeX,holeY)=>{
+        const shape=new THREE.Shape();shape.moveTo(-size/2,-size/2);shape.lineTo(size/2,-size/2);shape.lineTo(size/2,size/2);shape.lineTo(-size/2,size/2);shape.closePath();
+        const hole=new THREE.Path();hole.absarc(holeX,holeY,size*0.1,0,Math.PI*2,true);shape.holes.push(hole);
+        return new THREE.ExtrudeGeometry(shape,{depth:t,bevelEnabled:false,curveSegments:24});
+      };
+      const a=new THREE.Mesh(plate(size*.16,0),material.clone());
+      const b=new THREE.Mesh(plate(0,size*.16),material.clone());
+      a.rotation.x=-Math.PI/2;a.position.set(size/2,0,0);
+      b.rotation.y=Math.PI/2;b.position.set(0,size/2,0);
       group.add(a, b);
+      const rib=new THREE.Shape();rib.moveTo(t,t);rib.lineTo(size*.78,t);rib.lineTo(t,size*.78);rib.closePath();
+      for(const z of [-size/2,size/2-t]){
+        const mesh=new THREE.Mesh(new THREE.ExtrudeGeometry(rib,{depth:t,bevelEnabled:false}),material.clone());mesh.position.z=z;group.add(mesh);
+      }
     } else if (part.accessoryType === 'CORNER_CUBE') {
       group.add(new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material));
     } else if (part.accessoryType === 'T_NUT') {

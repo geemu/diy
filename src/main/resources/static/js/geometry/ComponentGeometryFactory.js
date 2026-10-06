@@ -8,13 +8,13 @@ export default class ComponentGeometryFactory {
   static create(part) {
     const group=new THREE.Group(),d=part.dimensions||{},kind=d.geometryKind;
     group.userData.part=part;
-    // 脚杯保留金属高光；预览与画布共用材质，不把展示明暗写成新的制造参数。
+    // 画布使用本地环境反射表现五金金属；预览层仍统一中性照明，不改目录或制造参数。
     const material=kind==='FOOT_CUP'
       ?new THREE.MeshPhongMaterial({color:part.color||'#808080',specular:0x999999,shininess:40,side:THREE.DoubleSide})
-      :new THREE.MeshLambertMaterial({color:part.color||'#808080',side:THREE.DoubleSide});
+      :new THREE.MeshStandardMaterial({color:part.color||'#808080',metalness:part.type==='PANEL'?0.05:0.65,roughness:part.type==='PANEL'?0.65:0.32,envMapIntensity:0.85,side:THREE.DoubleSide});
     const add=(geometry,pos=[0,0,0],rot=[0,0,0],color=null)=>{
       const m=color?material.clone():material;
-      if(color){m.color.set(color);if(m.isMeshPhongMaterial){m.specular.set(0x111111);m.shininess=8;}}
+      if(color){m.color.set(color);if(m.isMeshPhongMaterial){m.specular.set(0x111111);m.shininess=8;}if(m.isMeshStandardMaterial){m.metalness=0.05;m.roughness=0.65;}}
       const mesh=new THREE.Mesh(geometry,m);mesh.position.set(...pos);mesh.rotation.set(...rot);mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;
     };
     const box=(w,h,t,pos=[0,0,0],color=null)=>add(new THREE.BoxGeometry(w,h,t),pos,[0,0,0],color);

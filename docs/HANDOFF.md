@@ -1,4 +1,12 @@
-# 项目交接文档 — v0.75.8
+# 项目交接文档 — v0.75.9
+
+## v0.75.9 当前重点
+
+- 用户要求候选吸附面整体绿色、落位蓝色接触带和金属选中效果，以及修改页加工/连接白底和下拉样式修复。新增 SurfaceFeedback 从实体三角面生成独立展示 Mesh，不用平面板填孔，不改 Part/Connection/History。
+- Snap.preview 与绘制候选共用真实外表面覆盖；InterferenceFeedbackManager 保留已有 SAT/OBB 分类和红色优先，对直型材真实 CONTACT 做另一构件 OBB 局部裁剪，live 绿色、结束蓝色。视觉 margin 不修改接触容差，不代表制造连接已经完成；近似 AABB 接触不渲染精确蓝面。
+- 选择覆盖橙金色，不覆盖原金属材质；surfaceGeometryKey 在截面/长度/子网格重建后重建覆盖。提示 raycast 禁用，嵌套释放正确 removeFromParent，不参与业务根网格拾取。端面孔和槽保持开放。
+- 通用五金使用 Standard 金属反射，右库仍经预览层中性照明；脚杯 Phong/橡胶特殊材质保留。旧 ANGLE_BRACKET 方块示意增加通孔和侧肋，原 X/Y 安装角点和范围不变，孔径为视觉比例，不能当制造孔径。
+- 连接 quick-change 取消白底；加工卡、下拉 hover/focus/disabled/option、徽章统一深色。加工动作换行，窄连接卡单列；现有领域切换逻辑不变。浏览器检查和全量回归见 VALIDATION。
 
 ## v0.75.8 当前重点
 

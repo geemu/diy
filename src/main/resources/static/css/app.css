@@ -433,7 +433,7 @@ body{background:linear-gradient(180deg,#eef2f6 0,#e9eef3 100%)}
 
 /* v0.47 quick-change connection */
 .connection-user-badge{font-size:7px;padding:2px 5px;border-radius:8px;background:#eef2ff;color:#5263a9;white-space:nowrap}
-.connection-quick-change{display:grid;grid-template-columns:58px 1fr;gap:6px 7px;align-items:center;margin-top:9px;padding:8px;border:1px solid #e6e9ed;border-radius:7px;background:#fff}
+.connection-quick-change{display:grid;grid-template-columns:58px minmax(0,1fr);gap:6px 7px;align-items:center;margin-top:9px;padding:8px;border:1px solid var(--line);border-radius:7px;background:#151925}
 .connection-quick-change label{font-size:9px;color:#7a848e}
 .connection-quick-change select{min-width:0;width:100%;font-size:9px;padding:5px 6px;border:1px solid var(--line);border-radius:5px;background:#fff;color:#46515c}
 .connection-quick-change .connection-recommend-button{grid-column:2;font-size:9px;padding:5px 7px}
@@ -949,3 +949,22 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .catalog-preview-head>span{flex:0 0 auto}
 .catalog-preview-head strong{max-width:calc(100% - 42px)!important;min-width:0}
 .workbench-footer-tip{position:fixed;z-index:21000;max-width:min(300px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:hidden;white-space:pre-line;padding:9px 11px;border:1px solid #374151;border-radius:7px;background:#111827;color:#e5e7eb;box-shadow:0 6px 20px #0003;font-size:12px;line-height:1.6;pointer-events:none}
+/* 修改页的嵌套表单必须同样遵守深色全状态，不能沿用早期白底卡片。 */
+.inspector-panel .machining-item-card,.inspector-panel .connection-quick-change{background:#151925;border-color:#303745;color:#e5e7eb;min-width:0}
+.inspector-panel .connection-quick-change label,.inspector-panel .connection-quick-change small,.inspector-panel .connection-card dt{color:#aab4c4}
+.inspector-panel .connection-card dd{color:#e5e7eb;min-width:0;overflow-wrap:anywhere}
+.inspector-panel .connection-quick-change select{background:#1a1a1a;color:#e5e7eb;border-color:#414756;min-width:0;max-width:100%;text-overflow:ellipsis}
+.inspector-panel select:hover:not(:disabled){background:#242833;color:#f3f4f6;border-color:#657084}
+.inspector-panel select:focus{background:#1a1a1a;color:#fff;border-color:var(--accent);outline:2px solid #ff910033;outline-offset:1px}
+.inspector-panel select:disabled,.inspector-panel option:disabled{background:#15171d;color:#9ca3af;opacity:1}
+.inspector-panel select option{background:#1a1a1a;color:#f3f4f6}
+.inspector-panel .connection-status.valid{background:#153a2c;color:#91e5b5}
+.inspector-panel .connection-status.invalid,.inspector-panel .connection-error{background:#3b2027;color:#ffabb0}
+.inspector-panel .connection-auto-badge,.inspector-panel .connection-user-badge{background:#1e304a;color:#a6ccff}
+.inspector-panel .machining-item-head{align-items:flex-start;gap:8px;flex-wrap:wrap}
+.inspector-panel .machining-item-head strong{flex:1 0 90px}
+.inspector-panel .machining-head-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}
+.inspector-panel .machining-head-actions button{padding:3px 5px;border-radius:4px;color:#b9c6dc}
+.inspector-panel .machining-head-actions button:last-child,.inspector-panel .connection-card-head>button{color:#ff9098}
+.inspector-panel .machining-head-actions button:hover,.inspector-panel .connection-card-head>button:hover{background:#293143;color:#fff}
+@media(max-width:1200px){.inspector-panel .connection-quick-change{grid-template-columns:minmax(0,1fr)}.inspector-panel .connection-quick-change .connection-recommend-button{grid-column:1}.inspector-panel .connection-card dl{grid-template-columns:62px minmax(0,1fr)}}

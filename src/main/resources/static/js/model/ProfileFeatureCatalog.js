@@ -121,6 +121,30 @@ export function profileFeatureWorldPoint(mesh,feature){
   return mesh.getWorldPosition(new THREE.Vector3());
 }
 
+/** 与侧面特征共用截面朝向；这里只提供法向，不增加第二套槽位/安装判定。 */
+export function profileFaceLocalNormal(face){
+  const normals={RIGHT:[1,0,0],LEFT:[-1,0,0],FRONT:[0,1,0],BACK:[0,-1,0]};
+  return normals[face]?new THREE.Vector3(...normals[face]):null;
+}
+
+/** 直型材侧面的实际空间平面；四角用于排除长杆微倾斜却中心点同高的假齐平。 */
+export function profileSidePlanes(mesh){
+  const part=mesh?.userData?.part;
+  if(part?.type!=='PROFILE'||!isLinearProfile(part))return [];
+  const length=Number(part.dimensions?.length),size=part.dimensions?.sectionSize;
+  if(!(length>0)||!size?.every(value=>Number.isFinite(Number(value))&&Number(value)>0))return [];
+  mesh.updateWorldMatrix(true,false);
+  const matrix=new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+  return ['FRONT','BACK','LEFT','RIGHT'].map(face=>{
+    const normal=profileFaceLocalNormal(face).applyMatrix3(matrix).normalize();
+    const span=Number(['FRONT','BACK'].includes(face)?size[0]:size[1]);
+    const feature={type:'PROFILE_FACE',face,stationS:length/2};
+    const corners=[];
+    for(const stationS of [0,length])for(const faceOffset of [-span/2,span/2])corners.push(profileFeatureWorldPoint(mesh,{...feature,stationS,faceOffset}));
+    return {face,normal,point:profileFeatureWorldPoint(mesh,feature),corners};
+  });
+}
+
 export function findNearestProfileFeature(mesh,worldPoint,options={}){
   const feature=resolveProfileFeature(mesh,worldPoint,options);
   if(!feature)return null;

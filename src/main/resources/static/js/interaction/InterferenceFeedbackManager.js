@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
+import {createSurfaceFeedback,disposeFeedback} from './SurfaceFeedback.js';
+import {addCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
 
 /**
  * 设计阶段实时接触 / 干涉反馈。
  *
- * 红色只表示“超过制造容差的实体穿透”；绿色表示“在接触容差内贴合但没有实体穿透”。
+ * 红色只表示“超过制造容差的实体穿透”；操作中绿色贴合，结束后保留蓝色接触带。
  * 这样连续搭框时可以直接判断是正确贴面还是已经互相插进去了。
  */
 export default class InterferenceFeedbackManager {
@@ -83,7 +85,7 @@ export default class InterferenceFeedbackManager {
     for (const id of issuePartIds) contactPartIds.delete(id);
     this.issues = issues;
     this.contacts = contacts;
-    this.render(issuePartIds,contactPartIds,{showContacts:live || !!focusIds});
+    this.render(issuePartIds,contactPartIds,{live,items,focusIds});
     const state = {
       active:issues.length > 0,
       live,
@@ -151,8 +153,20 @@ export default class InterferenceFeedbackManager {
   render(issuePartIds,contactPartIds,options={}) {
     this.clearVisuals();
     for (const partId of issuePartIds) this.addHelper(partId,0xe54848,'INTERFERENCE');
-    if (options.showContacts === true) {
-      for (const partId of contactPartIds) this.addHelper(partId,0x20b86a,'CONTACT');
+    const items=new Map((options.items||[]).map(item=>[item.part.id,item]));
+    const selected=new Set((this.editor.selectedMeshes||[]).map(mesh=>mesh.userData?.part?.id));
+    const coplanarFaces=new Set();
+    for(const contact of this.contacts) {
+      if(contact.partIds.some(id=>!contactPartIds.has(id)))continue;
+      const [a,b]=contact.partIds.map(id=>items.get(id));
+      // 近似 AABB 不冒充真实接触面；直型材才有稳定的领域 OBB。
+      if(!a?.obb||!b?.obb)continue;
+      for(const [source,target] of [[a,b],[b,a]]) {
+        const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),color:options.live?0x25c778:0x315cff,opacity:options.live?0.36:0.52,renderOrder:1601});
+        if(helper){helper.userData.__contact=true;this.group.add(helper);}
+      }
+      // 静止时仅解释当前选择的邻接面，不把整个框架每层都染成紫色；拖动由 Snap 候选负责。
+      if(!options.live&&contact.partIds.some(id=>selected.has(id)))addCoplanarSurfaceFeedback(this.group,a.mesh,b.mesh,coplanarFaces);
     }
   }
 
@@ -171,9 +185,7 @@ export default class InterferenceFeedbackManager {
 
   clearVisuals() {
     while (this.group.children.length) {
-      const child = this.group.children.pop();
-      child.geometry?.dispose?.();
-      child.material?.dispose?.();
+      disposeFeedback(this.group.children[0]);
     }
   }
 

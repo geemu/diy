@@ -3,6 +3,8 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import InfiniteGround from './InfiniteGround.js';
+import {createSurfaceFeedback,disposeFeedback,surfaceGeometryKey} from '../interaction/SurfaceFeedback.js';
+import {addCoplanarSurfaceFeedback,coplanarFeedbackLabel} from '../interaction/CoplanarSurfaceFeedback.js';
 
 export default class SceneManager {
   constructor(container) {
@@ -215,6 +217,15 @@ export default class SceneManager {
         const center=handle.geometry.boundingBox.getCenter(new THREE.Vector3());
         if(center[handle.name.toLowerCase()]<0) {
           group.remove(handle);handle.geometry.dispose();
+        } else if(group===gizmo.gizmo.translate && handle.isMesh) {
+          // 只细化显示几何，拾取区和正反向拖动事务完全沿用本地工具。
+          const axis=handle.name.toLowerCase();
+          const tip=center[axis]>0.5;
+          const geometry=tip?new THREE.CylinderGeometry(0,0.032,0.12,24):new THREE.CylinderGeometry(0.006,0.006,0.5,12);
+          geometry.translate(0,tip?0.56:0.25,0);
+          if(axis==='x')geometry.rotateZ(-Math.PI/2);
+          if(axis==='z')geometry.rotateX(Math.PI/2);
+          handle.geometry.dispose();handle.geometry=geometry;
         }
       }
     }
@@ -510,9 +521,7 @@ export default class SceneManager {
 
   clearSelectionHelpers() {
     for (const helper of this.selectionHelpers) {
-      this.scene.remove(helper);
-      helper.geometry?.dispose?.();
-      helper.material?.dispose?.();
+      disposeFeedback(helper);
     }
     this.selectionHelpers = [];
     this.selectionHelper = null;
@@ -527,11 +536,11 @@ export default class SceneManager {
     const unique = [...new Set((objects || []).filter(Boolean))];
     for (const object of unique) {
       const isPrimary = object === primary;
-      const helper = new THREE.BoxHelper(object, isPrimary ? 0x2f78ff : 0x5ca8ff);
-      helper.material.depthTest = false;
-      helper.material.transparent = true;
-      helper.material.opacity = isPrimary ? 0.95 : 0.55;
-      helper.renderOrder = 1000;
+      const helper = createSurfaceFeedback(object,{color:0xffa629,opacity:isPrimary?0.24:0.13,renderOrder:1000});
+      if(!helper)continue;
+      helper.userData.feedbackRoot=object;
+      helper.userData.primary=isPrimary;
+      helper.userData.geometryKey=surfaceGeometryKey(object);
       this.selectionHelpers.push(helper);
       this.scene.add(helper);
     }
@@ -539,6 +548,11 @@ export default class SceneManager {
   }
 
   refreshSelection() {
+    if(this.selectionHelpers.some(helper=>helper.userData.geometryKey!==surfaceGeometryKey(helper.userData.feedbackRoot))) {
+      const objects=this.selectionHelpers.map(helper=>helper.userData.feedbackRoot);
+      const primary=this.selectionHelpers.find(helper=>helper.userData.primary)?.userData.feedbackRoot;
+      this.setSelections(objects,primary);
+    }
     for (const helper of this.selectionHelpers) helper?.update?.();
   }
 
@@ -593,10 +607,18 @@ export default class SceneManager {
   clearSnapPreview() {
     if (!this.snapPreviewGroup) return;
     while (this.snapPreviewGroup.children.length) {
-      const child = this.snapPreviewGroup.children.pop();
-      child.geometry?.dispose?.();
-      child.material?.dispose?.();
+      disposeFeedback(this.snapPreviewGroup.children[0]);
     }
+  }
+
+  /** 特征仍由 Snap/Feature Catalog 解析；此处只显示真实外表面，孔槽保持开放。 */
+  showSnapSurface(target,feature,color=0x25c778) {
+    const helper=createSurfaceFeedback(target,{feature,color,opacity:0.4});
+    if(helper)this.snapPreviewGroup.add(helper);
+  }
+
+  showCoplanarPreview(source,target){
+    return coplanarFeedbackLabel(addCoplanarSurfaceFeedback(this.snapPreviewGroup,source,target));
   }
 
   showSnapPreview(sourcePoint,targetPoint,snap = {}) {

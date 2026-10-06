@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {getLocalEndpoints, isLinearProfile} from '../model/ProfilePath.js';
 import {resolveProfileFeature,findNearestProfileFeature,getSlotOffsetsForFace} from '../model/ProfileFeatureCatalog.js';
+import {profileObb,intersectObb} from '../validation/PartCollisionDetector.js';
 
 /**
  * 基础 DIY 几何吸附。
@@ -40,6 +41,7 @@ export default class SnapManager {
   clearLock() {
     this.previewLockKey = null;
     this.lastSession = null;
+    this.blockedCandidate=null;
   }
 
   snap(mesh) {
@@ -87,16 +89,19 @@ export default class SnapManager {
     if (!candidate) {
       this.previewLockKey = null;
       this.editor.sceneManager.clearSnapPreview();
-      this.editor.sceneManager.hideSnapFeedback?.();
+      if(this.blockedCandidate)this.editor.sceneManager.showSnapFeedback?.({status:'blocked',label:'吸附位置不可用',details:[this.blockedCandidate.message]});
+      else this.editor.sceneManager.hideSnapFeedback?.();
       return null;
     }
     this.previewLockKey = candidate.key;
     const snap = {...candidate.snap,candidateIndex:1,candidateCount:normalCandidates.length || 1,preview:true};
     this.editor.sceneManager.showSnapPreview(candidate.sourcePoint,candidate.targetPoint,snap);
+    this.editor.sceneManager.showSnapSurface?.(this.editor.getMeshByPartId(snap.targetProfileId),snap);
+    const alignmentLabel=this.editor.sceneManager.showCoplanarPreview?.(mesh,this.editor.getMeshByPartId(snap.targetProfileId));
     this.editor.sceneManager.showSnapFeedback?.({
       status:'valid',
       label:snap.feedbackLabel || snapTypeLabel(snap.type),
-      details:this.feedbackDetails(snap)
+      details:[...this.feedbackDetails(snap),...(alignmentLabel?[alignmentLabel]:[])]
     });
     return snap;
   }
@@ -115,6 +120,14 @@ export default class SnapManager {
     const session = this.lastSession;
     if (!session) return null;
     const candidate = session.candidates[index];
+    // 切换候选或松手时重新检查；一帧以前的合法候选不能绕过新障碍。
+    const collision=this.candidateCollision(source,candidate,session.originPosition);
+    if(collision){
+      source.userData.lastSnap=null;
+      this.editor.sceneManager.clearSnapPreview();
+      this.editor.sceneManager.showSnapFeedback?.({status:'blocked',label:'吸附位置不可用',details:[collision.message]});
+      return null;
+    }
     source.position.copy(session.originPosition).add(candidate.delta);
     source.updateMatrixWorld(true);
     const snap = {
@@ -148,7 +161,40 @@ export default class SnapManager {
   }
 
   sortedCandidates(source,maxDistance=this.distance) {
-    return this.collectCandidates(source,maxDistance).sort((a,b) => a.priority - b.priority || a.score - b.score);
+    this.blockedCandidate=null;
+    return this.collectCandidates(source,maxDistance).sort((a,b) => a.priority - b.priority || a.score - b.score).filter(candidate=>{
+      const collision=this.candidateCollision(source,candidate);
+      if(collision&&!this.blockedCandidate)this.blockedCandidate=collision;
+      return !collision;
+    });
+  }
+
+  /** 候选落位用原干涉分类器预判，包含第三根障碍和整体移动随动件；只读虚拟位置。 */
+  candidateCollision(source,candidate,originPosition=source.position){
+    const manager=this.editor.interferenceFeedbackManager;
+    const moving=source===this.editor.selected?this.editor.currentTransformMeshes?.()||[source]:[source];
+    const meshes=moving.includes(source)?moving:[source];
+    const movingSet=new Set(meshes);
+    const delta=originPosition.clone().add(candidate.delta).sub(source.position);
+    const item=(mesh,offset)=>{
+      mesh.updateWorldMatrix(true,true);
+      const position=mesh.getWorldPosition(new THREE.Vector3()).add(offset);
+      const rotation=new THREE.Euler().setFromQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion()),'XYZ');
+      const part={...mesh.userData.part,position:{x:position.x,y:position.y,z:position.z},rotation:{x:rotation.x,y:rotation.y,z:rotation.z}};
+      return {part,obb:profileObb(part),box:new THREE.Box3().setFromObject(mesh).translate(offset)};
+    };
+    const zero=new THREE.Vector3();
+    const targets=(this.editor.meshes||[]).filter(mesh=>!movingSet.has(mesh)&&mesh.visible!==false&&!mesh.userData?.part?.hidden&&['PROFILE','PANEL','SHAFT','ACCESSORY'].includes(mesh.userData?.part?.type)).map(mesh=>item(mesh,zero));
+    for(const mesh of meshes){
+      if(!mesh?.userData?.part)continue;
+      const a=item(mesh,delta);
+      for(const b of targets){
+        if(manager?.isIntentionalContact(a.part,b.part))continue;
+        const relation=manager?.classify(a,b)||(a.obb&&b.obb?{kind:intersectObb(a.obb,b.obb,Number(this.editor.projectSettings?.collisionToleranceMm??0.5)).intersects?'INTERFERENCE':'SEPARATE'}:{kind:'SEPARATE'});
+        if(relation.kind==='INTERFERENCE')return {message:`${a.part.displayId||a.part.name||'构件'} 与 ${b.part.displayId||b.part.name||'目标'} 干涉${relation.penetrationMm?` ${Number(relation.penetrationMm.toFixed(2))} mm`:''}`,partIds:[a.part.id,b.part.id]};
+      }
+    }
+    return null;
   }
 
   preferredCandidate(candidates) {
@@ -193,7 +239,8 @@ export default class SnapManager {
           const worldPoint = target.localToWorld(item.point.clone());
           const distance = sourcePoint.distanceTo(worldPoint);
           if (distance > slotDistance) continue;
-          const alignment = Math.abs(axis.dot(this.faceNormal(target,item.face)));
+          // 源端朝外的法向必须与目标面相对；绝对值会把伸入目标内部的反面当成可贴合。
+          const alignment = -axis.dot(this.faceNormal(target,item.face));
           if (alignment < 0.86) continue;
           output.push(this.candidate(sourcePoint,worldPoint,0,distance + (1-alignment)*14,{
             type:'END_TO_SLOT',feedbackLabel:'槽中心对齐',targetProfileId:targetPart.id,targetDisplayId:targetPart.displayId,sourceEnd,targetFace:item.face,slot:'CENTER',slotIndex:item.slotIndex,slotOffset:item.slotOffset,distance:Number(distance.toFixed(3)),alignment:Number(alignment.toFixed(3))
@@ -227,7 +274,7 @@ export default class SnapManager {
           const worldPoint = target.localToWorld(item.point.clone());
           const distance = sourcePoint.distanceTo(worldPoint);
           if (distance > maxDistance) continue;
-          const alignment = Math.abs(axis.dot(this.faceNormal(target,item.face)));
+          const alignment = -axis.dot(this.faceNormal(target,item.face));
           if (alignment < 0.82) continue;
           output.push(this.candidate(sourcePoint,worldPoint,1,distance + (1-alignment)*20,{
             type:'END_TO_FACE',feedbackLabel:'端面贴合',targetProfileId:targetPart.id,targetDisplayId:targetPart.displayId,sourceEnd,targetFace:item.face,distance:Number(distance.toFixed(3)),alignment:Number(alignment.toFixed(3))

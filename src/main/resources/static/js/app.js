@@ -14,7 +14,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.8';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.10';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -850,6 +850,7 @@ createApp({
         Object.assign(interferenceState,{active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[],...(state||{})});
       };
       editor.onTransformBlocked = state => {
+        lastSnap.value=null;
         const first=state?.issues?.[0];
         notify(first?.message ? `已阻止落位：${first.message}` : '已阻止落位：该位置发生实体干涉','warning');
       };

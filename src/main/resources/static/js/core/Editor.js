@@ -302,7 +302,7 @@ export default class Editor {
       } else if (this.selected?.userData?.part?.type === 'PROFILE') {
         const previewSnap=this.snapManager.preview(this.selected);
         if (this.onSnapChanged) this.onSnapChanged(previewSnap || null);
-        if(!previewSnap&&liveRelation?.contactCount>0)this.sceneManager.showSnapFeedback?.({status:'valid',label:'面接触',details:['当前几何贴合有效']});
+        if(!previewSnap&&!this.snapManager.blockedCandidate&&liveRelation?.contactCount>0)this.sceneManager.showSnapFeedback?.({status:'valid',label:'面接触',details:['当前几何贴合有效']});
       } else {
         this.sceneManager.clearSnapPreview();
         if(liveRelation?.contactCount>0)this.sceneManager.showSnapFeedback?.({status:'valid',label:'面接触',details:['当前几何贴合有效']});
@@ -337,6 +337,8 @@ export default class Editor {
         this.restoreTransformSnapshot(snapshot);
         this.transformSelectionSnapshot=null;
         this.snapManager.clearLock();
+        this.selected.userData.lastSnap=null;
+        this.onSnapChanged?.(null);
         this.sceneManager.clearSnapPreview();
         this.sceneManager.hideSnapFeedback?.();
         this.sceneManager.setSelections(this.selectedMeshes,this.selected);
@@ -1188,6 +1190,7 @@ export default class Editor {
     if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
     else this.sceneManager.transformControls.detach();
     this.sceneManager.setSelections(this.selectedMeshes,this.selected);
+    this.interferenceFeedbackManager?.requestRefresh();
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
   }
@@ -1198,6 +1201,7 @@ export default class Editor {
     if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
     else this.sceneManager.transformControls.detach();
     this.sceneManager.setSelections(this.selectedMeshes,this.selected);
+    this.interferenceFeedbackManager?.requestRefresh();
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
   }

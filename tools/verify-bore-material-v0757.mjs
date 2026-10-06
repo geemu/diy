@@ -19,7 +19,7 @@ function checkLitMaterials(object,label){
     const positions=child.geometry.attributes.position;
     for(let i=0;i<positions.count;i++)assert.ok(Number.isFinite(positions.getX(i))&&Number.isFinite(positions.getY(i))&&Number.isFinite(positions.getZ(i)),`${label} 几何坐标必须有限`);
     for(const material of [].concat(child.material)){
-      assert.ok(material.isMeshLambertMaterial||material.isMeshPhongMaterial,`${label} 孔壁不能使用不受光照的黑色覆盖层`);
+      assert.ok(material.isMeshLambertMaterial||material.isMeshPhongMaterial||material.isMeshStandardMaterial,`${label} 孔壁不能使用不受光照的黑色覆盖层`);
       assert.equal(material.fog,false);
     }
   });

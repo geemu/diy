@@ -50,6 +50,7 @@ export default class ProfileDrawTool {
     this.editor.sceneManager.renderer.domElement.style.cursor='';
     if(this.editor.sceneManager.snapMarker)this.editor.sceneManager.snapMarker.visible=false;
     this.editor.sceneManager.hideSnapFeedback?.();
+    this.editor.sceneManager.clearSnapPreview?.();
     if(this.editor.selected&&this.editor.selected.userData?.part?.locked!==true)this.editor.sceneManager.transformControls.attach(this.editor.selected);
     this.emit();
   }
@@ -58,12 +59,13 @@ export default class ProfileDrawTool {
     this.typedLength='';
     if(this.mode==='CONTOUR'&&this.contourPoints.length){
       this.editor.sceneManager.hideSnapFeedback?.();
+      this.editor.sceneManager.clearSnapPreview?.();
       this.contourPoints.pop();
       this.start=this.contourPoints.length?this.contourPoints[this.contourPoints.length-1]:null;
       this.hover=null;this.clearPreview();this.emit();return true;
     }
     if(this.mode==='POLYLINE'&&this.sessionSegments.length){this.stop();return true;}
-    if(this.start){this.start=null;this.hover=null;this.polylineOrigin=null;this.clearPreview();this.editor.sceneManager.hideSnapFeedback?.();this.emit();return true;}
+    if(this.start){this.start=null;this.hover=null;this.polylineOrigin=null;this.clearPreview();this.editor.sceneManager.hideSnapFeedback?.();this.editor.sceneManager.clearSnapPreview?.();this.emit();return true;}
     this.stop();return false;
   }
 
@@ -499,6 +501,15 @@ export default class ProfileDrawTool {
       }
     }
     this.editor.sceneManager.showSnapFeedback?.({status,label,details});
+    this.editor.sceneManager.clearSnapPreview?.();
+    if(candidate?.feature)this.editor.sceneManager.showSnapSurface?.(this.editor.getMeshByPartId(candidate.feature.partId),candidate.feature,status==='blocked'?0xe54848:0x25c778);
+    if(status!=='blocked'&&this.previewGroup&&this.start){
+      const feature=candidate?.feature||this.start.feature;
+      if(feature){
+        const alignmentLabel=this.editor.sceneManager.showCoplanarPreview?.(this.previewGroup,this.editor.getMeshByPartId(feature.partId));
+        if(alignmentLabel)this.editor.sceneManager.showSnapFeedback?.({status,label,details:[...details,alignmentLabel]});
+      }
+    }
   }
 
   previewCollision(candidate){

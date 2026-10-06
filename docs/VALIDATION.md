@@ -1,4 +1,13 @@
-# Validation / Regression — v0.75.8
+# Validation / Regression — v0.75.9
+
+## v0.75.9 当前检查范围
+
+- 2026-10-06：154 个 JS/MJS 语法检查、51 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，2 项测试、0 失败、0 错误。Schema 62 不变。新增模块包含在全量版本映射中。
+- verify-surface-feedback-v0759 使用真实 Three.js 型材几何检查四个外侧面、端面中心孔真实射线穿透与实体材料命中、接触带裁剪范围、分离件无色带、矩阵跟随、业务/几何只读以及嵌套资源释放；6 系列通用角码安装范围与两侧通孔检查。未知特征不能全件变绿。
+- 独立 Chrome 8083 的隔离工程：12 根多层架型材，既有 OBB 分类得到 24 组接触、48 个蓝色局部提示；SnapManager.preview 的真实 END_TO_SLOT 候选生成绿色 RIGHT 外表面，提示不封闭槽口。几何接触与正式连接记录分别核对。
+- 通过现有自动连接扫描创建测试连接，真实 selectOption 将角码连接改为端面连接；加工 Manager 添加通孔后 UI 下拉将 FRONT 改为 BACK。连接内卡与加工卡背景 rgb(21,25,37)，下拉背景 rgb(26,26,26)/文字 rgb(229,231,235)，无 pageerror。截图 v0759-connection / machining / surface-snap 保存于本轮 visualizations；未触碰用户 Chrome 工程。
+- 1050 px 窗口加工卡/连接内卡无水平溢出，连接表单实际单列，select 真实焦点橙色边框 rgb(224,127,14)。普通页面无注入刷新 v0.75.9，JS 请求无旧版本。独立无连接型材实际拉伸 300→500 mm 后选择覆盖 uuid 更新、覆盖长度 500；带连接型材仍由原守卫禁止直接破坏接头，不能为视觉检查绕过保护。
+- 自由绘制真实鼠标悬停命中 PROFILE_SLOT/RIGHT，生成 1 个真实面绿色覆盖；按 Esc 后 mode=OFF、临时覆盖=0，13 个已完成构件保留。最后独立浏览器已关闭；所有临时 Editor 注入仅存在于隔离验证页面响应，不写入仓库。
 
 ## v0.75.8 当前检查范围
 
