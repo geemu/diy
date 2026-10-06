@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {normalizeProfilePath} from '../model/ProfilePath.js';
 import {getSectionDefinition} from '../model/ProfileSectionRegistry.js';
+import {applyProfileSurfaceShading} from './ProfileSurfaceAppearance.js';
 
 export default class ProfileGeometryFactory {
   static create(part) {
@@ -11,8 +12,12 @@ export default class ProfileGeometryFactory {
   static material(part) {
     return new THREE.MeshStandardMaterial({
       color: part.color || 0xd3d7db,
-      metalness: 0.48,
-      roughness: 0.32,
+      metalness: 0.68,
+      roughness: 0.36,
+      envMapIntensity:0.65,
+      vertexColors:true,
+      // 远处淡出只用于地面，不应让适配后的大型工程消失。
+      fog:false,
       side: THREE.DoubleSide
     });
   }
@@ -108,6 +113,7 @@ export default class ProfileGeometryFactory {
     });
     geometry.translate(0,0,-length/2);
     geometry.computeVertexNormals();
+    applyProfileSurfaceShading(geometry,section);
     return new THREE.Mesh(geometry,material);
   }
 
@@ -157,10 +163,11 @@ export default class ProfileGeometryFactory {
     if (!mesh?.geometry) return;
     const geometry = new THREE.EdgesGeometry(mesh.geometry, 24);
     const material = new THREE.LineBasicMaterial({
-      color:0x7e8790,
+      color:0x4a535d,
       transparent:true,
-      opacity:0.24,
-      depthTest:true
+      opacity:0.32,
+      depthTest:true,
+      fog:false
     });
     const edges = new THREE.LineSegments(geometry, material);
     edges.renderOrder = 1;

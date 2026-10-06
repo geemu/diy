@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>DIY 铝型材设计器</title>
-  <link rel="stylesheet" href="./css/app.css?v=0.71.0">
+  <link rel="stylesheet" href="./css/app.css?v=0.74.0">
   <script src="./vendor/vue/vue.global.js"></script>
   <script src="./vendor/jszip/jszip.min.js"></script>
-  <script src="./js/boot.js?v=0.71.0"></script>
+  <script src="./js/boot.js?v=0.74.0"></script>
   <script type="importmap">
-    {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/controls/OrbitControls.js":"./vendor/three/examples/jsm/controls/OrbitControls.js","three/addons/controls/TransformControls.js":"./vendor/three/examples/jsm/controls/TransformControls.js"}}
+    {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/controls/OrbitControls.js":"./vendor/three/examples/jsm/controls/OrbitControls.js","three/addons/controls/TransformControls.js":"./vendor/three/examples/jsm/controls/TransformControls.js","three/addons/environments/RoomEnvironment.js":"./vendor/three/examples/jsm/environments/RoomEnvironment.js"}}
   </script>
 </head>
 <body>
@@ -46,7 +46,7 @@
         </div></details>
         <details class="cad-menu"><summary>帮助</summary><div class="cad-menu-popover"><button @click="showShortcutHelp=true">快捷键与操作说明</button><button @click="resetWorkbenchLayout">复位工作台布局</button></div></details>
       </nav>
-      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.71.0</span></div>
+      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.74.0</span></div>
       <div class="topbar-actions compact"><button class="icon-button" title="撤销 控制键+Z" @click="undo">↶</button><button class="icon-button" title="重做 控制键+Y" @click="redo">↷</button><button class="top-action primary" @click="exportFactoryPackage">制造输出</button></div>
       <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="handleFile">
       <input ref="sectionDxfInput" type="file" accept=".dxf,application/dxf,text/plain" hidden @change="handleSectionDxf">
@@ -150,7 +150,7 @@
             <div class="field-stack"><label for="design-profile-choice">规格尺寸</label><select id="design-profile-choice" v-model="newProfile.catalogId" @change="newProfileModelChanged"><option v-for="item in referenceProfiles" :key="item.id" :value="item.id">{{item.label}}</option><optgroup label="扩展规格"><option v-for="item in extensionProfiles" :key="item.id" :value="item.id">{{item.name}}</option></optgroup></select></div>
             <div class="field-stack" v-if="['DESIGN-2020','DESIGN-3030','DESIGN-4040','DESIGN-2020R','DESIGN-3030R','DESIGN-4040R'].includes(newProfile.catalogId)"><label for="profile-closure">封边</label><select id="profile-closure" v-model="profileClosure"><option v-for="item in ProfileClosureOptions" :key="item.value" :value="item.value">{{item.label}}</option></select></div>
             <template v-if="newProfile.catalogId==='DESIGN-U88'"><label class="inline-check"><input type="checkbox" v-model="newProfile.free">自由添加</label><div class="field-row"><label>长度</label><input type="number" min="10" max="3000" v-model.number="newProfile.length"><em>mm</em></div><div class="draw-toggle-row"><button class="soft-button" v-for="length in [800,1000,1200,1500,2000,2400]" :key="length" @click="newProfile.length=length">{{length}}</button></div></template>
-            <button class="catalog-profile-preview profile-asset-row" :class="{'selected-profile':drawState.active}" @click="quickAddProfile(newProfile.catalogId)" draggable="true" @dragstart="startProfileDrag(newProfile.catalogId,$event)" :aria-label="'选择 '+selectedDesignProfile?.name+' 并自由绘制'">
+            <button class="catalog-profile-preview" :class="{'selected-profile':drawState.active}" @click="quickAddProfile(newProfile.catalogId)" draggable="true" @dragstart="startProfileDrag(newProfile.catalogId,$event)" :aria-label="'选择 '+selectedDesignProfile?.name+' 并自由绘制'">
               <div class="catalog-preview-head"><span>出料口</span><strong>{{selectedDesignProfile?.name}}</strong></div>
               <canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas>
               <div class="catalog-preview-foot"><span>{{selectedDesignProfile?.width}}×{{selectedDesignProfile?.height}} mm · 槽宽 {{selectedDesignProfile?.slotWidth}} mm</span><strong>{{drawState.active?'绘制中 · 点击重新起笔':'点击选中'}}</strong></div>
@@ -195,7 +195,7 @@
             <label class="inline-check"><input type="checkbox" v-model="newPanel.free">自由添加</label>
             <div class="catalog-parameter-grid"><div class="field-stack" v-for="field in panelFields" :key="newPanel.shape+'-'+field[0]"><label :for="'panel-'+field[0]">{{field[0]==='radius'&&newPanel.shape==='polygon'&&newPanel.edgeMode?'多边形边长 (mm)':field[1]}}</label><input :id="'panel-'+field[0]" type="number" :min="field[3]" :max="field[4]" :step="['sides','segments','radialSegments','tubularSegments'].includes(field[0])?1:'any'" v-model.number="newPanel.parameters[field[0]]"></div></div>
             <div v-if="newPanel.shape==='polygon'" class="catalog-radio-row"><label><input type="radio" :value="false" v-model="newPanel.edgeMode">按外接圆半径</label><label><input type="radio" :value="true" v-model="newPanel.edgeMode">按多边形边长</label></div>
-            <button class="catalog-profile-preview" @click="placePanelComponent" :aria-label="'选择 '+panelShapeLabel"><span class="catalog-preview-head"><span>出料口</span><strong>{{panelShapeLabel}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
+            <button class="catalog-profile-preview" @click="placePanelComponent" :aria-label="'选择 '+panelShapeLabel"><span class="catalog-preview-head"><span>出料口</span><strong>{{panelPreviewLabel}}</strong></span><canvas ref="catalogProfileCanvas" aria-hidden="true"></canvas><span class="catalog-preview-foot"><span></span><strong>⠿ 点击选中</strong></span></button>
             <p class="catalog-draw-hint">{{currentPanelDimensions?'点击预览后，在画布选择位置；单击确认，Esc 或右键取消。':'尺寸无效，请检查内外径、切角或半径。'}}</p>
             <button v-if="accessoryPlacementState.active" class="soft-button full" @click="cancelAccessoryPlacement">取消放置 · Esc</button>
             <details class="advanced-options"><summary>材料设置</summary><div class="field-stack"><label for="panel-material">材质</label><select id="panel-material" v-model="newPanel.material"><option>木饰面板</option><option>亚克力</option><option>铝板</option><option>钢板</option></select></div></details>
@@ -455,7 +455,7 @@
 
       <main class="canvas-shell" @dragover.prevent @drop="dropAsset">
         <div ref="viewport" class="viewport"></div>
-        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.71.0</span></div>
+        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.74.0</span></div>
 
         <div class="canvas-transform-bar">
           <button class="floating-drag-handle" data-floating-drag="toolbar" title="拖动工具条；双击恢复默认位置">⠿</button>
@@ -546,7 +546,7 @@
         <div class="canvas-bottom-bar">
           <button :class="{active:snapEnabled}" @click="toggleSnap"><span>⌁</span> 吸附</button>
           <button :class="{active:autoConnectionEnabled}" @click="toggleAutoConnection"><span>↔</span> 自动连接</button>
-          <button :class="{active:gridEnabled}" @click="toggleGrid"><span>#</span> 网格</button>
+          <button :class="{active:gridEnabled}" @click="toggleGrid" title="XZ 四象限线色：X+ Z+ 蓝，X− Z+ 紫，X− Z− 橙，X+ Z− 青；中心轴灰蓝"><span>#</span> 网格</button>
           <button :class="{active:workPlaneVisible}" @click="toggleWorkPlane"><span>▦</span> 工作面 {{drawForm.plane}}</button>
           <button :class="{active:annotationOptions.showOverall}" @click="annotationOptions.showOverall=!annotationOptions.showOverall;updateAnnotationOptions()"><span>↔</span> 总尺寸</button>
           <button :class="{active:annotationOptions.showMachiningLabels}" @click="annotationOptions.showMachiningLabels=!annotationOptions.showMachiningLabels;updateAnnotationOptions()"><span>Ⓜ</span> 加工标签</button>
@@ -1058,6 +1058,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./js/app.js?v=0.71.0"></script>
+<script type="module" src="./js/app.js?v=0.74.0"></script>
 </body>
 </html>

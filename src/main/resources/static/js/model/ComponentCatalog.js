@@ -31,7 +31,7 @@ function definition(kind,label,dimensions,options={}) {
   const key=Object.entries(dimensions).map(([k,v])=>`${k}:${v}`).join('-');
   return {id:`DIY-${kind}-${key}`,label,model:label,accessoryType:options.accessoryType || 'CATALOG_COMPONENT',
     category:options.category || '连接件',source:'DIY_COMPONENT_CATALOG',material:options.material||'设计参考件',
-    color:options.color||'#a8aaad',note:'通用参数化设计模型；制造前核对实际尺寸和安装方案',
+    color:options.color||'#808080',note:'通用参数化设计模型；制造前核对实际尺寸和安装方案',
     dimensions:{geometryKind:kind,...dimensions},mountRule:options.mountRule||{target:'FREE'},...options};
 }
 export function connectionComponent(form) {
@@ -45,24 +45,29 @@ export function connectionComponent(form) {
   if(type==='PANEL_FIX_CONNECTOR'){p.size=p.width=p.height=numbers[0];p.rounded=label.startsWith('半圆');}
   if(type==='A_PILLAR_BRACKET'){p.length=Number(form.length||165);p.side=form.side||'right';}
   const name=ConnectionComponentOptions.find(x=>x.value===type)?.label||type;
-  return definition(type,`${name} ${label}${type==='A_PILLAR_BRACKET'?` ${p.length}mm ${p.side==='left'?'左':'右'}`:''}`,p,{color:type==='L_BRACKET'?'#b3001b':'#a8aaad'});
+  return definition(type,`${name} ${label}${type==='A_PILLAR_BRACKET'?` ${p.length}mm ${p.side==='left'?'左':'右'}`:''}`,p,{color:type==='L_BRACKET'?'#a30016':'#808080'});
 }
 export function shaftComponent(form) {
   const type=form.type,d=Number(form.diameter),name=ShaftComponentOptions.find(x=>x.value===type)?.label||type;
-  const dimensions={size:d*3,diameter:d,secondDiameter:form.mixed?Number(form.secondDiameter):d,length:d*5,
-    width:d*3,height:d*5,thickness:d*2,spacing:type.endsWith('_35')?35:type.endsWith('_40')?40:d*2};
+  const dimensions={size:d*2,diameter:d,secondDiameter:form.mixed?Number(form.secondDiameter):d,length:d*2,
+    width:d*2,height:d*4,thickness:d*2,spacing:type.endsWith('_35')?35:type.endsWith('_40')?40:d*2};
   // 安装偏移必须使用实际主轴孔中心，不能让所有夹具沿用十字夹的偏移。
-  dimensions.axisOffsetY=type.startsWith('PARALLEL')?dimensions.spacing/2:type==='VERTICAL_SK'?d*.25:type==='HORIZONTAL_SHF'||type==='LIMIT_RING'?0:d*1.2;
-  if(type==='LIMIT_RING')Object.assign(dimensions,{size:d*1.9,width:d*1.9,height:d*1.9,thickness:d*.65});
+  dimensions.axisOffsetY=type.startsWith('PARALLEL')?dimensions.spacing/2:['VERTICAL_SK','HORIZONTAL_SHF','LIMIT_RING'].includes(type)?0:d;
+  if(type.startsWith('PARALLEL'))dimensions.height=dimensions.spacing+d*2;
+  if(type==='VERTICAL_SK')Object.assign(dimensions,{width:d*4,height:d*3.5,length:d*2,thickness:d*1.3});
+  if(type==='HORIZONTAL_SHF')Object.assign(dimensions,{width:d*4,height:d*2,length:d*1.2,thickness:d*1.2});
+  if(type==='LIMIT_RING')Object.assign(dimensions,{size:d*1.9,width:d*1.9,height:d*1.9,length:d*.65,thickness:d*.65});
+  // L 夹是前低后高的实体阶梯块，主轴孔位于下层；不能沿用通用立板尺寸。
+  if(type==='L_FIX')Object.assign(dimensions,{width:d*2,height:d*4,length:d*4,thickness:d*4,axisOffsetY:d});
   return definition(`SHAFT_${type}`,`${name} ${form.mixed?`异径Φ${dimensions.secondDiameter}-${d}`:`Φ${d}`}mm`,dimensions,{category:'光轴配件',mountRule:{target:'SHAFT_AXIS',diameter:d}});
 }
 export function accessoryComponent(form,profile) {
-  if(form.type==='SLIDE_RAIL')return definition('SLIDE_RAIL',`${SlideTypeOptions.find(x=>x.value===form.slideType)?.label} ${form.slideLength}mm`,
+  if(form.type==='SLIDE_RAIL')return definition('SLIDE_RAIL',`${SlideTypeOptions.find(x=>x.value===form.slideType)?.label} ${SlideLengthOptions.find(x=>String(x.value)===String(form.slideLength))?.label||`${form.slideLength}mm`}`,
     {length:Number(form.slideLength),width:12,height:45,black:form.slideType==='THREE_SECTION_BLACK'},
-    {category:'导轨',accessoryType:'DRAWER_SLIDE',mountRule:{target:'PANEL_SIDE'},color:form.slideType==='THREE_SECTION_BLACK'?'#282a2d':'#b8bec3'});
+    {category:'导轨',accessoryType:'DRAWER_SLIDE',mountRule:{target:'PANEL_SIDE'},color:form.slideType==='THREE_SECTION_BLACK'?'#282a2d':'#909090'});
   if(form.type==='FASTENING') {
     if(form.head==='ELASTIC_NUT')return definition('ELASTIC_NUT',`${form.elasticSeries}×${form.elasticSeries}-M${Number(form.elasticSeries)===20?6:8}`,
-      {size:Number(form.elasticSeries),diameter:Number(form.elasticSeries)===20?6:8},{category:'紧固件'});
+      {size:Number(form.elasticSeries),diameter:Number(form.elasticSeries)===20?6:8},{category:'紧固件',color:'#222326'});
     return definition(`SCREW_${form.head}`,`${FastenerHeadOptions.find(x=>x.value===form.head)?.label} M${form.thread}*${form.screwLength}`,
       {diameter:Number(form.thread),length:Number(form.screwLength),headDiameter:Number(form.thread)*1.65},{category:'紧固件',thread:`M${form.thread}`,accessoryType:'SOCKET_SCREW',color:'#282b2f'});
   }

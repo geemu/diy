@@ -1,4 +1,75 @@
-# Validation / Regression — v0.71
+# Validation / Regression — v0.74.0
+
+## v0.74.0 当前检查范围
+
+2026-10-06：141 个 JS/MJS 语法检查、41 个 verify 回归；JDK 21 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- 新 verify-viewport-presentation-v074 使用真实 Three.js WebJar 的 TransformControls：world/local × X/Y/Z × 正负两方向，共 12 个真实射线拾取/拖动用例，位移均为 ±60 mm。translate gizmo 从 13 个 mesh 减为 10 个（每轴一个箭头和原轴杆），picker 从 10 减为 7；中心/三平面保留，rotate 数量不变。
+- 显示暗部回归：384 个内槽侧壁顶点变暗、600 个端面顶点保持原色；位置/法线数组及截面 JSON 完全不变。凸圆形外表面无错误暗部。本地 RoomEnvironment 实际存在且 importmap/POM 均有映射。
+- Chrome 8081 实测同一正向箭头的六个世界轴正反移动，每次对应坐标 ±60 mm，其他两坐标不变；Ctrl+Z 均恢复 (30,20,-10)。撤销沿既有逻辑清除选择，测试重新选择后再验证下一轴，未更改该选择语义。
+- 实际绘制 800 mm 的 40×40 型材，完成后退出绘制；复看 20×40、40×40、40×40R 三种短型材，凹槽、孔口与圆弧反光正常。最终 console error / pageerror=[]，运行版本 v0.74.0；测试仅使用独立浏览器，不修改用户主浏览器工程。
+- v074-three-arrows-profile.png、v074-three-arrows-detail.png、v074-profile-surface.png、v074-profile-section-materials.png、v074-profile-material-detail.png 保存于当前 Codex visualizations 目录。柔光/暗部是独立展示近似，未复制参考模型或承诺照片级/制造尺寸完全一致。
+
+## v0.73.3 当前检查范围
+
+2026-10-06：139 个 JS/MJS 语法检查、40 个 verify 回归；JDK 21 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- ViewCube 真实 handleMove 投影回归覆盖 4 个方位角 × 3 个俯仰角 × 4 个拖动方向，共 48 用例；可见点屏幕位移与鼠标同向，观察中心、缩放距离不变，拖动取消视角 tween；26 面/边/角方向断言保留。
+- Chrome 8081 实际鼠标向右/左/下/上拖动各 18 px，正面中心归一化屏幕位移分别约 (+0.0762,0)、(-0.0762,0)、(0,+0.0762)、(0,-0.0762)。修正前下拖对应屏幕 Y=-0.0762，证明原反向；修正后 console error / pageerror=[]。
+- 实际逐项检查铝材、连接、光轴、板材、配件：默认、hover、按下、点击后、键盘 focus-visible 均为 rgb(3,7,12)；hover 橙边、transform=none，键盘焦点 outline=solid。点击仍进入既有绘制/放置，Esc 可退出；未改领域模型。
+- 运行版本已确认为 v0.73.3；悬停截图 v0733-profile-hover-dark.png 保存在当前 Codex visualizations 目录。资源缓存、样例和版本同步，XZ 四象限无限网格保留。
+
+## v0.73.2 当前检查范围
+
+2026-10-06：139 个 JS/MJS 语法检查、40 个 verify 回归；JDK 21 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- InfiniteGround 回归检查四种独立颜色 uniform、GLSL 世界 X/Z 符号分支、中心轴像素抗锯齿、中性色以及仅线条混色；原 51 个逆矩阵射线与 30 个远裁剪面外交点检查保留。
+- Chrome 8081 在 1600×1000 / DPR 1 复看透视和正交俯视，1200×800 / DPR 2 复看滚轮缩放；最终着色器成功渲染，console error / pageerror=[]。首轮实际浏览器发现 GLSL min 缺少第二实参，修正为两个轴距离分量后重新复看，不能以文本断言替代编译验证。
+- 网格关闭 showGrid=0，地面仍可见且不写深度；重新开启 showGrid=1。实际绘制 800 mm 的 30×30 型材，中心 Y=15 mm，完成后 mode=OFF，已完成件保留。
+- v0732-quadrant-grid.png、v0732-quadrant-grid-top.png、v0732-quadrant-grid-dpr2.png 保存在当前 Codex visualizations 目录。仅展示颜色改变，地面底色、无限远、模型单位与吸附不变。
+
+## v0.73.1 当前检查范围
+
+2026-10-06：139 个 JS/MJS 语法检查、40 个 verify 回归；JDK 21 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- 网格线色、实线中心覆盖率及渐变调整后，在 1600×1000 / DPR 1 和 1200×800 / DPR 2 的真实 Chrome 页面复看；滚轮拉远/拉近可用，console error / pageerror=[]。
+- 51 个无限地面逆矩阵射线及世界坐标/无深度遮挡检查保留；新增实线抗锯齿与线条晚于地面淡出的回归断言。
+- 原无限求交、网格尺寸、模型单位和吸附未改。v0731-clear-grid.png 与 v0731-clear-grid-dpr2.png 保存于当前 Codex visualizations 目录。
+
+## v0.73.0 当前检查范围
+
+2026-10-06：139 个 JS/MJS 语法检查、40 个 verify 回归；JDK 21 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- InfiniteGround 真实 Three.js 逆矩阵回归：51 个透视/正交及正负 100 米平移射线，30 个交点在相机远裁剪距离之外；无固定距离截断，网格世界坐标不随视点漂移。地面仅四顶点、无深度读写。
+- XZ 工作面不再叠加有限密网格；XY 提示及显示开关回归保留。
+- 8081 实际 Chrome 渲染着色器，console error / pageerror=[]。平移相机与目标各 100 米后，地面网格仍连续显示；真实滚轮拉远/拉近、俯视和正交投影可用。
+- 网格关闭后 uniform showGrid=0，地面仍可见，depthWrite=false。点击预览实际绘制 800 mm 型材，中心 Y=15 mm，确认后绘制退出，毫米尺寸与落地行为不变。
+- 当前整页截图 v073-infinite-workbench.png、正交俯视图 v073-infinite-top-ortho.png 保存在本轮 Codex visualizations 目录。参考页复位视角已实际观察；无限远是展示效果，不扩大业务制造范围或修改吸附步长。
+
+## v0.72.0 当前检查范围
+
+2026-10-06：137 个 JS/MJS 语法检查，39/39 verify 回归通过；JDK 21 Maven clean test BUILD SUCCESS，1 项测试、0 失败、0 错误。后续相机留白微调再执行相关回归。Schema 62 不变。
+
+- 浏览器逐项复看五类 59 个主项：16 型材、18 连接、10 光轴、11 板材/几何体、4 配件，另检查五种紧固件头型。公开参考页预览缩放随状态变化；同时采用用户截图的小件留白基准，不把自动适配状态声明为像素一致。
+- verify-component-catalog-v071 原有 349 个实际 Three.js 有限网格用例、7 个 L_FIX 台阶/正交通孔检查仍通过。新 verify-catalog-presentation-v072 检查 95 个不同夹具孔径的主 Z 孔中心射线无阻挡、R 名称/预览朝向、独立地面与纯展示尺度。
+- 独立浏览器空白工程实际绘制 800 mm 型材，中心 Y=15 mm、30 mm 截面落地，确认后 FREE 退出；光轴、圆环板、三向插接件与脚杯实际添加。连接 Ghost Esc 取消，构件数不变。
+- Φ8 光轴上实际安装 L 型夹，合法提示与确认产生第六个构件，保存 SHAFT_AXIS、stationS=62.160703465176994。通过真实属性输入移动宿主 X+100 mm、旋转 Y=90°，主孔与宿主站位距离为 0 mm。
+- 真正下载 v072-catalog-project.json；metadata.version=0.72.0，6 构件和 1 安装关系。在新浏览器上下文重新打开，全部类型/形状及安装关系保留，JSON 不含展示地面。
+- 两个当前检查页面 pageerror=[]。画布地面 depthWrite=false，构件向工作面以下延伸不会被地面裁掉。只改变展示网格，不改变吸附步长。
+- 型材、通用构件及 CAD 边线材质关闭距离雾；大型工程适配到远处后，淡出仅作用于地面与网格，不能让构件消失。
+- 实际浏览器截图 v072-workbench.png、v072-铝材-catalog.png、v072-连接-catalog.png、v072-光轴-catalog.png、v072-板材-catalog.png、v072-配件-catalog.png 保存在本轮 Codex visualizations 目录；后五张为本地真实卡片汇总，不伪装为参考站或制造图。
+- 相交孔内壁使用细分网格裁除，组件为独立设计参考，不是制造级实体布尔或专有供应商模型。未验证全部复杂组件的自动装配；制造映射、干涉与 FactoryValidator 边界仍保留。
+
+## v0.71.1 当前检查范围
+
+2026-10-06：135 个 JS/MJS 语法检查通过，38/38 verify 回归通过；JDK 21.0.11 Maven clean test 成功，1 项测试，0 失败 / 0 错误。git diff --check 通过（本地 CRLF 转换提示不属于检查失败）。
+
+- 用户对照图作为本轮 L 型固定夹的外形与预览占比基准，另在公开参考页观察阶梯形和孔向。参考页自动适配时的模型大小与用户截图不同，因此按用户图中的小模型留白修正，不声称参考页所有状态像素一致。
+- 原有 349 个实际 Three.js 有限网格用例通过；新增 7 种 L_FIX 孔径用例，验证 2d × 4d × 4d 包围盒、主孔偏移 d、Z/Y/X 三向孔中心射线无阻挡、上前台阶空位及下层实体保留。孔壁交会以细分三角片裁除，是设计参考几何，不是制造级实体布尔。
+- 8081 当前服务重新生成静态资源后实测：点击卡片添加 Φ8 × 100 光轴，再在光轴上安装 L 型夹，确认为有效并新增 ACCESSORY；确认后放置退出。实际夹具尺寸为 16 × 32 × 32 mm、主孔偏移 8 mm，保存 SHAFT_AXIS 与 stationS=31.798895739742193。
+- 真正下载 v0711-l-clamp-project.json，metadata.version=0.71.1；在新浏览器上下文重新打开，两构件及安装关系保留。宿主平移 100 mm 并旋转 Y=90° 后，夹具主孔与宿主站位误差约 2.6e-7 mm（工程坐标序列化舍入），小于 1e-6 mm。
+- 规格框聚焦后 Esc 取消，不增件。五类目录往返切换，标签均为 14 px / 500，所有预览 contextLost=false，pageerror 0；切回型材恢复原灯光。
+- 实际页面截图 v0711-l-clamp-panel.png / v0711-l-clamp-library.png 与 JSON 均保存在当前 Codex visualizations 目录。此次没有逐一修正其他九类光轴模型或所有连接，不把目录选项一致、非空网格或回归通过当成视觉一致证据。
 
 ## v0.71 当前检查范围
 

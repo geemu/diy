@@ -99,7 +99,9 @@ export default class ViewCube {
         this.main.cameraTween=null;
         const offset=this.main.camera.position.clone().sub(this.main.orbitControls.target);
         const spherical=new THREE.Spherical().setFromVector3(offset);
-        spherical.theta-=dx*.012;spherical.phi=Math.max(.001,Math.min(Math.PI-.001,spherical.phi+dy*.012));
+        // 拖动的是眼前的正方体：面上的点应沿鼠标方向移动，相机绕目标朝相反方向运动。
+        // 屏幕 Y 向下为正，而球坐标 phi 增大是相机向下；此处需减去 dy，不能加。
+        spherical.theta-=dx*.012;spherical.phi=Math.max(.001,Math.min(Math.PI-.001,spherical.phi-dy*.012));
         this.main.camera.position.copy(this.main.orbitControls.target).add(new THREE.Vector3().setFromSpherical(spherical));
         this.main.orbitControls.update();
         this.highlight(null);

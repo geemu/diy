@@ -1,4 +1,57 @@
-# 项目交接文档 — v0.71.0
+# 项目交接文档 — v0.74.0
+
+## v0.74.0 当前重点
+
+- SceneManager.compactTranslationGizmo 只作用于 translate gizmo/picker 的 X/Y/Z。WebJar 烘焙几何包围盒中心负值表示反向件；移除并释放几何，保留共享材质。不能只设 visible=false，因为 vendor 每帧重置显示，也不能残留隐藏 picker。
+- 仅显示 X+/Y+/Z+ 的单象限箭头，局部坐标下跟随构件旋转。三平面和中心柄、旋转工具不变；同一正向箭头允许 signed delta，两方向仍经现有 Editor Transform 事务。
+- RoomEnvironment 必须同时在 Maven unpack/copy 与 index importmap 中本地交付。PMREM 只在主场景初始化时生成一次；临时 Room 和 PMREMGenerator 释放，studioEnvironment target 由当前 SceneManager 生命周期持有。
+- ProfileSurfaceAppearance 以截面凸包到侧壁的内缩距离估算槽内暗部，仅产生 color attribute；端面不染暗、凸圆弧面不因矩形 bbox 被误判。ProfileGeometryFactory 的位置/法线、截面 Registry、端切和制造模型不改变；预览 Lambert 转换保留 vertexColors。
+- 金属参数 metalness=.68 / roughness=.36 / envMapIntensity=.65；边缘线 0x4a535d、opacity=.32。展示暗部不是精确 AO 或制造建模，不承诺专有模型/制造尺寸一致。
+- 版本/缓存 0.74.0，Schema 62 / 8081 不变，四象限无限地面和 v0.73.3 交互修复保留。
+
+## v0.73.3 当前重点
+
+- ViewCube.handleMove 使用 theta-=dx*.012、phi-=dy*.012：拖动物体视觉同向，相机轨道相反。此前 phi+=dy 导致向下拖动时面向上移动；不能把已正确的 theta 一并反转。
+- 48 个拖动回归直接调用真实 handleMove，投影可见点验证四个屏幕方向，并检查观察中心和距离不变。面/边/角的点击选择仍为 26 个方向。
+- 主型材预览不再使用 profile-asset-row；仅保留 catalog-profile-preview、draggable 与原 dragstart/click 行为。五类共享 :is(:hover,:active,:focus-visible,.selected-profile) 深色背景与橙边框，键盘焦点有独立 outline。
+- 版本/缓存 0.73.3，Schema 62 / 8081 不变；XZ 四象限线色与无限地面保留。
+
+## v0.73.2 当前重点
+
+- InfiniteGround 四个 uniform 线色：X+ Z+ 蓝 0x587fb5，X− Z+ 紫 0x8e6da8，X− Z− 橙 0xa17d54，X+ Z− 青 0x438c92。GLSL 根据 hit.x / hit.z 的世界符号分区，不使用屏幕象限。
+- 原点轴使用原 lineColor=0x7b91a7；像素导数控制轴线抗锯齿，仅 lines 覆盖处混合色。地面底色、无限求交、像素格距与业务坐标不变。
+- 底部网格按钮 title 解释颜色；运行页 8081 保留。版本/缓存 0.73.2，Schema 62 不变。
+
+## v0.73.1 当前重点
+
+- InfiniteGround 线色改为 0x7b91a7，细格/粗格强度 0.72/0.40；smoothstep 保留线芯并抗锯齿。线条 pow(fade,0.75) 比地面晚淡出，中远景保持可辨。
+- 仅改地面着色，不改无限求交、工作面、尺寸或吸附。版本/缓存 0.73.1，运行页仍为 8081。
+
+## v0.73.0 当前重点
+
+- InfiniteGround 为 renderer-only 全屏片元地面：逆投影矩阵/相机世界矩阵计算 XZ 平面交点，不扩大全局网格来伪造无限远。固定世界坐标，常规 200 mm 展示细格与十倍粗格按像素覆盖平滑过渡。
+- SceneManager.ground 是无深度遮挡的全屏网格；grid 保留 visible 状态接口，onBeforeRender 更新相机和线条开关。scene.fog 已移除；远处渐变只在地面着色器。
+- 不能把展示网格间距写入吸附参数，也不能把 quad 当建模平面用于拾取。世界求交/模型单位/26 视角均沿用现有流程。
+- WorkPlaneVisualizer 在 XZ 不再叠加有限密网格，否则会重新出现方形边界与双层线条；XY/YZ 蓝色工作面提示与开关保留。
+- 版本 0.73.0 / Schema 62 / 端口 8081；更新 target/classes 静态资源后检查页面。历史有限地面实现仅保留在下方版本记录。
+
+## v0.72.0 当前重点
+
+- 五类全目录复看与修正，不再仅修 L 型夹。具体覆盖与不可推断的制造边界见 reference/lewan-visual-review-2026-10-06-v072.md；原始 v071 选项记录不可覆盖。
+- CatalogPresentation 是唯一预览展示策略；分类/几何种类决定朝向、留白和参考观察跨度。小件不因 Box3 自动适配全部撑满卡片，也不能用 mesh.scale 修改真实毫米尺寸。
+- ProfileSectionPreview3D 统一中性 MeshLambert 柔光，转换旧 MeshStandard 材质仅限预览并释放旧材质；切换组件必须复位灯光位置和强度。R 型材预览旋转只在展示根节点，实际安装坐标不变。
+- ComponentGeometryFactory 与实际新增仍共用；SK/SHF 主孔轴为 local Z，十字/平行/T 夹主孔中心 local Y=-axisOffsetY。任何修改需同时检查 AccessoryMountManager 的主孔站位与真实穿孔射线。
+- 新灰蓝地面是 SceneManager 展示层，depthWrite=false，不能加入 editor.meshes / Project / BOM。网格显示间距 100 mm 不改变建模吸附步长。初始正面透视不改变 home/26 视角的已有方向定义。
+- 版本 0.72.0 / Schema 62，保留用户端口 8081。当前服务读取 target/classes；源修改后需要 process-resources。实际 6 构件工程已下载重开并保留安装关系，未改用户主浏览器工程。
+- 外形是独立参数化设计参考，不宣称复制专有网格或全部供应商制造尺寸，也不以回归通过代替视觉验收。
+
+## v0.71.1 当前重点
+
+- 用户指出 L 型固定夹与参考截图显著不同；v0.71 的选项和非空网格验证不能证明形状一致。现修正为前低后高的阶梯块，三向主孔和紧固孔为真实孔面与内壁，不是黑色圆片。
+- ComponentCatalog 的 L_FIX 尺寸为 width=2d、height=4d、length=4d、axisOffsetY=d；ComponentGeometryFactory 与实际安装共用这些事实。孔相交处裁除内壁，主 Z 孔中心 local Y=-d。
+- ProfileSectionPreview3D 对此夹具使用中性哑光、前低后高方向与 2.4 的留白系数；调整相机而非缩放实际网格。其他组件灯光及适配恢复原值。表单标签使用 14 px、500 字重、6 px 底间距。
+- 构建后再看运行页：当前 Spring 服务读取 target/classes 静态资源，源文件修改本身不会更新页面。资源缓存和当前版本同步到 0.71.1；不改用户的 8081 端口。
+- 本次重点是用户指出的 L 型夹具，不宣称所有目录模型与参考站像素或制造尺寸一致。验证证据见 docs/VALIDATION.md。
 
 ## v0.71 当前重点
 

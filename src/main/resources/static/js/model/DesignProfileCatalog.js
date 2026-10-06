@@ -69,7 +69,7 @@ for(const size of [20,30,40])profiles.push(designProfile(`DESIGN-${size}${size}R
   {name:`欧标${size}x${size}R`,shape:'ROUND_CORNER',defaultFaceClosures:['FRONT','RIGHT']}));
 profiles.push(designProfile('DESIGN-U88',8,8,8,0,{name:'A柱 U型 8x8',shape:'U_CHANNEL',defaultFaceClosures:['FRONT','BACK','LEFT','RIGHT']}));
 const referenceNominals=new Set(['2020','2040','2060','3030','3060','3090','4040','4080','40120','6060','8080']);
-const namedProfiles=profiles.map(item=>referenceNominals.has(item.nominal)?Object.freeze({...item,name:`欧标${item.width}x${item.height}`}):item);
+const namedProfiles=profiles.map(item=>item.shape==='T_SLOT'&&referenceNominals.has(item.nominal)?Object.freeze({...item,name:`欧标${item.width}x${item.height}`}):item);
 
 export const DesignProfileList=Object.freeze(namedProfiles);
 export const DesignProfileCatalog=Object.freeze(Object.fromEntries(namedProfiles.map(item=>[item.id,item])));

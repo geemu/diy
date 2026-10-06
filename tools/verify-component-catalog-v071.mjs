@@ -32,6 +32,26 @@ for(const option of catalog.ConnectionComponentOptions)for(const spec of catalog
   assert.ok(definition.label.includes(spec.label));checkMesh(catalog.componentPart(definition));connectorSpecs++;
 }
 for(const option of catalog.ShaftComponentOptions.filter(x=>x.value!=='ROD'))for(const diameter of catalog.shaftDiametersFor(option.value))checkMesh(catalog.componentPart(catalog.shaftComponent({type:option.value,diameter,mixed:false})));
+// L 型固定夹不仅要有非空网格：阶梯比例、空出的上前角和三个正交主孔都必须真实存在。
+let steppedClampCases=0;
+for(const diameter of catalog.shaftDiametersFor('L_FIX')) {
+  const definition=catalog.shaftComponent({type:'L_FIX',diameter,mixed:false});
+  const object=factory.create(catalog.componentPart(definition));object.updateMatrixWorld(true);
+  const size=new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
+  assert.ok(size.distanceTo(new THREE.Vector3(diameter*2,diameter*4,diameter*4))<1e-8);
+  assert.equal(definition.dimensions.axisOffsetY,diameter);
+  const clearRay=(from,direction)=>{
+    const ray=new THREE.Raycaster(new THREE.Vector3(...from),new THREE.Vector3(...direction));
+    assert.equal(ray.intersectObject(object,true).length,0,`Φ${diameter} 孔中不得残留实体壁面`);
+  };
+  clearRay([0,-diameter,-diameter*6],[0,0,1]);
+  clearRay([0,diameter*6,diameter],[0,-1,0]);
+  clearRay([-diameter*6,-diameter,diameter],[1,0,0]);
+  clearRay([-diameter*6,diameter,-diameter],[1,0,0]);
+  const solidRay=new THREE.Raycaster(new THREE.Vector3(-diameter*6,-diameter*.25,-diameter),new THREE.Vector3(1,0,0));
+  assert.ok(solidRay.intersectObject(object,true).length>0,'下层不能只保留孔口或轮廓');
+  object.traverse(c=>{c.geometry?.dispose();c.material?.dispose();});steppedClampCases++;
+}
 for(const foot of catalog.FootCupOptions)checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'FOOT_CUP',foot:foot.value})));
 for(const head of catalog.FastenerHeadOptions.filter(x=>x.value!=='ELASTIC_NUT'))for(const thread of catalog.fastenerThreads(head.value))checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'FASTENING',head:head.value,thread,screwLength:catalog.fastenerLengths(head.value,thread)[0]})));
 for(const cap of catalog.EndCapMaterialOptions)for(const id of ['DESIGN-2020','DESIGN-2040','DESIGN-3030R','DESIGN-U88'])checkMesh(catalog.componentPart(catalog.accessoryComponent({type:'END_CAP',capMaterial:cap.value},getDesignProfileDefinition(id))));
@@ -77,4 +97,4 @@ const drawing=new Drawing({parts}).buildProject({views:['FRONT']});
 const ring=drawing.views.FRONT.entities.find(x=>x.partId==='ring');assert.equal(ring.rings.length,2);
 const cross=drawing.views.FRONT.entities.find(x=>x.partId==='cross');assert.equal(cross.rings[0].length,12);
 assert.ok(drawing.views.FRONT.entities.find(x=>x.partId==='sphere').polygon.length>20);
-console.log(JSON.stringify({ok:true,version:CURRENT_APP_VERSION,schema:62,profileReference:16,connectionTypes:18,connectorSpecs,shaftTypes:10,panelShapes:11,accessoryTypes:4,footSpecs:catalog.FootCupOptions.length,geometryCases,shapeRoundTrip:true,nonRectangularDrawing:true}));
+console.log(JSON.stringify({ok:true,version:CURRENT_APP_VERSION,schema:62,profileReference:16,connectionTypes:18,connectorSpecs,shaftTypes:10,panelShapes:11,accessoryTypes:4,footSpecs:catalog.FootCupOptions.length,geometryCases,steppedClampCases,shapeRoundTrip:true,nonRectangularDrawing:true}));

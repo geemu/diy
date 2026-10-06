@@ -30,7 +30,7 @@ assert.ok(!html.includes('供应商、料号或截面说明'),'供应商相关 U
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.71.0',
+  version:'0.74.0',
   schema:62,
   lasso:true,
   penetrationCycle:true,

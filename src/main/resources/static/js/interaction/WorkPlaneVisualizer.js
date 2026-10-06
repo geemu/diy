@@ -26,7 +26,7 @@ export default class WorkPlaneVisualizer {
 
   setVisible(visible) {
     this.visible = visible !== false;
-    if (this.grid) this.grid.visible = this.visible;
+    if (this.grid) this.grid.visible = this.visible && !(this.plane==='XZ' && this.sceneManager.infiniteGround);
   }
 
   rebuild() {
@@ -43,7 +43,8 @@ export default class WorkPlaneVisualizer {
     grid.renderOrder = -5;
     if (this.plane === 'XY') grid.rotation.x = Math.PI / 2;
     else if (this.plane === 'YZ') grid.rotation.z = Math.PI / 2;
-    grid.visible = this.visible;
+    // XZ 已由无限地面表现，不能再叠加有限密网格；XY/YZ 仍需蓝色方向提示。
+    grid.visible = this.visible && !(this.plane==='XZ' && this.sceneManager.infiniteGround);
     this.grid = grid;
     this.sceneManager.scene.add(grid);
   }

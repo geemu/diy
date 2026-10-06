@@ -13,7 +13,7 @@
 
     <groupId>com.paic.stock</groupId>
     <artifactId>diy</artifactId>
-    <version>0.71.0</version>
+    <version>0.74.0</version>
     <name>diy</name>
     <description>Browser-based aluminum profile DIY builder and manufacturing assistant</description>
 
@@ -102,7 +102,8 @@
                                     <includes>
                                         META-INF/resources/webjars/three/${three.version}/build/three.module.min.js,
                                         META-INF/resources/webjars/three/${three.version}/examples/jsm/controls/OrbitControls.js,
-                                        META-INF/resources/webjars/three/${three.version}/examples/jsm/controls/TransformControls.js
+                                        META-INF/resources/webjars/three/${three.version}/examples/jsm/controls/TransformControls.js,
+                                        META-INF/resources/webjars/three/${three.version}/examples/jsm/environments/RoomEnvironment.js
                                     </includes>
                                 </artifactItem>
                             </artifactItems>
@@ -131,6 +132,7 @@
                                         <include>build/three.module.min.js</include>
                                         <include>examples/jsm/controls/OrbitControls.js</include>
                                         <include>examples/jsm/controls/TransformControls.js</include>
+                                        <include>examples/jsm/environments/RoomEnvironment.js</include>
                                     </includes>
                                 </resource>
                             </resources>

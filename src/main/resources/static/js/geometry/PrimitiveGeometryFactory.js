@@ -168,6 +168,8 @@ export default class PrimitiveGeometryFactory {
   static bind(group) {
     group.traverse(object => {
       if (object.isMesh) object.userData.profileRoot = group;
+      // 构件与其材质独立于展示地面的距离雾，尤其是大尺寸工程适配后。
+      for(const material of [].concat(object.material||[]))material.fog=false;
     });
   }
 

@@ -754,7 +754,9 @@ button:disabled{cursor:not-allowed;opacity:.35}
 .profile-catalog-content label{font-size:13px;color:#9ca3af}
 .profile-catalog-content select{width:100%;height:42px;border:1px solid #333;background:#1a1a1a;border-radius:8px;color:#f3f4f6;padding:0 12px;font-size:13px}
 .catalog-profile-preview{display:block;width:100%;padding:12px;background:#03070c;border:1px solid #ffffff1a;border-radius:12px;cursor:pointer;text-align:left;color:#9ca3af;overflow:hidden}
-.catalog-profile-preview:hover,.catalog-profile-preview.selected-profile{border-color:var(--accent)}
+/* 五类三维预览的交互只强调边框，不沿用旧浅色型材列表的 hover 底色或位移动画。 */
+.catalog-profile-preview:is(:hover,:active,:focus-visible,.selected-profile){background:#03070c;color:#9ca3af;border-color:var(--accent);transform:none;box-shadow:none}
+.catalog-profile-preview:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .catalog-preview-head{display:flex;justify-content:space-between;gap:8px;font-size:12px;align-items:start}
 .catalog-preview-head strong{font-size:13px;color:#fff;text-align:right}
 .catalog-profile-preview canvas{display:block;width:100%;height:215px;pointer-events:none}
@@ -793,8 +795,8 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .free-draw-options>summary,.advanced-options>summary{padding:10px 0;cursor:pointer;color:#9ca3af;font-size:12px}
 .free-draw-options[open],.advanced-options[open]{padding-bottom:10px}.library-panel>.advanced-options{margin:12px 20px}
 .catalog-component-content{padding:0 20px 20px}.catalog-component-content>.field-stack{margin:0 0 12px}
-.catalog-component-content>.field-pair{margin-bottom:12px}.catalog-component-content label{color:#9ca3af;font-size:13px}
-.catalog-component-content :is(input,select){width:100%;height:42px;padding:0 12px;font-size:13px;border:1px solid #333}
+.catalog-component-content>.field-pair{margin-bottom:16px}.catalog-component-content label{color:#9ca3af;font-size:14px}
+.catalog-component-content :is(input,select){width:100%;height:42px;padding:0 12px;font-size:14px;border:1px solid #333}
 .catalog-component-content .catalog-profile-preview{margin-top:12px}.catalog-component-content .catalog-preview-foot strong{color:var(--accent)}
 .catalog-component-content .advanced-options{margin-top:20px}.catalog-component-content .advanced-options .form-card{margin:10px 0;padding:12px}
 .catalog-component-content .catalog-secondary-actions{display:flex;gap:8px;margin-top:12px}.catalog-secondary-actions button{flex:1;min-height:34px;font-size:12px}
@@ -805,9 +807,12 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .resource-category-tabs button{height:68px!important;min-width:0;padding:8px 4px!important;gap:5px;font-size:13px!important;border-radius:4px!important}
 .resource-category-tabs .workbench-icon{width:24px;height:24px}
 .catalog-component-content,.profile-catalog-content{padding:0 20px!important}
-.catalog-component-content .catalog-profile-preview,.profile-catalog-content .catalog-profile-preview{margin-top:10px;border-radius:12px}
-.catalog-preview-head{align-items:flex-start!important}.catalog-preview-head strong{font-size:12px!important;max-width:72%;text-align:right;line-height:1.5}
-.catalog-profile-preview canvas{height:178px!important}.catalog-preview-foot{min-height:30px}
+.catalog-component-content>.field-stack,.profile-catalog-content>.field-stack{margin-bottom:16px}
+.catalog-component-content .field-stack>label,.profile-catalog-content .field-stack>label{display:block;font-size:14px;font-weight:500;line-height:20px;margin-bottom:6px}
+.profile-catalog-content select{font-size:14px}
+.catalog-component-content .catalog-profile-preview,.profile-catalog-content .catalog-profile-preview{position:relative;margin-top:12px;padding:0;border-radius:12px}
+.catalog-preview-head{position:absolute;top:12px;left:12px;right:12px;align-items:flex-start!important;pointer-events:none}.catalog-preview-head strong{font-size:12px!important;max-width:72%;text-align:right;line-height:1.5}
+.catalog-profile-preview canvas{height:238px!important}.catalog-preview-foot{position:absolute;bottom:12px;left:12px;right:12px;min-height:0;pointer-events:none}
 .catalog-component-content input[type="checkbox"],.catalog-component-content input[type="radio"]{width:14px!important;height:14px!important;padding:0!important;flex-shrink:0}
 .catalog-component-content .inline-check{display:flex;gap:7px;align-items:center;margin:10px 0;font-size:12px}
 .catalog-parameter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px;margin-top:16px}

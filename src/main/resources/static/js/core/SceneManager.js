@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import InfiniteGround from './InfiniteGround.js';
 
 export default class SceneManager {
   constructor(container) {
@@ -77,7 +79,13 @@ export default class SceneManager {
     this.snapFeedback.style.display = 'none';
     this.container.appendChild(this.snapFeedback);
 
-    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x7a8290, 1.55);
+    // 本地生成柔光棚反射，给金属提供明暗环境，不依赖 HDR 图片或网络资源。
+    const room=new RoomEnvironment();
+    const pmrem=new THREE.PMREMGenerator(this.renderer);
+    this.studioEnvironment=pmrem.fromScene(room,.04);
+    this.scene.environment=this.studioEnvironment.texture;
+    room.dispose();pmrem.dispose();
+    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x7a8290, .75);
     this.scene.add(hemisphere);
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(1400, 2600, 1500);
@@ -88,8 +96,12 @@ export default class SceneManager {
     fill.position.set(-1200, 900, -800);
     this.scene.add(fill);
 
-    this.grid = new THREE.GridHelper(10000, 200, 0x93aabb, 0xc3d8e7);
-    this.grid.position.y = 0;
+    // 解析式无限地面无固定网格边界；保留 grid.visible 接口，只控制线条而非地面。
+    this.infiniteGround=new InfiniteGround();
+    this.ground=this.infiniteGround.mesh;
+    this.grid=new THREE.Group();this.grid.name='__presentation_grid_state__';
+    this.ground.onBeforeRender=(_renderer,_scene,camera)=>this.infiniteGround.update(camera,this.grid.visible);
+    this.scene.add(this.ground);
     this.scene.add(this.grid);
 
     this.axes = new THREE.AxesHelper(220);
@@ -112,12 +124,13 @@ export default class SceneManager {
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.enableDamping = true;
     this.orbitControls.dampingFactor = 0.08;
-    this.orbitControls.target.set(0, 600, 0);
+    this.orbitControls.target.set(0, 500, 0);
     this.orbitControls.screenSpacePanning = true;
     this.orbitControls.minDistance = 40;
     this.orbitControls.maxDistance = 40000;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
+    this.compactTranslationGizmo();
     this.transformControls.setSize(0.8);
     this.scene.add(this.transformControls);
     this.transformControls.addEventListener('dragging-changed', event => {
@@ -179,8 +192,27 @@ export default class SceneManager {
       if (this.contextMenuHandler) this.contextMenuHandler(event);
     });
 
-    this.setView('iso', new THREE.Vector3(0, 600, 0), 2200,{immediate:true});
+    // 默认低俯角面向搭建区；六面/十二边/八角和三维复位仍复用原有 setView。
+    this.camera.position.set(0,500,2800);this.orbitControls.target.set(0,500,0);
+    this.camera.lookAt(this.orbitControls.target);this.orbitControls.update();
     this.animate();
+  }
+
+  /** 仅裁掉负轴显示件及拾取件；正轴柄仍使用原 TransformControls 双向拖动事务。 */
+  compactTranslationGizmo() {
+    const gizmo=this.transformControls.children.find(child=>child.gizmo?.translate&&child.picker?.translate);
+    if(!gizmo)throw new Error('本地移动工具缺少平移手柄');
+    for(const group of [gizmo.gizmo.translate,gizmo.picker.translate]) {
+      for(const handle of [...group.children]) {
+        if(!['X','Y','Z'].includes(handle.name))continue;
+        // WebJar 将手柄局部偏移烘焙进几何，不能用 object.position 判断正负。
+        handle.geometry.computeBoundingBox();
+        const center=handle.geometry.boundingBox.getCenter(new THREE.Vector3());
+        if(center[handle.name.toLowerCase()]<0) {
+          group.remove(handle);handle.geometry.dispose();
+        }
+      }
+    }
   }
 
   resize() {
