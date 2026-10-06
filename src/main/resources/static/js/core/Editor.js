@@ -2736,7 +2736,8 @@ export default class Editor {
   getCenterAndSize() {
     const visibleMeshes = this.meshes.filter(mesh => mesh.visible !== false);
     const candidates = visibleMeshes.length ? visibleMeshes : this.meshes;
-    if (!candidates.length) return {center:new THREE.Vector3(0,500,0), max:1200};
+    // 空白工程切换视角/适配时也围绕原点，不能又回到旧的 500 mm 高度中心。
+    if (!candidates.length) return {center:new THREE.Vector3(0,0,0), max:1200};
     const box = new THREE.Box3();
     for (const mesh of candidates) box.expandByObject(mesh);
     const center = new THREE.Vector3();

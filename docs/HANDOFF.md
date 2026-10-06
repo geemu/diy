@@ -1,4 +1,11 @@
-# 项目交接文档 — v0.75.4
+# 项目交接文档 — v0.75.5
+
+## v0.75.5 当前重点
+
+- ViewCube 导航相机改为 38° 轻透视，仍沿主相机 target→position 方向观察。Lambert + 半球/定向光提供面明暗；EdgesGeometry 外轮廓不进入 targets，标签色加深，CSS drop-shadow 不改变命中范围或卡片尺寸。
+- 26 个真实区域、悬停橙色、释放复位、拖动方向、点击切换和资源释放保持；导航独立光照/线框属于展示层，不写入 Project。
+- SceneManager 初始化 OrbitControls.target/resetInitialView 改为原点 (0,0,0)。启动/空白新建原点投影为中心，仍是 (0,1,1) 上前方向/3000 距离；Editor.getCenterAndSize 的无模型分支同样改为原点，避免切换视角/小房子/适配后再次偏下。已有模型分支不变，不得将有模型工程强制移到原点或替换模型适配。
+- 新增 verify-view-cube-depth-v0755，使用实际 Three.js 构造/投影/拾取，只替代无 GPU 渲染器；26 个区域逐个点击/恢复检查，四个画布比例验证原点中心。完整语法、回归、Maven 与浏览器记录见 VALIDATION。
 
 ## v0.75.4 当前重点
 

@@ -14,11 +14,16 @@ export default class ViewCube {
     this.main=sceneManager;
     this.onSelect=onSelect;
     this.scene=new THREE.Scene();
-    this.camera=new THREE.OrthographicCamera(-1.85,1.85,1.85,-1.85,.1,30);
+    // 导航使用轻透视，让上前两个面呈现梯形透视；朝向仍逐帧严格跟随主相机。
+    this.camera=new THREE.PerspectiveCamera(38,1,.1,30);
     this.renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
     this.renderer.setSize(148,148);
     this.renderer.setClearColor(0x000000,0);
+    // 真实受光的面产生明暗层次；不能为了露出第三个面而偷偷偏转主场景的上前视角。
+    this.scene.add(new THREE.HemisphereLight(0xffffff,0xb4c1d2,1.35));
+    const key=new THREE.DirectionalLight(0xffffff,1.6);
+    key.position.set(-3,7,2);this.scene.add(key);
     this.renderer.domElement.setAttribute('aria-label','视角正方体：点击面、边或角切换视角，拖动旋转查看其他方向');
     container.appendChild(this.renderer.domElement);
     this.targets=[];
@@ -26,7 +31,7 @@ export default class ViewCube {
     for(const direction of VIEW_DIRECTIONS) {
       const dimensions=[direction.x,direction.y,direction.z].map(value=>value===0?1.28:.34);
       const geometry=new THREE.BoxGeometry(...dimensions);
-      const material=new THREE.MeshBasicMaterial({color:direction.kind==='面'?0xe9eef6:0xd5deeb});
+      const material=new THREE.MeshLambertMaterial({color:direction.kind==='面'?0xc5d1df:0x9cacc0});
       const mesh=new THREE.Mesh(geometry,material);
       mesh.position.set(direction.x*.82,direction.y*.82,direction.z*.82);
       mesh.userData.direction=direction;
@@ -34,6 +39,10 @@ export default class ViewCube {
       this.targets.push(mesh);this.scene.add(mesh);
       if(direction.kind==='面')this.addLabel(direction);
     }
+    // 外轮廓只用于展示，不进入 26 个射线目标，也不挡住面、边和角的拾取。
+    const outlineSource=new THREE.BoxGeometry(1.986,1.986,1.986);
+    const outline=new THREE.LineSegments(new THREE.EdgesGeometry(outlineSource),new THREE.LineBasicMaterial({color:0x61758e,transparent:true,opacity:.6}));
+    outlineSource.dispose();this.scene.add(outline);
     this.raycaster=new THREE.Raycaster();
     this.pointer=new THREE.Vector2();
     this.hover=null;
@@ -58,7 +67,7 @@ export default class ViewCube {
 
   addLabel(direction) {
     const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
-    const context=canvas.getContext('2d');context.font='bold 62px sans-serif';context.textAlign='center';context.textBaseline='middle';context.fillStyle='#46566c';context.fillText(direction.label,64,67);
+    const context=canvas.getContext('2d');context.font='bold 62px sans-serif';context.textAlign='center';context.textBaseline='middle';context.fillStyle='#25384f';context.fillText(direction.label,64,67);
     const texture=new THREE.CanvasTexture(canvas);this.textures.push(texture);
     const mesh=new THREE.Mesh(new THREE.PlaneGeometry(.66,.66),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false}));
     const normal=new THREE.Vector3(direction.x,direction.y,direction.z);

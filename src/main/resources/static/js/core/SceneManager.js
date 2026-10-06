@@ -124,7 +124,7 @@ export default class SceneManager {
     this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
     this.orbitControls.enableDamping = true;
     this.orbitControls.dampingFactor = 0.08;
-    this.orbitControls.target.set(0, 500, 0);
+    this.orbitControls.target.set(0, 0, 0);
     this.orbitControls.screenSpacePanning = true;
     this.orbitControls.minDistance = 40;
     this.orbitControls.maxDistance = 40000;
@@ -198,7 +198,8 @@ export default class SceneManager {
 
   /** 初始化从上前边看向搭建区；三维复位和其他命名视角仍保持原有语义。 */
   resetInitialView() {
-    this.setView(new THREE.Vector3(0,1,1),new THREE.Vector3(0,500,0),3000,{immediate:true});
+    // 空白工作台围绕世界原点观察，使四象限轴交点位于实际画布中心，而非偏向底部。
+    this.setView(new THREE.Vector3(0,1,1),new THREE.Vector3(0,0,0),3000,{immediate:true});
   }
 
   /** 仅裁掉负轴显示件及拾取件；正轴柄仍使用原 TransformControls 双向拖动事务。 */

@@ -1,4 +1,15 @@
-# Validation / Regression — v0.75.4
+# Validation / Regression — v0.75.5
+
+## v0.75.5 当前检查范围
+
+2026-10-06：147 个 JS/MJS 语法检查、46 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- verify-view-cube-depth-v0755 执行真实 ViewCube 构造，只替代无 GPU 渲染器；实际 Three.js 检查 PerspectiveCamera、Lambert 材质、两盏灯、独立轮廓、六个标签和资源释放。上前投影近边宽于远边，主方向 x=0 不被伪造。
+- 26 个真实区域逐个射线拾取、点击方向和橙色悬停/恢复通过；既有 verify-player-workbench-v065 的 48 组投影拖动方向仍通过。四种画布比例原点投影为中心，无模型视角中心为原点，有模型包围中心仍按几何计算。
+- 独立 Chrome 实际鼠标点击 6 面/12 边/8 角，26/26 切换正确；实际鼠标四向拖动均与面上点的屏幕运动同向，距离不变。空白工程依次切换全部 26 方向后 target 均为原点，pageerror=[]。
+- 1920/1600/1360/1000/900/700 px 窗宽下，新建空白工程原点偏移小于 1e-10 像素；底栏 48 px 且 stage.bottom=footer.top，画布中心不包含顶部、侧栏或底栏。导航仍为 96 px 卡片/88 px 画布。
+- 实际点击型材预览，画布选择起点、输入 500 + Enter：生成标准 PROFILE、dimensions.length=500、自动结束 FREE。模型中心 (250,20,170)，适配后 target 保持该模型中心，未强制移回原点。
+- 截图 v0755-view-cube-upper-front.png、v0755-view-cube-three-faces.png、v0755-centered-workbench.png 位于本轮 Codex visualizations 目录。8081 提供 v0.75.5，用户 8080 IDE 实例未停止或重启；不把它表述为已更新。
 
 ## v0.75.4 当前检查范围
 
