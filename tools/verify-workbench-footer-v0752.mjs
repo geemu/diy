@@ -14,7 +14,7 @@ for(const name of ['canvas-transform-bar','quick-rotate-bar','canvas-bottom-bar'
 }
 assert.ok(!html.includes('data-floating-drag="toolbar"'),'已停靠工具条不再允许拖回画布');
 assert.ok(html.includes('<div class="canvas-stage" @dragover.prevent @drop="dropAsset">'),'组件拖放只在真实画布提交');
-for(const token of ['.canvas-shell{display:flex;flex-direction:column}', '.canvas-stage{position:relative;flex:1;', '.workbench-footer{position:relative;flex:0 0 auto;', 'transform:none!important;', '.workbench-footer .drawing-status{display:inline!important}'])assert.ok(css.includes(token),token);
+for(const token of ['.canvas-shell{display:flex;flex-direction:column}', '.canvas-stage{position:relative;flex:1;', '.workbench-footer{position:relative;flex:0 0 auto;', 'transform:none!important;', '.workbench-footer-scroll{display:flex;', '.workbench-footer-status{display:flex;'])assert.ok(css.includes(token),token);
 assert.ok(app.includes('viewportResizeObserver.observe(viewport.value)')&&app.includes('viewportResizeObserver?.disconnect()'),'底栏动态换行必须重算画布并清理观察器');
 
 const layoutSource=read('js/ui/WorkbenchLayoutManager.js');
@@ -29,4 +29,4 @@ assert.equal(state.floaters.toolbar,undefined);
 assert.deepEqual(state.floaters.viewCube,{custom:true,x:8,y:9});
 assert.deepEqual(calls.filter(item=>item[0]==='floater'),[['floater','viewCube','.view-cube']]);
 assert.ok(layoutSource.includes("document.querySelector('.canvas-stage')"),'浮动导航限制到实际画布，不可覆盖底栏');
-console.log(JSON.stringify({ok:true,version:'0.75.2',separateCanvas:true,dockedToolbar:true,dockedRotation:true,dockedStatus:true,oldToolbarPositionIgnored:true,resizeObserver:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.4',separateCanvas:true,dockedToolbar:true,dockedRotation:true,dockedStatus:true,oldToolbarPositionIgnored:true,resizeObserver:true}));

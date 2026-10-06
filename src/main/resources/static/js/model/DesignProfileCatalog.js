@@ -18,6 +18,8 @@ function designProfile(id, width, height, series, slotWidth, options = {}) {
     series:String(series),
     slotWidth:Number(slotWidth),
     slotDefinitions:Object.freeze((options.shape==='U_CHANNEL'?[]:buildSlots(Number(width),Number(height),Number(series),Number(slotWidth))).filter(slot=>!(options.defaultFaceClosures||[]).includes(slot.face))),
+    // 截面几何保留封闭面的原槽腔，安装槽位仍只暴露开放面。
+    sectionSlotDefinitions:Object.freeze(options.shape==='U_CHANNEL'?[]:buildSlots(Number(width),Number(height),Number(series),Number(slotWidth))),
     defaultFaceClosures:Object.freeze([...(options.defaultFaceClosures || [])]),
     shape:options.shape || 'T_SLOT',
     sectionStyle:options.sectionStyle || 'DESIGN_REFERENCE'
@@ -90,6 +92,7 @@ function catalogGeometry(profile) {
     id:profile.id,nominal:`${width}${height}`,name:String(profile.variant||profile.code||profile.id),
     width,height,sectionSize:Object.freeze([width,height]),series:String(profile.series),
     slotWidth:Number(profile.slotWidth),slotDefinitions:Object.freeze(profile.slotDefinitions.filter(slot=>!closed.has(slot.face))),
+    sectionSlotDefinitions:Object.freeze(profile.sourceFamily==='DATABASE'?profile.slotDefinitions:[...profile.slotDefinitions,...buildSlots(width,height,Number(profile.series),Number(profile.slotWidth)).filter(slot=>closed.has(slot.face))]),
     defaultFaceClosures:Object.freeze([...closed]),shape,sectionStyle:'CATALOG_REFERENCE'
   });
   geometricDefinitions.set(profile,definition);

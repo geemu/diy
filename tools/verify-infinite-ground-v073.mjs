@@ -16,12 +16,13 @@ const quadrantColors={positiveXPositiveZ:0x587fb5,negativeXPositiveZ:0x8e6da8,ne
 assert.equal(new Set(Object.values(quadrantColors)).size,4);
 for(const [name,color] of Object.entries(quadrantColors))assert.equal(ground.material.uniforms[name].value.getHex(),color);
 assert.equal(ground.material.uniforms.groundColor.value.getHex(),0xa5bfd5,'象限颜色不能染到地面底色');
-assert.equal(ground.material.uniforms.lineColor.value.getHex(),0x7b91a7,'中心轴保留中性色');
+assert.equal(ground.material.uniforms.xAxisColor.value.getHex(),0xe74c4c,'X 轴为红色');
+assert.equal(ground.material.uniforms.zAxisColor.value.getHex(),0x229e63,'Z 轴为绿色');
 assert.match(ground.material.fragmentShader,/hit\.z>=0\.0\s*\?\(hit\.x>=0\.0\?positiveXPositiveZ:negativeXPositiveZ\)\s*:\(hit\.x>=0\.0\?positiveXNegativeZ:negativeXNegativeZ\)/,'四象限按真实世界 X/Z 符号选色');
 assert.ok(ground.material.fragmentShader.includes('axisDistance=abs(hit.xz)/axisWidth'));
-assert.ok(ground.material.fragmentShader.includes('min(axisDistance.x,axisDistance.y)'));
-assert.ok(ground.material.fragmentShader.includes('mix(quadrantInk,lineColor,axisCoverage)'));
-assert.ok(ground.material.fragmentShader.includes('color=mix(color,ink,lines)'),'颜色只作用在线条覆盖区域');
+assert.ok(ground.material.fragmentShader.includes('color=mix(color,zAxisColor,axisCoverage.x*axisFade)'));
+assert.ok(ground.material.fragmentShader.includes('color=mix(color,xAxisColor,axisCoverage.y*axisFade)'));
+assert.ok(ground.material.fragmentShader.includes('color=mix(color,quadrantInk,lines)'),'象限颜色只作用在线条覆盖区域');
 let cases=0,beyondFarPlane=0;
 // 根据真实相机逆矩阵模拟片元射线：平移、缩放、投影及远裁剪面之外均可求出地面。
 for(const projection of ['perspective','orthographic'])for(const shift of [0,100000,-100000])for(const altitude of [50,500,5000]){
@@ -54,4 +55,4 @@ planes.setPlane('XY');assert.equal(planes.grid.visible,true);
 planes.setVisible(false);assert.equal(planes.grid.visible,false);
 planes.setPlane('XZ');planes.setVisible(true);assert.equal(planes.grid.visible,false);
 ground.dispose();
-console.log(JSON.stringify({ok:true,version:'0.75.2',rayCases:cases,beyondFarPlane,infiniteGrid:true,worldLocked:true,quadrantColors:4,neutralAxes:true,depthOcclusion:false}));
+console.log(JSON.stringify({ok:true,version:'0.75.4',rayCases:cases,beyondFarPlane,infiniteGrid:true,worldLocked:true,quadrantColors:4,coloredAxes:true,depthOcclusion:false}));

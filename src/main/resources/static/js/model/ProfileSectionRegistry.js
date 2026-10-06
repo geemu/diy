@@ -154,7 +154,10 @@ function buildReferenceSection(profile,faceClosures=[]) {
   const referenceHoles = design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER'
     ?buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth)
     :designSection?.holes || buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
-  const holes=design?.sectionStyle==='CATALOG_REFERENCE'?fitReferenceHoles(referenceHoles,outer):referenceHoles;
+  const closedSlotHoles=designSection?.closedSlotHoles||[];
+  const holes=design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER'
+    ?[...closedSlotHoles,...fitReferenceHoles(referenceHoles,outer,closedSlotHoles)]
+    :referenceHoles;
   return normalizeSection({
     id: `REF-${profile.id}`,
     catalogId: profile.id,
@@ -256,15 +259,17 @@ function buildVariantHoles(width,height,variant,wallThickness,slotWidth) {
 /** 旧参考内腔必须留在新的真实槽轮廓内，避免相交孔使 Three.js 端面三角化破裂。
  * 只约束内置示意孔；数据库/DXF 先返回，不收缩用户的精确截面。
  */
-function fitReferenceHoles(holes,outer) {
-  const inside=point=>{
+function fitReferenceHoles(holes,outer,reservedHoles=[]) {
+  const inRing=(point,ring)=>{
     let result=false;
-    for(let i=0,j=outer.length-1;i<outer.length;j=i++) {
-      const a=outer[i],b=outer[j];
+    for(let i=0,j=ring.length-1;i<ring.length;j=i++) {
+      const a=ring[i],b=ring[j];
       if((a.y>point.y)!==(b.y>point.y)&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)result=!result;
     }
     return result;
   };
+  // 旧型号参考孔不能跨入新保留的槽腔；精确数据库/DXF 截面不走此分支。
+  const inside=point=>inRing(point,outer)&&!reservedHoles.some(ring=>inRing(point,ring));
   const result=[];
   for(const ring of holes) {
     const center=ring.reduce((sum,point)=>({x:sum.x+point.x/ring.length,y:sum.y+point.y/ring.length}),{x:0,y:0});

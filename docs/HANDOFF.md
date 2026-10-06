@@ -1,4 +1,20 @@
-# 项目交接文档 — v0.75.2
+# 项目交接文档 — v0.75.4
+
+## v0.75.4 当前重点
+
+- Footer 增加 workbench-footer-scroll 和固定的 workbench-footer-status，前者 flex:1/min-width:0/overflow-x:auto，后者 flex:0 0 auto；提示入口和单位不与操作按钮共用滚动/压缩空间，底栏仍实际占位 48 px。
+- 长 status-label/status-hint 不再进入 DOM，footerContextTip 读取当前选择、FREE 起点/终点、轴锁定及快捷键。可见提示入口只显示 ⓘ 或“起点/终点”，正式操作保留原 Editor/Manager API。
+- Footer 控件 title 改 data-tip，避免原生和自定义重复提示。事件委托处理 pointerover/out、focusin/out；Teleport 提示到 body，用 nextTick 后实测尺寸计算固定坐标，sequence 防止旧异步覆盖。鼠标在按钮内部图标间移动不能闪退。
+- 滚动/resize/菜单打开/操作点击清理 tip；handleKeyboard 在字段/Grip 提前返回前清理 Esc，卸载取消等待中的提示。更多菜单仍通过既有 fixed 定位，不被滚动容器裁掉。
+- 146 个 JS/MJS、45 个 verify 和 JDK 21 Maven 检查见 VALIDATION；8081 为验证页，未中断用户 8080 IDE 实例。上一轮封边几何和红绿轴保持，本轮不修改 3060 型号或通用封边入口。
+
+## v0.75.3 当前重点
+
+- DesignProfileCatalog.sectionSlotDefinitions 保留内置封闭面的原几何槽；安装 slotDefinitions 仍仅包含开放面，数据库不凭尺寸猜测无槽面的孔。DesignProfileSection.closedSlotHoles 将 lip 以下的槽腔从外轮廓凹口转换为内部闭合孔，侧壁保持连续，端面和 A/B 贯通腔均保留。
+- Registry 的标准/R 截面直接使用生成孔；具体型号将 closedSlotHoles 与不相交的参考孔合并。精确数据库/DXF 在此前已返回，不修改或加孔。R 参考中心孔调整至 (0,0)，避免旧孔与槽轮廓相交；这不是供应商精确截面。
+- InfiniteGround 的 X 轴为 Z=0 红线，Z 轴为 X=0 绿线，两条完整轴划分四象限。独立 axisCoverage/axisFade 不依赖网格细分级别，保留原象限网格色、抗锯齿、无限延伸及网格开关。
+- 底栏仍与 canvas-stage 同级且真实占位，固定 48 px 单行 flex。窄屏 overflow-x:auto，不再换行；非绘制快捷键提示收起，绘制提示/结束保持可达。更多菜单改 fixed 并使用 requestAnimationFrame 在聚焦滚动后定位，横向滚动调用 repositionFooterMenus，不得关闭刚打开的菜单。
+- 145 个 JS/MJS、44 个 verify 与 JDK 21 Maven 检查及浏览器证据见 VALIDATION；验证运行页 8081 为 v0.75.3。8080 是用户 IDE 启动的旧实例，本轮未停止或重启它。
 
 ## v0.75.2 当前重点
 

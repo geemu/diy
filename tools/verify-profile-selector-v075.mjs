@@ -110,5 +110,5 @@ assert.ok(Math.abs(offset.length()-3000)<1e-6);
 const toolbar=html.slice(html.indexOf('<div class="canvas-transform-bar"'),html.indexOf('<div class="quick-rotate-bar"'));
 assert.ok(toolbar.includes('class="draw-hud"')&&toolbar.includes('确认这一根')&&toolbar.includes('取消当前段'));
 assert.equal((html.match(/class="draw-hud"/g)||[]).length,1,'不残留独立绘制大卡片');
-assert.ok(html.includes('drawing-status')&&!html.includes('draw-hud-heading'));
-console.log(JSON.stringify({ok:true,version:'0.75.2',sizeGroups:groups.length,modelChoices:choices.length,models3030:family.models.length,concreteGeometry:true,schemaRoundTrip:true,manufacturingUnbound:true,cascadingSelection:true,closedFaceCases:faceCases,compactDrawingBar:true,initialUpperFront:true}));
+assert.ok(html.includes('footerContextTip')&&!html.includes('draw-hud-heading'));
+console.log(JSON.stringify({ok:true,version:'0.75.4',sizeGroups:groups.length,modelChoices:choices.length,models3030:family.models.length,concreteGeometry:true,schemaRoundTrip:true,manufacturingUnbound:true,cascadingSelection:true,closedFaceCases:faceCases,compactDrawingBar:true,initialUpperFront:true}));

@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>DIY 铝型材设计器</title>
-  <link rel="stylesheet" href="./css/app.css?v=0.75.2">
+  <link rel="stylesheet" href="./css/app.css?v=0.75.4">
   <script src="./vendor/vue/vue.global.js"></script>
   <script src="./vendor/jszip/jszip.min.js"></script>
-  <script src="./js/boot.js?v=0.75.2"></script>
+  <script src="./js/boot.js?v=0.75.4"></script>
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/controls/OrbitControls.js":"./vendor/three/examples/jsm/controls/OrbitControls.js","three/addons/controls/TransformControls.js":"./vendor/three/examples/jsm/controls/TransformControls.js","three/addons/environments/RoomEnvironment.js":"./vendor/three/examples/jsm/environments/RoomEnvironment.js"}}
   </script>
@@ -46,7 +46,7 @@
         </div></details>
         <details class="cad-menu"><summary>帮助</summary><div class="cad-menu-popover"><button @click="showShortcutHelp=true">快捷键与操作说明</button><button @click="resetWorkbenchLayout">复位工作台布局</button></div></details>
       </nav>
-      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.75.2</span></div>
+      <div class="project-chip cad-project-chip"><span class="project-dot" :class="{dirty:dirty}"></span><button class="project-name" @click="renameProject" title="修改工程名称">{{engineeringDrawingForm.projectName}}</button><span class="version-tag">v0.75.4</span></div>
       <div class="topbar-actions compact"><button class="icon-button" title="撤销 控制键+Z" @click="undo">↶</button><button class="icon-button" title="重做 控制键+Y" @click="redo">↷</button><button class="top-action primary" @click="exportFactoryPackage">制造输出</button></div>
       <input ref="fileInput" type="file" accept=".json,application/json" hidden @change="handleFile">
       <input ref="sectionDxfInput" type="file" accept=".dxf,application/dxf,text/plain" hidden @change="handleSectionDxf">
@@ -457,7 +457,7 @@
       <main class="canvas-shell">
         <div class="canvas-stage" @dragover.prevent @drop="dropAsset">
         <div ref="viewport" class="viewport"></div>
-        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.75.2</span></div>
+        <div class="canvas-brand-watermark"><strong>DIY 设计助手</strong><span>v0.75.4</span></div>
 
         <div class="scene-summary">
           <div><strong>{{dimensions.width}}</strong><span>宽</span></div>
@@ -514,54 +514,56 @@
 
         </div>
 
-        <footer class="workbench-footer" aria-label="工作台底部操作区">
+        <footer class="workbench-footer" aria-label="工作台底部操作区" @pointerover="showFooterTip" @pointerout="leaveFooterTip" @focusin="showFooterTip" @focusout="leaveFooterTip" @pointerdown="hideFooterTip" @keydown.esc="hideFooterTip">
+          <div class="workbench-footer-scroll" @scroll="repositionFooterMenus">
           <div class="workbench-tools-row">
         <div class="canvas-transform-bar" :class="{'is-drawing':drawState.active}">
-          <button class="transform-tool select-tool" @click="returnToSelection" title="返回选择，退出当前工具"><i class="workbench-icon" v-html="workbenchIcon('select')"></i><span>选择</span></button>
-          <button class="transform-tool draw-tool" :class="{active:drawState.active}" @click="drawState.active?stopProfileDraw():startProfileDraw('FREE')" title="自由绘制 · E；Esc 或右键单击结束"><i class="workbench-icon" v-html="workbenchIcon('draw')"></i><span>{{drawState.active?'结束绘制':'绘制'}}</span></button>
+          <button class="transform-tool select-tool" @click="returnToSelection" data-tip="返回选择，退出当前工具"><i class="workbench-icon" v-html="workbenchIcon('select')"></i><span>选择</span></button>
+          <button class="transform-tool draw-tool" :class="{active:drawState.active}" @click="drawState.active?stopProfileDraw():startProfileDraw('FREE')" data-tip="自由绘制 · E；Esc 或右键单击结束"><i class="workbench-icon" v-html="workbenchIcon('draw')"></i><span>{{drawState.active?'结束绘制':'绘制'}}</span></button>
           <div v-if="drawState.active" class="draw-hud" role="group" aria-label="绘制操作">
-            <label v-if="drawState.mode==='FREE'" class="inline-check" title="开启后可以接着画；关闭后完成一根返回选择"><input type="checkbox" v-model="drawForm.continueDrawing" @change="drawOptionsChanged">连续添加</label>
-            <button v-if="drawState.mode==='FREE' && drawState.start" class="transform-tool" @click="confirmProfileDraw" title="确认当前长度 · Enter">确认这一根</button>
-            <button v-if="drawState.start" class="transform-tool" @click="cancelProfileDrawStep" title="只取消未完成段，已完成的构件会保留">取消当前段</button>
+            <label v-if="drawState.mode==='FREE'" class="inline-check" data-tip="开启后可以接着画；关闭后完成一根返回选择"><input type="checkbox" v-model="drawForm.continueDrawing" @change="drawOptionsChanged">连续添加</label>
+            <button v-if="drawState.mode==='FREE' && drawState.start" class="transform-tool" @click="confirmProfileDraw" data-tip="确认当前长度 · Enter">确认这一根</button>
+            <button v-if="drawState.start" class="transform-tool" @click="cancelProfileDrawStep" data-tip="只取消未完成段，已完成的构件会保留">取消当前段</button>
           </div>
           <template v-if="!drawState.active">
           <div class="float-divider"></div>
-          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" title="移动 W"><i class="workbench-icon" v-html="workbenchIcon('move')"></i><span>移动</span></button>
-          <button class="transform-tool" :class="{active:toolMode==='rotate'&&!drawState.active}" @click="setMode('rotate')" title="旋转 R"><i class="workbench-icon" v-html="workbenchIcon('rotate')"></i><span>旋转</span></button>
+          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" data-tip="移动 W"><i class="workbench-icon" v-html="workbenchIcon('move')"></i><span>移动</span></button>
+          <button class="transform-tool" :class="{active:toolMode==='rotate'&&!drawState.active}" @click="setMode('rotate')" data-tip="旋转 R"><i class="workbench-icon" v-html="workbenchIcon('rotate')"></i><span>旋转</span></button>
           <div class="float-divider"></div>
-          <button class="transform-tool" @click="duplicateSelected" :disabled="!selected" title="复制 控制键+D"><i class="workbench-icon" v-html="workbenchIcon('batch')"></i><span>复制</span></button>
-          <button class="transform-tool danger" @click="deleteSelected" :disabled="!selected" title="删除 Delete"><i class="workbench-icon" v-html="workbenchIcon('delete')"></i><span>删除</span></button>
-          <details class="cad-menu toolbar-more"><summary title="更多操作" aria-label="更多操作">⋯</summary><div class="cad-menu-popover">
+          <button class="transform-tool" @click="duplicateSelected" :disabled="!selected" data-tip="复制 控制键+D"><i class="workbench-icon" v-html="workbenchIcon('batch')"></i><span>复制</span></button>
+          <button class="transform-tool danger" @click="deleteSelected" :disabled="!selected" data-tip="删除 Delete"><i class="workbench-icon" v-html="workbenchIcon('delete')"></i><span>删除</span></button>
+          <details class="cad-menu toolbar-more" @toggle="positionFooterMenu"><summary data-tip="更多操作" aria-label="更多操作">⋯</summary><div class="cad-menu-popover">
             <button :class="{active:measureMode}" @click="toggleMeasure">测量 <kbd>M</kbd></button>
             <button :class="{active:dimensionMode}" @click="toggleDimensionMode">永久标注 <kbd>D</kbd></button>
             <button :class="{active:boxSelectMode}" @click="toggleBoxSelect">框选 <kbd>B</kbd></button>
             <button :class="{active:lassoSelectMode}" @click="toggleLassoSelect">自由选择 <kbd>L</kbd></button>
-            <button @click="groupSelection" :disabled="selectionCount<2" title="将多个构件归入同一个组件，不会合并几何">组合组件 <kbd>Ctrl+G</kbd></button>
+            <button @click="groupSelection" :disabled="selectionCount<2" data-tip="将多个构件归入同一个组件，不会合并几何">组合组件 <kbd>Ctrl+G</kbd></button>
             <span class="cad-menu-divider"></span>
-            <button class="space-tool" title="画布方向（世界）：固定的 X/Y/Z；构件方向（局部）：随构件旋转。与鼠标位置、旋转中心无关。" @click="toggleTransformSpace">轴方向：{{transformSpace==='local'?'构件方向':'画布方向'}} <kbd>X</kbd></button>
+            <button class="space-tool" data-tip="画布方向（世界）：固定的 X/Y/Z；构件方向（局部）：随构件旋转。与鼠标位置、旋转中心无关。" @click="toggleTransformSpace">轴方向：{{transformSpace==='local'?'构件方向':'画布方向'}} <kbd>X</kbd></button>
           </div></details>
           </template>
         </div>
-        <div class="quick-rotate-bar" v-show="selectionCount && !drawState.active" :aria-label="transformSpace==='local'?'绕局部轴旋转90度':'绕世界轴旋转90度'"><button class="rotate-space-toggle" @click="toggleTransformSpace" title="切换轴方向：画布方向固定；构件方向随构件旋转。不会改变旋转中心。快捷键 X">{{transformSpace==='local'?'构件方向':'画布方向'}}</button><button v-for="axis in ['X','Y','Z']" :key="axis" @click="quickRotate(axis)" :title="'绕 '+axis+' 轴 +90° · Alt+'+axis">{{axis}} +90°</button></div>
+        <div class="quick-rotate-bar" v-show="selectionCount && !drawState.active" :aria-label="transformSpace==='local'?'绕局部轴旋转90度':'绕世界轴旋转90度'"><button class="rotate-space-toggle" @click="toggleTransformSpace" data-tip="切换轴方向：画布方向固定；构件方向随构件旋转。不会改变旋转中心。快捷键 X">{{transformSpace==='local'?'构件方向':'画布方向'}}</button><button v-for="axis in ['X','Y','Z']" :key="axis" @click="quickRotate(axis)" :data-tip="'绕 '+axis+' 轴 +90° · Alt+'+axis">{{axis}} +90°</button></div>
           </div>
         <div class="canvas-bottom-bar">
-          <button :class="{active:snapEnabled}" @click="toggleSnap"><span>⌁</span> 吸附</button>
-          <button :class="{active:autoConnectionEnabled}" @click="toggleAutoConnection"><span>↔</span> 自动连接</button>
-          <button :class="{active:gridEnabled}" @click="toggleGrid" title="XZ 四象限线色：X+ Z+ 蓝，X− Z+ 紫，X− Z− 橙，X+ Z− 青；中心轴灰蓝"><span>#</span> 网格</button>
-          <button :class="{active:workPlaneVisible}" @click="toggleWorkPlane"><span>▦</span> 工作面 {{drawForm.plane}}</button>
-          <button :class="{active:annotationOptions.showOverall}" @click="annotationOptions.showOverall=!annotationOptions.showOverall;updateAnnotationOptions()"><span>↔</span> 总尺寸</button>
-          <button :class="{active:annotationOptions.showMachiningLabels}" @click="annotationOptions.showMachiningLabels=!annotationOptions.showMachiningLabels;updateAnnotationOptions()"><span>Ⓜ</span> 加工标签</button>
-          <button :class="{active:projection==='orthographic'}" @click="toggleProjection"><span>▱</span> {{projection==='orthographic'?'正交':'透视'}}</button>
-          <button @click="fitView"><span>⌗</span> 适配</button>
-          <button @click="capturePng"><span>◫</span> 截图</button>
-          <div class="status-spacer"></div>
-          <span v-if="interferenceState.active" class="status-interference">⚠ 干涉 {{interferenceState.count}}</span>
-          <span v-if="drawState.active" class="status-hint drawing-status" role="status">{{drawState.start?'选择终点或输入长度回车':'点击画布选择起点'}}{{drawState.axisLock?' · 锁定 '+drawState.axisLock+' 轴':''}} · Esc / 右键结束</span>
-          <span v-else class="status-hint">Alt+点击 穿透选择 · L 自由选择 · X {{transformSpace==='local'?'构件方向':'画布方向'}}</span>
-          <span class="status-label">{{selectionCount>1 ? '已选择 '+selectionCount+' 个构件' : selectedPart ? selectedPart.displayId+' · '+selectedPart.name : '未选择构件'}}</span>
-          <span class="status-unit">mm</span>
+          <button :class="{active:snapEnabled}" @click="toggleSnap" data-tip="吸附到网格或构件特征；按住 Ctrl 可临时不吸附。"><span>⌁</span> 吸附</button>
+          <button :class="{active:autoConnectionEnabled}" @click="toggleAutoConnection" data-tip="新建构件时识别可用接头并建立设计连接；不自动替代制造方案配置。"><span>↔</span> 自动连接</button>
+          <button :class="{active:gridEnabled}" @click="toggleGrid" data-tip="XZ 四象限网格；红色 X 轴（Z=0）、绿色 Z 轴（X=0），交点为世界原点"><span>#</span> 网格</button>
+          <button :class="{active:workPlaneVisible}" @click="toggleWorkPlane" :data-tip="'显示或隐藏绘制工作面；当前为 '+drawForm.plane+'。'"><span>▦</span> 工作面 {{drawForm.plane}}</button>
+          <button :class="{active:annotationOptions.showOverall}" @click="annotationOptions.showOverall=!annotationOptions.showOverall;updateAnnotationOptions()" data-tip="显示或隐藏整个结构的宽、深、高尺寸。"><span>↔</span> 总尺寸</button>
+          <button :class="{active:annotationOptions.showMachiningLabels}" @click="annotationOptions.showMachiningLabels=!annotationOptions.showMachiningLabels;updateAnnotationOptions()" data-tip="显示或隐藏孔、槽等加工特征的标签。"><span>Ⓜ</span> 加工标签</button>
+          <button :class="{active:projection==='orthographic'}" @click="toggleProjection" :data-tip="projection==='orthographic'?'当前正交投影：远近不缩小。点击切换透视。':'当前透视投影：近大远小。点击切换正交。'"><span>▱</span> {{projection==='orthographic'?'正交':'透视'}}</button>
+          <button @click="fitView" data-tip="调整观察距离，让整个结构完整显示在画布中。"><span>⌗</span> 适配</button>
+          <button @click="capturePng" data-tip="将当前三维视角导出为 PNG 图片。"><span>◫</span> 截图</button>
         </div>
+          </div>
+          <div class="workbench-footer-status">
+            <button v-if="interferenceState.active" class="footer-alert" :data-tip="interferenceState.message" @click="runFactoryValidation" aria-label="检查构件干涉">⚠ {{interferenceState.count}}</button>
+            <button class="footer-help" :class="{'is-drawing':drawState.active}" :data-tip="footerContextTip" :aria-label="footerContextTip" @click="showFooterTip">{{drawState.active?(drawState.start?'终点':'起点'):'ⓘ'}}</button>
+            <span class="footer-unit">mm</span>
+          </div>
         </footer>
+        <teleport to="body"><div v-if="footerTip.visible" id="workbench-footer-tip" ref="footerTipElement" role="tooltip" class="workbench-footer-tip" :style="{left:footerTip.x+'px',top:footerTip.y+'px'}">{{footerTip.text}}</div></teleport>
       </main>
 
       <aside v-show="rightPanelMode==='modify'" class="inspector-panel" data-layout-panel="inspector">
@@ -1061,6 +1063,6 @@
     </div>
   </div>
 </div>
-<script type="module" src="./js/app.js?v=0.75.2"></script>
+<script type="module" src="./js/app.js?v=0.75.4"></script>
 </body>
 </html>

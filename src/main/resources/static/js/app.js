@@ -14,7 +14,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.2';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.4';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -59,6 +59,16 @@ createApp({
     const sectionDxfInput = ref(null);
     const selected = ref(null);
     const selectedMeshes = ref([]);
+    const footerTipElement=ref(null);
+    const footerTip=reactive({visible:false,text:'',x:0,y:0});
+    let footerTipAnchor=null,footerTipSequence=0;
+    const footerContextTip=computed(()=>{
+      const selection=selectionCount.value>1?`已选择 ${selectionCount.value} 个构件`:selectedPart.value?`${selectedPart.value.displayId} · ${selectedPart.value.name}`:'未选择构件';
+      const operation=drawState.active
+        ?`${drawState.start?'选择终点，输入长度后按 Enter 确认':'点击画布选择起点'}${drawState.axisLock?' · 锁定 '+drawState.axisLock+' 轴':''}\nEsc 或右键单击结束绘制，已完成构件保留。`
+        :'Alt+点击：穿透选择\nL：自由选择\nX：切换画布方向 / 构件方向';
+      return `${selection}\n${operation}\n尺寸单位：毫米（mm）`;
+    });
     const connectionSource = ref(null);
     const sectionRevision = ref(0);
     const activeLibrary = ref('profile');
@@ -1009,11 +1019,12 @@ createApp({
       window.addEventListener('keyup', handleKeyboardUp);
       window.AluminumCadBoot?.ready();
       // 底栏因绘制/旋转或窄屏换行变高时，更新实际画布，不改变工程坐标。
-      viewportResizeObserver=new ResizeObserver(()=>editor?.sceneManager.resize());
+      viewportResizeObserver=new ResizeObserver(()=>{hideFooterTip();repositionFooterMenus();editor?.sceneManager.resize();});
       viewportResizeObserver.observe(viewport.value);
     });
 
     onBeforeUnmount(() => {
+      hideFooterTip();
       viewportResizeObserver?.disconnect();
       window.removeEventListener('keydown', handleKeyboard);
       window.removeEventListener('keyup', handleKeyboardUp);
@@ -1031,6 +1042,7 @@ createApp({
     });
 
     function handleKeyboard(event) {
+      if(event.key==='Escape')hideFooterTip();
       if(event.key==='Control')editor?.setSnapTemporarilyDisabled(true);
       if (event.defaultPrevented || gripState.active) return;
       if(event.key==='Escape'){
@@ -1529,6 +1541,53 @@ createApp({
 
     function closeCadMenus(except=null) {
       document.querySelectorAll('details.cad-menu[open]').forEach(item=>{ if(item!==except)item.open=false; });
+    }
+
+    function positionFooterMenu(event) {
+      hideFooterTip();
+      const menu=event.target;
+      requestAnimationFrame(()=>{
+        if(!menu.open)return;
+        const panel=menu.querySelector('.cad-menu-popover'),anchor=menu.querySelector('summary').getBoundingClientRect();
+        // 等浏览器完成聚焦滚动后再定位；底栏横向滚动不能裁掉或误关闭弹层。
+        const width=panel.offsetWidth,height=panel.offsetHeight;
+        panel.style.left=`${Math.max(8,Math.min(anchor.right-width,window.innerWidth-width-8))}px`;
+        panel.style.top=`${Math.max(8,anchor.top-height-8)}px`;
+      });
+    }
+
+    function repositionFooterMenus() {
+      hideFooterTip();
+      document.querySelectorAll('.toolbar-more[open]').forEach(menu=>positionFooterMenu({target:menu}));
+    }
+
+    function hideFooterTip() {
+      footerTipSequence++;
+      footerTip.visible=false;
+      footerTipAnchor?.removeAttribute('aria-describedby');
+      footerTipAnchor=null;
+    }
+
+    async function showFooterTip(event) {
+      const anchor=event.target?.closest?.('[data-tip]');
+      const text=anchor?.getAttribute('data-tip');
+      if(!text||anchor.closest('details[open]'))return;
+      if(anchor===footerTipAnchor&&footerTip.text===text)return;
+      hideFooterTip();
+      const sequence=footerTipSequence;
+      footerTipAnchor=anchor;
+      Object.assign(footerTip,{visible:true,text,x:8,y:8});
+      await nextTick();
+      if(sequence!==footerTipSequence||!footerTip.visible)return;
+      // 提示传送到 body，按实际尺寸定位；不受底栏滚动裁切，不占按钮布局。
+      const bounds=anchor.getBoundingClientRect(),tip=footerTipElement.value.getBoundingClientRect();
+      footerTip.x=Math.max(8,Math.min(bounds.left+bounds.width/2-tip.width/2,window.innerWidth-tip.width-8));
+      footerTip.y=Math.max(8,Math.min(bounds.top-tip.height-8,window.innerHeight-tip.height-8));
+      anchor.setAttribute('aria-describedby','workbench-footer-tip');
+    }
+
+    function leaveFooterTip(event) {
+      if(!footerTipAnchor?.contains(event.relatedTarget))hideFooterTip();
     }
 
     function handleCadMenuPointerDown(event) {
@@ -3197,7 +3256,7 @@ createApp({
     }
 
     return {
-      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
+      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
       catalogConnectionForm,catalogAccessoryForm,profileClosure,profileChoices,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,

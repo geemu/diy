@@ -32,10 +32,10 @@ const html=read('index.html');
 const pom=readRoot('pom.xml');
 
 assert.ok(schema.includes('CURRENT_PROJECT_SCHEMA_VERSION = 62'));
-assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.2'"));
+assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.4'"));
 assert.ok(schema.includes('manufacturingConfigurationVersion:1'));
 assert.ok(schema.includes('连接 ${connection.id} 缺少有效 designType'));
-assert.ok(pom.includes('<version>0.75.2</version>'));
+assert.ok(pom.includes('<version>0.75.4</version>'));
 
 for(const token of ['createDesignConnection','recommendDesignFor','getManufacturingOptions','configureManufacturingRule','clearManufacturingRule','manufacturingRuleId:null',"status:'DESIGN_VALID'"]){
   assert.ok(manager.includes(token),`ConnectionManager missing ${token}`);
@@ -75,7 +75,7 @@ for(const forbidden of ['材料单价','报价金额','成本估算','供应商�
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.75.2',
+  version:'0.75.4',
   schema:62,
   abstractDesignConnection:true,
   realHardwareDeferred:true,

@@ -1,4 +1,26 @@
-# Validation / Regression — v0.75.2
+# Validation / Regression — v0.75.4
+
+## v0.75.4 当前检查范围
+
+2026-10-06：146 个 JS/MJS 语法检查、45 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，1 项测试、0 失败、0 错误。随后 process-resources 更新最终 Esc/卸载提示清理；Schema 62 不变。
+
+- verify-footer-tips-v0754 直接执行实际 showFooterTip/hideFooterTip/leaveFooterTip，检查视口夹边、aria-describedby、按钮内图标切换不闪退、旧 nextTick 取消。结构契约检查固定状态区、独立滚动区、body Teleport、无原生 title 重复及每个视图开关都有说明。
+- 独立 Chrome 在 1920/1600/1360/1000/900/700 px 窗宽实测：底栏 48 px、scroll.right<status.left、状态区完整可见、stage.bottom=footer.top、无页面横向溢出。tip 浮层不参与按钮尺寸或覆盖按钮，状态区不随操作区横向滚动。
+- 实际鼠标悬停吸附显示说明，离开后 tip=0；键盘聚焦提示入口显示选择/快捷键，Esc 后 tip=0。700 px 横向滚动后状态 tip 仍在视口内，更多菜单点击测量仍能启动真实工具，应用 pageerror=[]。
+- 实际 FREE 起点/终点显示对应完整步骤提示，确认 500 mm 型材退出绘制并保留构件；选择 tip 显示 P-001 和名称，X +90° 仍把 X 旋转增加 π/2。900×700 / DPR 2 在规格框聚焦时 Esc 同时清理 FREE、draw-hud 和 tip，底栏始终 48 px。
+- 截图 v0754-footer-context-tip.png、v0754-footer-narrow-tip.png、v0754-footer-selected-tip.png、v0754-footer-drawing-dpr2.png 和 v0754-footer-tip-detail.png 位于本轮 Codex visualizations 目录。8081 已更新，用户 8080 IDE 旧实例未重启；不把它表述为已更新。
+
+## v0.75.3 当前检查范围
+
+2026-10-06：145 个 JS/MJS 语法检查、44 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变；运行验证使用独立 Chrome 工程，不改用户主浏览器。
+
+- verify-sealed-profile-v0753 对全部内置可选槽型/R 型号测试 608 组封边组合：3536 条 A/B 贯通腔射线无实体命中，1360 条侧壁射线真实命中连续外壁。标准 4040 双封边保留 7 个内孔；默认 A/B/H/T 封面同样保留槽腔，数据库/DXF 截面对象保持优先且不变。
+- 整系列分格截面的实际端面三角化面积与二维净面积吻合，包括 R。原有 60×90 非整系列分格内孔超出外轮廓，端面面积不纳入本次全量通过承诺；该型号仍检查本轮槽腔贯通和连续封闭侧壁，不在本轮重绘其旧参考孔。
+- 浏览器实际选择 4040 + 邻面双封边，预览能看见封闭槽腔；另复看 2020A、3030B、4040T 默认封闭型号。实际绘制 500 mm 4040，完成后退出 FREE；保存/重开 JSON 保留 FRONT/RIGHT 封边和长度。对重开后的真实场景构件射线检查 (0,14)、(14,0)、(0,0) 均无实体命中，两个封闭槽腔和中心孔贯通。
+- 红 X / 绿 Z 轴实际可见并贯穿原点，保留四象限网格颜色。网格开关正常；InfiniteGround 回归保留透视/正交、世界坐标锁定、远裁剪之外网格与无业务遮挡检查。
+- Chrome 实测 1920/1600/1360/1000/900/700 px 窗宽，选中状态底栏始终 48 px、所有常驻按钮在同一行，实际 WebGL 高度匹配 canvas-stage，stage.bottom=footer.top。内容超宽时在底栏内部横向滚动，无第二行。1600×1000 实际画布高 904 px，比 v0.75.2 的 866 px 增加 38 px。
+- 700 px 横向滚动后实际打开更多菜单，弹层位于视口内并在底栏上方，点击测量启动真实工具。底栏 X +90° 将选中构件旋转 X 增加 π/2，撤销仍有效。独立 900×700 / DPR 2 绘制时开启连续添加，规格框聚焦下 Esc 一次退出，draw-hud=0，底栏保持 48 px。
+- 应用 pageerror=[]；截图 v0753-sealed-4040-preview.png、v0753-2020A-preview.png、v0753-3030B-preview.png、v0753-4040T-preview.png、v0753-final-workbench.png、v0753-footer-narrow.png、v0753-drawing-narrow-dpr2.png 保存于本轮 Codex visualizations 目录。8081 已提供 v0.75.3，8080 用户 IDE 旧实例未重启，不把它表述为已更新。
 
 ## v0.75.2 当前检查范围
 

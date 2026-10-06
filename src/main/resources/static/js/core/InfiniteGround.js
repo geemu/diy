@@ -14,6 +14,7 @@ export default class InfiniteGround {
         groundHeight:{value:-.05},fadeDistance:{value:16000},showGrid:{value:1},
         groundColor:{value:new THREE.Color(0xa5bfd5)},skyColor:{value:new THREE.Color(0xe0f2fe)},
         lineColor:{value:new THREE.Color(0x7b91a7)},
+        xAxisColor:{value:new THREE.Color(0xe74c4c)},zAxisColor:{value:new THREE.Color(0x229e63)},
         positiveXPositiveZ:{value:new THREE.Color(0x587fb5)},
         negativeXPositiveZ:{value:new THREE.Color(0x8e6da8)},
         negativeXNegativeZ:{value:new THREE.Color(0xa17d54)},
@@ -28,6 +29,7 @@ export default class InfiniteGround {
         uniform mat4 inverseProjection,cameraWorld;
         uniform float groundHeight,fadeDistance,showGrid;
         uniform vec3 groundColor,skyColor,lineColor;
+        uniform vec3 xAxisColor,zAxisColor;
         uniform vec3 positiveXPositiveZ,negativeXPositiveZ,negativeXNegativeZ,positiveXNegativeZ;
         float gridLine(vec2 world,float cell){
           vec2 q=world/cell;
@@ -61,12 +63,15 @@ export default class InfiniteGround {
           vec3 quadrantInk=hit.z>=0.0
             ?(hit.x>=0.0?positiveXPositiveZ:negativeXPositiveZ)
             :(hit.x>=0.0?positiveXNegativeZ:negativeXNegativeZ);
-          // 原点两条轴保留中性色；覆盖宽度按像素求导，拉远后不扩成整片色带。
+          // X 轴是 Z=0 的红线，Z 轴是 X=0 的绿线；正负半轴同色，固定在世界原点。
           vec2 axisWidth=max(fwidth(hit.xz),vec2(0.00001));
           vec2 axisDistance=abs(hit.xz)/axisWidth;
-          float axisCoverage=1.0-smoothstep(0.12,0.95,min(axisDistance.x,axisDistance.y));
-          vec3 ink=mix(quadrantInk,lineColor,axisCoverage);
-          color=mix(color,ink,lines);
+          vec2 axisCoverage=vec2(1.0)-smoothstep(vec2(0.35),vec2(1.35),axisDistance);
+          color=mix(color,quadrantInk,lines);
+          // 轴线独立于网格细分层级，不因粗细格交替消失；网格开关仍统一控制。
+          float axisFade=pow(fade,0.75)*showGrid;
+          color=mix(color,zAxisColor,axisCoverage.x*axisFade);
+          color=mix(color,xAxisColor,axisCoverage.y*axisFade);
           gl_FragColor=vec4(color,1.0);
           #include <colorspace_fragment>
         }
