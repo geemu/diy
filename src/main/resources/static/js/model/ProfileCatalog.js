@@ -6,6 +6,7 @@ const WALL_60 = Object.freeze([2.0, 2.5, 3.0, 4.0]);
 const WALL_80 = Object.freeze([2.5, 3.0, 4.0, 5.0]);
 
 function v(id, nominal, variant, width, height, series, slotWidth, walls, defaultWall, options = {}) {
+  const defaultFaceClosures=options.defaultFaceClosures||(options.crossSectionStyle==='ROUND_CORNER'?['FRONT','RIGHT']:[]);
   return Object.freeze({
     id,
     nominal,
@@ -16,7 +17,8 @@ function v(id, nominal, variant, width, height, series, slotWidth, walls, defaul
     system: options.system || '欧标',
     sectionSize: Object.freeze([width, height]),
     slotWidth,
-    slotDefinitions: buildSlotDefinitions(width,height,series,slotWidth,options.slotDefinitions),
+    slotDefinitions: Object.freeze(buildSlotDefinitions(width,height,series,slotWidth,options.slotDefinitions).filter(slot=>!defaultFaceClosures.includes(slot.face))),
+    defaultFaceClosures:Object.freeze([...defaultFaceClosures]),
     slotModel: options.slotModel || 'CATALOG_EXPLICIT',
     wallThicknessOptions: Object.freeze([...walls]),
     defaultWallThickness: defaultWall,
@@ -71,33 +73,37 @@ function standardSlotOffsets(span,series) {
 
 const variants = [
   v('EU20-2020','2020','2020',20,20,'20',6,WALL_20,1.5),
-  v('EU20-2020A','2020','2020A',20,20,'20',6,WALL_20,1.5),
-  v('EU20-2020B','2020','2020B',20,20,'20',6,WALL_20,1.8),
+  // TXCJ 欧标 20 第 1 页：A 下侧封闭，B 下侧与右侧封闭；不按字母跨系列猜测。
+  v('EU20-2020A','2020','2020A',20,20,'20',6,WALL_20,1.5,{sourceFamily:'JLCFA_TXCJ_20',defaultFaceClosures:['BACK']}),
+  v('EU20-2020B','2020','2020B',20,20,'20',6,WALL_20,1.8,{sourceFamily:'JLCFA_TXCJ_20',defaultFaceClosures:['BACK','RIGHT']}),
   v('EU20-2040','2040','2040',20,40,'20',6,WALL_20,1.8),
   v('EU20-2060','2060','2060',20,60,'20',6,WALL_20,2.0),
   v('EU20-2080','2080','2080',20,80,'20',6,WALL_20,2.0),
 
   v('EU30-3030','3030','3030',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3030A','3030','3030A',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3030B','3030','3030B',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
+  // 嘉立创 TXCK 欧标 30 目录第 1 页：下=BACK、上=FRONT、右=RIGHT。
+  v('EU30-3030A','3030','3030A',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['BACK']}),
+  v('EU30-3030B','3030','3030B',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['BACK','RIGHT']}),
   v('EU30-3030C','3030','3030C',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
   v('EU30-3030G','3030','3030G',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3030H','3030','3030H',30,30,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
+  v('EU30-3030H','3030','3030H',30,30,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['FRONT','BACK']}),
   v('EU30-3030R','3030','3030R',30,30,'30',8.2,WALL_30,1.8,{crossSectionStyle:'ROUND_CORNER',sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3030T','3030','3030T',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
+  v('EU30-3030T','3030','3030T',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['FRONT','BACK','RIGHT']}),
   v('EU30-3030X','3030','3030X',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
   v('EU30-J3030','3030','J3030',30,30,'30',8.2,WALL_30,1.8,{sourceFamily:'JLCFA_TXCK_30'}),
   v('EU30-J3030R','3030','J3030R',30,30,'30',8.2,WALL_30,1.8,{crossSectionStyle:'ROUND_CORNER',sourceFamily:'JLCFA_TXCK_30'}),
   v('EU30-3060','3060','3060',30,60,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3060A','3060','3060A',30,60,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
-  v('EU30-3060B','3060','3060B',30,60,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
+  // 第 2 页 60×30 横向图旋转 90° 后映射到目录的 30×60 局部截面。
+  v('EU30-3060A','3060','3060A',30,60,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['RIGHT']}),
+  v('EU30-3060B','3060','3060B',30,60,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30',defaultFaceClosures:['LEFT','RIGHT','FRONT']}),
   v('EU30-3090','3090','3090',30,90,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
   v('EU30-30120','30120','30120',30,120,'30',8.2,WALL_30,2.0,{sourceFamily:'JLCFA_TXCK_30'}),
 
   v('EU40-4040','4040','4040',40,40,'40',8,WALL_40,2.0),
-  v('EU40-4040F','4040','4040F',40,40,'40',8,WALL_40,2.0),
-  v('EU40-4040H','4040','4040H',40,40,'40',8,WALL_40,2.5),
-  v('EU40-4040T','4040','4040T',40,40,'40',8,WALL_40,2.0),
+  // TXCL 欧标 40 第 4 页：F 四面开槽，H 上下封闭，T 上下与右侧封闭。
+  v('EU40-4040F','4040','4040F',40,40,'40',8,WALL_40,2.0,{sourceFamily:'JLCFA_TXCL_40'}),
+  v('EU40-4040H','4040','4040H',40,40,'40',8,WALL_40,2.5,{sourceFamily:'JLCFA_TXCL_40',defaultFaceClosures:['FRONT','BACK']}),
+  v('EU40-4040T','4040','4040T',40,40,'40',8,WALL_40,2.0,{sourceFamily:'JLCFA_TXCL_40',defaultFaceClosures:['FRONT','BACK','RIGHT']}),
   v('EU40-4080','4080','4080',40,80,'40',8,WALL_40,2.0),
   v('EU40-4080H','4080','4080H',40,80,'40',8,WALL_40,2.5),
   v('EU40-40120','40120','40120',40,120,'40',8,WALL_40,2.5),
@@ -143,6 +149,7 @@ export function registerProfileDefinition(input) {
     slotWidth:Number(input.slotWidth || 8),
     slotDefinitions:buildSlotDefinitions(Number(input.sectionSize[0]),Number(input.sectionSize[1]),input.series,input.slotWidth,input.slotDefinitions),
     slotModel:input.slotModel || 'CATALOG_EXPLICIT',
+    defaultFaceClosures:Object.freeze([...(input.defaultFaceClosures||[])]),
     wallThicknessOptions:Object.freeze(wallOptions.length ? wallOptions : [2]),
     defaultWallThickness:Number(input.defaultWallThickness || wallOptions[0] || 2),
     alloy:input.alloy || 'A6063-T5',

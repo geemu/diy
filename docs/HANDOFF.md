@@ -1,4 +1,33 @@
-# 项目交接文档 — v0.74.0
+# 项目交接文档 — v0.75.2
+
+## v0.75.2 当前重点
+
+- canvas-shell 仅作中央列纵向 flex 容器；canvas-stage 为 flex:1/min-height:0 的独立画布区域，包含 viewport 与就地 HUD。workbench-footer 是其同级、flex:0 0 auto 的真实底部占位，不用绝对定位留在 canvas-stage 内。
+- canvas-transform-bar、quick-rotate-bar、canvas-bottom-bar 进入底栏；作用域 CSS 覆盖历史定位/透明背景/transform，允许窄屏换行。更多菜单向上展开，可临时覆盖画布，但常驻底栏不覆盖。
+- app 生命周期创建 viewportResizeObserver 观察真实 viewport：底栏高度因绘制、选择旋转和窄屏换行变化时自动调用 SceneManager.resize，卸载时 disconnect；不能仅监听 window.resize。
+- WorkbenchLayoutManager.canvas 改为 canvas-stage；不再 bindFloater(toolbar)，删除读入状态中的旧 toolbar 项，但保留其他面板/导航布局。主工具条移除拖动手柄，不允许旧浮动坐标将它拉回画布。
+- @dragover/@drop 从 main 限制到 canvas-stage，底栏不是组件落位目标；原 Editor/Manager 提交、快捷键、撤销、坐标和 Schema 不改变。
+- 版本/缓存 0.75.2、Schema 62、运行页 8081。完整检查记录见 VALIDATION；仅 UI 布局调整，无制造或目录规则变更。
+
+## v0.75.1 当前重点
+
+- SceneManager.resetInitialView 使用方向 (0,1,1)、观察中心 (0,500,0)、距离 3000；启动和新建空白走此入口。小房子/Editor.viewIso 和适配仍沿用三维方向；不得再把初始化改为上/前/右。
+- draw-hud 只剩主工具条中的静态行，不再是独立浮层；确认/取消当前段按 start 显示，连续添加继续经过 configure。状态栏承担操作提示，Esc / 右键和主工具条结束按钮保留。CSS 静态覆盖必须同时压过原移动端定位规则。
+- ProfileCatalog.defaultFaceClosures 采用逐型号、逐系列核实的数据并过滤槽位；DesignProfileCatalog 投影 shape/slotDefinitions/defaultFaceClosures，只包含设计几何。2020A/B、3030A/B/H/T、3060A/B、4040F/H/T 已核对官方目录。3060 横向源图需旋转到 30×60 局部截面，详见 reference 新记录。
+- ProfileSectionRegistry 所有内置外轮廓由 buildDesignProfileSection 统一生成，圆角和封面不能丢失。fitReferenceHoles 仅约束内置参考孔防止与 T 槽相交；数据库、自定义 DXF section 在此前已经返回，不改用户精确截面。30/40 已核实部分内腔仍为独立简化图形，不标成生产精度。
+- CatalogPresentation 使用预览 part 的 faceClosures 选择可见封闭侧，不改工程旋转。右侧预览下方显示封闭面，sectionRevision 触发目录注册后的刷新。
+- ProfileSelector.change 带 previousId；属性和 ProfileReplacementManager 移除旧型号默认封面后再加入新默认，保留额外手工封边。数据库删除使用检查同时覆盖 designProfile / manufacturingProfile，避免删掉已使用的设计定义。
+- 版本/缓存 0.75.1、Schema 62、运行页 8081。检查记录见 VALIDATION；无限地面、四象限线色、单象限移动和两级选材继续保留。
+
+## v0.75.0 当前重点
+
+- ProfileSelector 共用外尺寸分组与二级型号；一级 value 使用默认设计截面 ID，v-model 始终是具体型号 ID。切换尺寸重置二级为该组默认项，不能把二级选中的 A/B/R 写回默认 3030。
+- DesignProfileList 的 23 个标准截面保持不变；getDesignProfileChoices 叠加已有目录的几何投影，按尺寸归为 20 组。具体型号不包含合金、壁厚或供应商字段，manufacturingProfile 新建仍为 null。内置同名标准项避免重复，数据库启用项保留；停用项在已使用构件中继续可解析。
+- CATALOG_REFERENCE 几何投影复用原 ProfileCatalog 型号参考截面；Registry 的自定义 DXF/数据库精确 section 仍优先。具体型号的参考轮廓封边跟随 faceClosures；显式无槽目录不能通过 ProfileFeatureCatalog 的标准回退凭空生成槽特征。内置参考图形不等于供应商制造精度。
+- 右侧创建/修改/替换和左侧框架/模板/门框统一两级选择。连接、光轴、板材、配件沿用既有类型/规格级联；不得为了本次归组擅自新增目录项。3030N1 没有可用定义。
+- 画布方向=world，构件方向=local，存储键不改；只解释轴向而不改变旋转中心或变换作用域。旋转条切换复用 toggleTransformSpace，X 快捷键保留。
+- SceneManager.init 直接调用 setView('iso',target,2500,{immediate:true})；不再在最后覆盖为水平正面。新建工程和小房子仍走 Editor.viewIso，归一化方向 (0.6164,0.4900,0.6164)，对应上/前/右三面。
+- 版本/缓存 0.75.0、Schema 62、运行页 8081。交付检查见 VALIDATION；上一版手柄、材料和无限网格保持。
 
 ## v0.74.0 当前重点
 

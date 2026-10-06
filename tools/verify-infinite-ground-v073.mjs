@@ -54,4 +54,4 @@ planes.setPlane('XY');assert.equal(planes.grid.visible,true);
 planes.setVisible(false);assert.equal(planes.grid.visible,false);
 planes.setPlane('XZ');planes.setVisible(true);assert.equal(planes.grid.visible,false);
 ground.dispose();
-console.log(JSON.stringify({ok:true,version:'0.74.0',rayCases:cases,beyondFarPlane,infiniteGrid:true,worldLocked:true,quadrantColors:4,neutralAxes:true,depthOcclusion:false}));
+console.log(JSON.stringify({ok:true,version:'0.75.2',rayCases:cases,beyondFarPlane,infiniteGrid:true,worldLocked:true,quadrantColors:4,neutralAxes:true,depthOcclusion:false}));

@@ -1,8 +1,10 @@
+import {ProfileCatalogList, getProfileDefinition} from './ProfileCatalog.js';
+
 /**
  * 设计阶段型材目录。
  *
  * 这里只描述“玩家搭结构时必须知道的几何语义”：截面尺寸、槽宽、槽面和封边。
- * 欧标名称仅用作用户要求的截面系列展示；壁厚、米重、合金和供应商仍在制造阶段配置。
+ * 具体型号名称仅用于尺寸组内的几何选择；壁厚、米重、合金和供应商仍在制造阶段配置。
  */
 function designProfile(id, width, height, series, slotWidth, options = {}) {
   const nominal = `${Number(width)}${Number(height)}`;
@@ -74,9 +76,56 @@ const namedProfiles=profiles.map(item=>item.shape==='T_SLOT'&&referenceNominals.
 export const DesignProfileList=Object.freeze(namedProfiles);
 export const DesignProfileCatalog=Object.freeze(Object.fromEntries(namedProfiles.map(item=>[item.id,item])));
 
+const geometricDefinitions=new WeakMap();
+
+/** 具体型号只投影几何字段；选中型号不等于完成制造材料配置。 */
+function catalogGeometry(profile) {
+  if(geometricDefinitions.has(profile))return geometricDefinitions.get(profile);
+  const [width,height]=profile.sectionSize.map(Number);
+  const shape=profile.crossSectionStyle==='ROUND_CORNER'?'ROUND_CORNER':'T_SLOT';
+  const closed=new Set([...(profile.defaultFaceClosures||[]),...(shape==='ROUND_CORNER'?['FRONT','RIGHT']:[])]);
+  // 明确缺少槽定义的面就是无槽面；不能将其回退成四面通用 T 槽。
+  for(const face of ['FRONT','BACK','LEFT','RIGHT'])if(!profile.slotDefinitions.some(slot=>slot.face===face))closed.add(face);
+  const definition=Object.freeze({
+    id:profile.id,nominal:`${width}${height}`,name:String(profile.variant||profile.code||profile.id),
+    width,height,sectionSize:Object.freeze([width,height]),series:String(profile.series),
+    slotWidth:Number(profile.slotWidth),slotDefinitions:Object.freeze(profile.slotDefinitions.filter(slot=>!closed.has(slot.face))),
+    defaultFaceClosures:Object.freeze([...closed]),shape,sectionStyle:'CATALOG_REFERENCE'
+  });
+  geometricDefinitions.set(profile,definition);
+  return definition;
+}
+
+/** 标准几何为默认项，A/B/N 等真实目录型号为二级项；不凭型号名推测不存在的截面。 */
+export function getDesignProfileChoices(catalog=ProfileCatalogList) {
+  const result=[...DesignProfileList];
+  const standardCodes=new Set(result.map(item=>item.id.replace('DESIGN-','')));
+  for(const profile of catalog) {
+    if(profile.enabled===false)continue;
+    if(profile.sourceFamily!=='DATABASE'&&standardCodes.has(String(profile.variant||profile.code)))continue;
+    result.push(getDesignProfileDefinition(profile.id));
+  }
+  return result.filter(Boolean);
+}
+
+/** 外尺寸是一级查找入口，不是持久化型号身份；圆角变体仍属于同一尺寸组。 */
+export function groupDesignProfiles(profiles) {
+  const groups=new Map();
+  for(const profile of profiles) {
+    const key=profile.shape==='U_CHANNEL'?`U:${profile.width}x${profile.height}`:`${profile.width}x${profile.height}`;
+    if(!groups.has(key))groups.set(key,{key,id:profile.id,label:profile.shape==='U_CHANNEL'?'U 型 8×8':`${profile.width}${profile.height} · ${profile.width}×${profile.height} mm`,models:[]});
+    const group=groups.get(key);
+    if(!group.models.some(item=>item.id===profile.id))group.models.push(profile);
+  }
+  return [...groups.values()];
+}
+
 export function getDesignProfileDefinition(id) {
   if(!id)return null;
-  return DesignProfileCatalog[id] || DesignProfileList.find(item=>item.nominal===String(id)) || null;
+  const standard=DesignProfileCatalog[id] || DesignProfileList.find(item=>item.nominal===String(id));
+  if(standard)return standard;
+  const catalog=getProfileDefinition(id);
+  return catalog?catalogGeometry(catalog):null;
 }
 
 export function getDefaultDesignProfileId(nominal='3030') {

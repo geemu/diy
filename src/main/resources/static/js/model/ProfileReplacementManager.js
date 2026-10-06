@@ -94,6 +94,8 @@ export default class ProfileReplacementManager {
 
 function applyDefinition(part,definition,options) {
   const old = part.designProfile || {};
+  const oldDefaults=new Set(getDesignProfileDefinition(old.profileId)?.defaultFaceClosures||[]);
+  const extraClosures=options.faceClosures||(old.faceClosures||[]).filter(face=>!oldDefaults.has(face));
   part.name = options.keepName === true ? part.name : definition.name;
   part.dimensions = {...(part.dimensions || {}),size:Number(definition.sectionSize[0]),sectionSize:[...definition.sectionSize]};
   part.designProfile = {
@@ -101,7 +103,7 @@ function applyDefinition(part,definition,options) {
     nominal:definition.nominal,
     series:definition.series,
     slotWidth:Number(definition.slotWidth || 0),
-    faceClosures:[...(options.faceClosures || old.faceClosures || definition.defaultFaceClosures || [])]
+    faceClosures:[...new Set([...(definition.defaultFaceClosures||[]),...extraClosures])]
   };
   // 更换设计截面后真实制造料号必须重新选择，不能沿用旧规格。
   part.manufacturingProfile = null;

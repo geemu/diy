@@ -14,7 +14,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.74.0';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.2';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -36,12 +36,14 @@ import DiyGenerator from './diy/DiyGenerator.js';
 import {DiyTemplateList, getDiyTemplate} from './diy/DiyTemplateCatalog.js';
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
 import {workbenchIcon} from './ui/WorkbenchIcons.js';
+import ProfileSelector from './ui/ProfileSelector.js';
 import ViewCube,{VIEW_DIRECTIONS} from './ui/ViewCube.js';
 import {buildContourPreset} from './drawing/ContourPresetFactory.js';
 import {buildConnectionInstallationDiagram} from './manufacturing/ConnectionInstallationDiagram.js';
 import {buildAssemblyGuidePrintHtml} from './manufacturing/AssemblyGuideDocument.js';
 import {
   DesignProfileList,
+  getDesignProfileChoices,
   getDesignProfileDefinition,
   getDefaultDesignProfileId,
   profileDisplayName
@@ -50,6 +52,7 @@ import {
 const {createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick} = Vue;
 
 createApp({
+  components:{ProfileSelector},
   setup() {
     const viewport = ref(null);
     const fileInput = ref(null);
@@ -161,6 +164,7 @@ createApp({
     const manufacturingConfigTab = ref('profiles');
     const showShortcutHelp = ref(false);
     let editor = null;
+    let viewportResizeObserver = null;
     let diyGenerator = null;
     let timer = null;
     let profileSectionPreview3d = null;
@@ -169,10 +173,10 @@ createApp({
     const AUTOSAVE_KEY = 'alu-cad-autosave';
     const LEGACY_AUTOSAVE_KEYS = [];
 
-    // 设计工作台只消费 DesignProfileList。ProfileCatalog 仅保留给后续制造目录管理，
-    // 不允许欧标/国标、壁厚、米重等制造属性回流到设计入口。
+    // 用户确认尺寸归组后选择具体型号。只投影几何，不提前绑定制造材料属性。
     const designProfiles = DesignProfileList;
     const profileCatalog = reactive([...ProfileCatalogList]);
+    const profileChoices = computed(()=>getDesignProfileChoices(profileCatalog));
     const profileSystems = ProfileSystemOptions;
     const profileSectionTemplateOptions = ProfileSectionTemplateOptions;
     const nominalOptions = computed(() => [...new Set(designProfiles.map(item=>item.nominal))].sort((a,b)=>String(a).localeCompare(String(b),'zh-CN',{numeric:true})));
@@ -226,7 +230,7 @@ createApp({
     const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const frameForm = reactive({catalogId:getDefaultDesignProfileId('3030'),width:1000,depth:600,height:1000});
     const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
-    const selectedDesignProfile = computed(()=>getDesignProfileDefinition(newProfile.catalogId));
+    const selectedDesignProfile = computed(()=>{sectionRevision.value;return getDesignProfileDefinition(newProfile.catalogId);});
     const hasChosenProfile = ref(false);
     async function refreshCatalogPreview() {
       await nextTick();
@@ -239,7 +243,7 @@ createApp({
       }
       catalogProfilePreview.resize();
       if(activeLibrary.value==='profile'){
-        catalogProfilePreview.setSection(getSectionDefinition(newProfile.catalogId,newProfile.faceClosures),{lengthMm:100,presentation:'catalog',profileId:newProfile.catalogId});
+        catalogProfilePreview.setSection(getSectionDefinition(newProfile.catalogId,newProfile.faceClosures),{lengthMm:100,presentation:'catalog',profileId:newProfile.catalogId,faceClosures:[...newProfile.faceClosures]});
       } else {
         let previewSpec;
         if(activeLibrary.value==='shaft')previewSpec=newShaft.type==='ROD'?{type:'SHAFT',dimensions:{diameter:Number(newShaft.diameter),length:Number(newShaft.length)}}:componentPart(currentShaftComponent.value);
@@ -371,7 +375,7 @@ createApp({
     });
     const frameProfileOptions = computed(() => {
       const preferred = new Set(['2020','3030','4040','4545','6060','8080']);
-      return designProfiles.filter(item => preferred.has(item.nominal));
+      return profileChoices.value.filter(item => preferred.has(item.nominal));
     });
     const canSmartConnect = computed(() => {
       const snap = selected.value?.userData?.lastSnap;
@@ -774,7 +778,7 @@ createApp({
 
     async function removeDatabaseProfile(item) {
       if(item?.sourceFamily!=='DATABASE')return notify('内置型材不能从数据库删除','warning');
-      const used=editor?.parts?.some(part=>part.type==='PROFILE'&&part.manufacturingProfile?.profileId===item.id);
+      const used=editor?.parts?.some(part=>part.type==='PROFILE'&&(part.designProfile?.profileId===item.id||part.manufacturingProfile?.profileId===item.id));
       if(used)return notify(`当前工程正在使用 ${item.variant}，请先替换这些构件再删除目录型号`,'warning');
       if(!confirm(`删除数据库型材 ${item.variant}？`))return;
       try { await deleteDatabaseProfile(item.id); await loadDatabaseProfiles({silent:true}); notify(`已删除 ${item.variant}`); }
@@ -1004,9 +1008,13 @@ createApp({
       window.addEventListener('keydown', handleKeyboard);
       window.addEventListener('keyup', handleKeyboardUp);
       window.AluminumCadBoot?.ready();
+      // 底栏因绘制/旋转或窄屏换行变高时，更新实际画布，不改变工程坐标。
+      viewportResizeObserver=new ResizeObserver(()=>editor?.sceneManager.resize());
+      viewportResizeObserver.observe(viewport.value);
     });
 
     onBeforeUnmount(() => {
+      viewportResizeObserver?.disconnect();
       window.removeEventListener('keydown', handleKeyboard);
       window.removeEventListener('keyup', handleKeyboardUp);
       window.removeEventListener('pointerdown',closeContextMenu,true);
@@ -1404,10 +1412,12 @@ createApp({
       selectedProfileModelChanged();
     }
 
-    function selectedProfileModelChanged() {
+    function selectedProfileModelChanged(change) {
       const definition = getDesignProfileDefinition(selectedPart.value?.designProfile?.profileId);
       if (!definition) return;
-      const closures=[...(selectedPart.value?.designProfile?.faceClosures||[])];
+      // 型号自带封面不能作为用户额外封边带到下一型号，否则 B→A 仍会显示两个封面。
+      const previousDefaults=new Set(getDesignProfileDefinition(change?.previousId)?.defaultFaceClosures||[]);
+      const closures=[...new Set([...(definition.defaultFaceClosures||[]),...(selectedPart.value?.designProfile?.faceClosures||[]).filter(face=>!previousDefaults.has(face))])];
       editor.applySelectedProfileSpec(definition.id,{faceClosures:closures});
       notify(`已切换截面 ${definition.name}`);
     }
@@ -2291,7 +2301,7 @@ createApp({
     function toggleTransformSpace() {
       transformSpace.value = transformSpace.value === 'world' ? 'local' : 'world';
       editor?.setTransformSpace(transformSpace.value);
-      notify(`操作轴坐标：${transformSpace.value === 'local' ? '局部' : '世界'}`,'warning');
+      notify(transformSpace.value === 'local' ? '构件方向（局部）：操作轴跟随构件旋转；旋转中心不变' : '画布方向（世界）：操作轴沿固定 X/Y/Z；旋转中心不变');
     }
 
     function setTransformSpace(space) {
@@ -2521,7 +2531,7 @@ createApp({
       editor.profileDrawTool.configure({...drawForm});syncManufacturingForm();
       editor.historyManager.reset();
       sectionRevision.value++;projectRevision.value++;dirty.value=false;
-      editor.viewIso();notify('已新建空白工程');
+      editor.sceneManager.resetInitialView();notify('已新建空白工程');
     }
 
     async function loadSample() {
@@ -3189,7 +3199,7 @@ createApp({
     return {
       quickPanel,rightPanelMode,resourceCategories,workbenchIcon,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
-      catalogConnectionForm,catalogAccessoryForm,profileClosure,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
+      catalogConnectionForm,catalogAccessoryForm,profileClosure,profileChoices,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
       PanelShapeFields,updatePanelShapeParameter,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,

@@ -4,7 +4,17 @@
  */
 export function catalogPresentation(part={}) {
   const kind=part.dimensions?.geometryKind||'',style={direction:[-5,4,-6],rotation:[0,0,0],margin:1.35,referenceSpan:0};
-  if(part.type==='PROFILE')return {...style,margin:1.4,rotation:/R$/.test(part.dimensions.profileId||'')?[0,0,Math.PI/2]:style.rotation};
+  if(part.type==='PROFILE') {
+    if(/R$/.test(part.dimensions.profileId||''))return {...style,margin:1.4,rotation:[0,0,Math.PI/2]};
+    const closed=new Set(part.designProfile?.faceClosures||[]);
+    let best=style.direction,bestScore=-1;
+    // 固定朝向可能把唯一封面藏在背面；目录展示优先露出封面，不转动工程构件。
+    for(const direction of [[-5,4,-6],[5,4,-6],[-5,-4,-6],[5,-4,-6]]) {
+      const score=Number(closed.has(direction[0]>0?'RIGHT':'LEFT'))+Number(closed.has(direction[1]>0?'FRONT':'BACK'));
+      if(score>bestScore){best=direction;bestScore=score;}
+    }
+    return {...style,direction:best,margin:1.4};
+  }
   if(part.type==='SHAFT')return {...style,margin:1.2};
   if(part.type==='PANEL')return {...style,direction:[5,4,6],margin:1.2,referenceSpan:({sphere:300,cylinder:200,cone:170,torus:140})[part.dimensions.panelShape]||400};
   if(kind.startsWith('SHAFT_'))return {...style,referenceSpan:kind==='SHAFT_LIMIT_RING'?60:80,margin:1.25};

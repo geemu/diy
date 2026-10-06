@@ -51,7 +51,7 @@ export default class ProfileSectionPreview3D {
     const lengthRatio=Math.max(1,Number(options.lengthRatio)||1.5);
     const length=options.presentation==='catalog'?Number(options.lengthMm)||100:span*lengthRatio;
     this.mesh=ProfileGeometryFactory.createSectionMesh(section,length,material);
-    this.mesh.userData.part={type:'PROFILE',dimensions:{length,profileId:options.profileId}};
+    this.mesh.userData.part={type:'PROFILE',dimensions:{length,profileId:options.profileId},designProfile:{faceClosures:[...(options.faceClosures||[])]}};
     ProfileGeometryFactory.addCadEdges(this.mesh);
     this.root.add(this.mesh);
     if(options.presentation==='catalog') {

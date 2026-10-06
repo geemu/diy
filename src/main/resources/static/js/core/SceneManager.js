@@ -192,10 +192,13 @@ export default class SceneManager {
       if (this.contextMenuHandler) this.contextMenuHandler(event);
     });
 
-    // 默认低俯角面向搭建区；六面/十二边/八角和三维复位仍复用原有 setView。
-    this.camera.position.set(0,500,2800);this.orbitControls.target.set(0,500,0);
-    this.camera.lookAt(this.orbitControls.target);this.orbitControls.update();
+    this.resetInitialView();
     this.animate();
+  }
+
+  /** 初始化从上前边看向搭建区；三维复位和其他命名视角仍保持原有语义。 */
+  resetInitialView() {
+    this.setView(new THREE.Vector3(0,1,1),new THREE.Vector3(0,500,0),3000,{immediate:true});
   }
 
   /** 仅裁掉负轴显示件及拾取件；正轴柄仍使用原 TransformControls 双向拖动事务。 */

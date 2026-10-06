@@ -140,14 +140,21 @@ function fmt(value) {
 }
 
 function buildReferenceSection(profile,faceClosures=[]) {
+  // 投影到设计目录不会改变具体型号已有的参考截面；数据库/DXF 仍优先。
+  const design=getDesignProfileDefinition(profile.id);
+  if(design?.sectionStyle==='CATALOG_REFERENCE')profile=getProfileDefinition(profile.id)||profile;
   const [width,height] = profile.sectionSize;
   const slotWidth = Math.min(Number(profile.slotWidth || Math.min(width,height) * 0.25), Math.min(width,height) * 0.45);
   const minSize = Math.min(width,height);
   const slotDepth = Math.max(1.6, Math.min(minSize * 0.17, 5));
   const variant = String(profile.variant || profile.nominal || profile.id || '').toUpperCase();
-  const designSection=getDesignProfileDefinition(profile.id)?buildDesignProfileSection(profile,faceClosures):null;
-  const outer = designSection?.outer || buildNotchedOuter(width,height,slotWidth,slotDepth);
-  const holes = designSection?.holes || buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
+  // 所有外轮廓沿用设计目录的真实槽面/槽位置；具体型号内腔仍保留原参考差异。
+  const designSection=design?buildDesignProfileSection(design,faceClosures):null;
+  const outer = designSection?.outer || buildNotchedOuter(width,height,slotWidth,slotDepth,faceClosures);
+  const referenceHoles = design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER'
+    ?buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth)
+    :designSection?.holes || buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
+  const holes=design?.sectionStyle==='CATALOG_REFERENCE'?fitReferenceHoles(referenceHoles,outer):referenceHoles;
   return normalizeSection({
     id: `REF-${profile.id}`,
     catalogId: profile.id,
@@ -163,22 +170,36 @@ function buildReferenceSection(profile,faceClosures=[]) {
   });
 }
 
-function buildNotchedOuter(width,height,slotWidth,slotDepth) {
+function buildNotchedOuter(width,height,slotWidth,slotDepth,faceClosures=[]) {
   const hw = width / 2;
   const hh = height / 2;
   const sx = Math.min(slotWidth / 2, hw * 0.45);
   const sy = Math.min(slotWidth / 2, hh * 0.45);
   const dx = Math.min(slotDepth, hw * 0.35);
   const dy = Math.min(slotDepth, hh * 0.35);
-  return [
-    p(-hw,-hh),p(-sx,-hh),p(-sx,-hh+dy),p(sx,-hh+dy),p(sx,-hh),p(hw,-hh),
-    p(hw,-sy),p(hw-dx,-sy),p(hw-dx,sy),p(hw,sy),p(hw,hh),
-    p(sx,hh),p(sx,hh-dy),p(-sx,hh-dy),p(-sx,hh),p(-hw,hh),
-    p(-hw,sy),p(-hw+dx,sy),p(-hw+dx,-sy),p(-hw,-sy)
-  ];
+  const closed=new Set(faceClosures);
+  return [p(-hw,-hh),
+    ...(closed.has('BACK')?[]:[p(-sx,-hh),p(-sx,-hh+dy),p(sx,-hh+dy),p(sx,-hh)]),p(hw,-hh),
+    ...(closed.has('RIGHT')?[]:[p(hw,-sy),p(hw-dx,-sy),p(hw-dx,sy),p(hw,sy)]),p(hw,hh),
+    ...(closed.has('FRONT')?[]:[p(sx,hh),p(sx,hh-dy),p(-sx,hh-dy),p(-sx,hh)]),p(-hw,hh),
+    ...(closed.has('LEFT')?[]:[p(-hw,sy),p(-hw+dx,sy),p(-hw+dx,-sy),p(-hw,-sy)])];
 }
 
 function buildVariantHoles(width,height,variant,wallThickness,slotWidth) {
+  // TXCK 目录第 1 页轻型 3030 A/B/H/T：四个 Ø4.2 角孔，中心 Ø6.8 参考孔。
+  if(width===30&&height===30&&['3030A','3030B','3030H','3030T'].includes(variant)) {
+    const result=[];
+    for(const x of [-11.5,11.5])for(const y of [-11.5,11.5])result.push(circlePoints(x,y,2.1,24));
+    result.push(circlePoints(0,0,3.4,32));
+    return result;
+  }
+  // TXCL 第 4 页 F/H/T 的四角为矩形内腔；此处仍是独立简化参考，不冒充精确图档。
+  if(width===40&&height===40&&['4040F','4040H','4040T'].includes(variant)) {
+    const result=[];
+    for(const x of [-14,14])for(const y of [-14,14])result.push(roundedRectPoints(x,y,6,6,.7));
+    result.push(circlePoints(0,0,3.4,32));
+    return result;
+  }
   const minSize = Math.min(width,height);
   const maxHoleW = Math.max(2, width / 2 - wallThickness * 3.2);
   const maxHoleH = Math.max(2, height / 2 - wallThickness * 3.2);
@@ -195,13 +216,11 @@ function buildVariantHoles(width,height,variant,wallThickness,slotWidth) {
   const holes = [];
 
   if (variant.endsWith('C')) {
-    const sideX = Math.min(width * 0.22,width / 2 - rectW * 0.38 - wallThickness * 1.4);
-    holes.push(roundedRectPoints(sideX,0,rectW * 0.68,height * 0.34,1.4));
-    holes.push(roundedRectPoints(-sideX,0,rectW * 0.68,height * 0.34,1.4));
+    for(const x of [-qx,qx])for(const y of [-qy,qy])holes.push(roundedRectPoints(x,y,rectW*.68,rectH*.68,1.1));
     holes.push(circlePoints(0,0,centerR,28));
   } else if (variant.endsWith('G')) {
-    holes.push(circlePoints(qx,qy,smallR,20),circlePoints(-qx,qy,smallR,20),circlePoints(qx,-qy,smallR,20),circlePoints(-qx,-qy,smallR,20));
-    holes.push(roundedRectPoints(0,0,minSize * 0.20,minSize * 0.20,0.8));
+    for(const x of [-qx,qx])for(const y of [-qy,qy])holes.push(roundedRectPoints(x,y,rectW*.78,rectH*.78,.6));
+    holes.push(circlePoints(0,0,centerR,28));
   } else if (variant.endsWith('H')) {
     holes.push(roundedRectPoints(qx,qy,rectW * 0.72,rectH * 0.72,1),roundedRectPoints(-qx,qy,rectW * 0.72,rectH * 0.72,1),roundedRectPoints(qx,-qy,rectW * 0.72,rectH * 0.72,1),roundedRectPoints(-qx,-qy,rectW * 0.72,rectH * 0.72,1));
     holes.push(circlePoints(0,0,centerR * 0.8,24));
@@ -232,6 +251,34 @@ function buildVariantHoles(width,height,variant,wallThickness,slotWidth) {
     holes.push(circlePoints(0,0,centerR,28));
   }
   return holes.filter(ring => ring.length >= 3);
+}
+
+/** 旧参考内腔必须留在新的真实槽轮廓内，避免相交孔使 Three.js 端面三角化破裂。
+ * 只约束内置示意孔；数据库/DXF 先返回，不收缩用户的精确截面。
+ */
+function fitReferenceHoles(holes,outer) {
+  const inside=point=>{
+    let result=false;
+    for(let i=0,j=outer.length-1;i<outer.length;j=i++) {
+      const a=outer[i],b=outer[j];
+      if((a.y>point.y)!==(b.y>point.y)&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)result=!result;
+    }
+    return result;
+  };
+  const result=[];
+  for(const ring of holes) {
+    const center=ring.reduce((sum,point)=>({x:sum.x+point.x/ring.length,y:sum.y+point.y/ring.length}),{x:0,y:0});
+    if(!inside(center))continue;
+    for(let attempt=0;attempt<12;attempt++) {
+      const factor=Math.pow(.8,attempt);
+      const candidate=ring.map(point=>({x:center.x+(point.x-center.x)*factor,y:center.y+(point.y-center.y)*factor}));
+      // 凹槽不能只检查顶点：同时取边上点，避免孔边跨过槽口。
+      if(candidate.every((point,index)=>{const next=candidate[(index+1)%candidate.length];return [0,.25,.5,.75].every(t=>inside({x:point.x+(next.x-point.x)*t,y:point.y+(next.y-point.y)*t}));})) {
+        result.push(candidate);break;
+      }
+    }
+  }
+  return result;
 }
 
 function normalizeSection(section) {

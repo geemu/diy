@@ -90,7 +90,7 @@ export function getSlotDefinitionsForFace(part,face){
   const definition=getDesignProfileDefinition(part?.designProfile?.profileId);
   if(!definition)return [];
   const explicit=(definition.slotDefinitions||[]).filter(slot=>slot.face===normalizedFace);
-  if(explicit.length)return explicit.map(slot=>({...slot}));
+  if(explicit.length||definition.sectionStyle==='CATALOG_REFERENCE')return explicit.map(slot=>({...slot}));
   const [widthRaw,heightRaw]=part?.dimensions?.sectionSize||definition.sectionSize||[30,30];
   const span=['FRONT','BACK'].includes(normalizedFace)?Number(widthRaw||30):Number(heightRaw||30);
   const series=Math.max(1,Number(definition.series||inferSeries(span)||30));

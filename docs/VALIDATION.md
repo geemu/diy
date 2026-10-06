@@ -1,4 +1,38 @@
-# Validation / Regression — v0.74.0
+# Validation / Regression — v0.75.2
+
+## v0.75.2 当前检查范围
+
+2026-10-06：144 个 JS/MJS 语法检查、43 个 verify 回归全部通过；JDK 21.0.11 Maven -o clean test 成功，1 项测试、0 失败、0 错误。随后 process-resources 更新最终窄屏 CSS；Schema 62 不变。
+
+- verify-workbench-footer-v0752 检查 viewport 在 canvas-stage 中、主工具/快捷旋转/状态栏在独立 footer 中、组件拖放只作用于 stage、旧 toolbar 坐标不再恢复、View Cube 位置保留，以及 ResizeObserver 创建/清理。原 v051 契约同步为主工具条停靠，不再要求可拖动。
+- Chrome 1600×1000 实测画布高度 866 px，底栏从 Y=914 到 1000、高度 86 px；实际 WebGL canvas 和 stage 完全一致，画布下边缘与底栏上边缘 gap=0。没有用视觉遮挡充当占位。
+- 实测 1920 / 1360 / 1000 / 900 / 700 px 窗宽，空白、绘制和选择后状态下可见底栏按钮均位于底栏内，无页面横向溢出；底栏换行会自动更新 WebGL 尺寸，未改变模型单位/坐标。关闭的 details 菜单不作为可见按钮统计。
+- 独立 900×700 / DPR 2 浏览器注入旧 toolbar 浮动坐标与 View Cube 位置：主工具条无 inline left/top 或 layout-custom-position，View Cube 保留自定义位置。绘制时底栏高 112 px、操作提示可见，WebGL 像素尺寸匹配实际画布；Esc 清理未完成段，无工程构件提交。
+- 实际通过底栏确认 500 mm 型材，完成后退出 FREE、保留 1 根构件；快捷旋转位于 footer 内并可用。更多菜单向上展开且处于窗口内，点击测量启动真实工具并自动收起菜单。
+- 测试使用独立浏览器工程，不修改用户主 Chrome；应用 pageerror=[]。截图 v0752-workbench-footer.png、v0752-footer-narrow-drawing-dpr2.png、v0752-footer-selected-dpr2.png 位于本轮 Codex visualizations 目录。
+
+## v0.75.1 当前检查范围
+
+2026-10-06：143 个 JS/MJS node --check、42 个 verify 回归全部通过；JDK 21.0.11 Maven -o clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。验证在独立 Chrome 工程进行，不修改用户主浏览器工程。
+
+- verify-profile-selector-v075 增加 11 个已核实型号 × 4 个侧面 = 44 个几何/槽位用例。封闭侧必须真实射线命中外壁且没有槽位，开放侧保留槽位；参考孔位于外轮廓内。包括 2020A/B、3030A/B/H/T、3060A/B、4040F/H/T。A/B 外轮廓不能相同，批量 B→A 清除旧默认封面但保留额外手工封边；预览朝向露出封面。
+- 独立浏览器实际复看标准 3030、3030A/B/H/T/R、2020A/B、4040F/H/T 的预览和封面提示，几何差异可见；4040F 四面开槽、4040H 上下封闭、4040T 三侧封闭。截面为参考级，未对全部型号做制造精度验证。
+- 实际绘制 500 mm 的 3030A 与 4040T，工程保留具体 ID/默认封面。勾选连续添加后确认仍在 FREE；点击取消当前段清除当前起点并保留已完成构件；主工具条结束后 active=false、draw-hud 数量=0。A→B→A 属性切换不残留 RIGHT，保存 JSON / 加载恢复 A 与其默认 BACK。
+- 启动/新建空白的相机归一化方向为 (0,0.70710678,0.70710678)，没有右向偏移；小房子和适配原有三维语义不变。静态真实 setView 方法亦验证观察距离为 3000。
+- 1600×1000 下绘制工具栏高 48 px，唯一 draw-hud 处于该工具栏内且 position=static，没有独立大卡片。900×700 / DPR 2 下工具条 312×48 px，处于画布内，结束文字可见；Esc 一次退出并移除绘制行。
+- 应用 pageerror 为 0；仅有原有 favicon.ico 404，不将此表述为 console 全部无错误。预览截图 v0751-preview-*.png、v0751-compact-drawing-bar.png、v0751-compact-drawing-narrow-dpr2.png 位于本轮 Codex visualizations 目录。
+- 官方 PDF 通过下载/Poppler 渲染逐页只读检查；封闭面依据和局部方向转换见 reference/profile-section-review-2026-10-06-v0751.md。未改数据库/DXF 精确 section，不自动完成制造配置，不宣称专有模型或目录所有型号已经精确复刻。
+
+## v0.75.0 当前检查范围
+
+2026-10-06：143 个 JS/MJS 语法检查、42 个 verify 回归；JDK 21.0.11 Maven clean test 成功，1 项测试、0 失败、0 错误。Schema 62 不变。
+
+- 新 verify-profile-selector-v075 检查 20 个外尺寸组、42 个内置可选设计几何、3030 二级型号、尺寸切换重置、同项不重复提交、具体型号参考内腔差异与封边轮廓、槽位单一来源、制造属性隔离、真实几何有限性及 Schema JSON 往返。动态目录按尺寸归组，数据库 section 优先，显式无槽不提供虚构槽位。标准 DesignProfileList 仍为 23 项。
+- Chrome 8081 独立窗口实际选择 3030 → 3030A，预览标题/槽宽跟随；画布绘制 500 mm，完成退出 FREE，属性显示 EU30-3030A。属性切换 3030B 保持长度；exportProject → JSON 序列化 → loadProject 实际恢复具体 ID/长度，manufacturingProfile=null。
+- 实际改选 4040 后二级回到标准 4040，显示该组已有 F/H/T/R 等项，无残留 3030A；未完成段切换为 4040F，在规格框聚焦时 Esc 退出，原已完成构件保留，无额外构件提交。
+- 初次进入、新建空白、切到正面再点小房子，归一化方向均恢复 (0.6164,0.4900,0.6164)；正面方向为 (0,0,1)。同时可见上/前/右，不强制覆盖用户后续手动操作。
+- 连接、光轴、板材、配件实际切换后均有级联选择和一个三维预览；未增改其目录定义。当前 browser pageerror/console error=[]。v075-profile-family-selector.png 和 v075-model-draw-and-axis-direction.png 位于当前 Codex visualizations 目录。
+- 3030N1 没有现存目录/截面；不宣称已支持。型号的内置参考截面不是制造精确图档，生产仍须实际截面与制造配置。所有浏览器测试使用独立工程，不修改用户主 Chrome 中的工程。
 
 ## v0.74.0 当前检查范围
 

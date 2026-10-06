@@ -751,6 +751,11 @@ button:disabled{cursor:not-allowed;opacity:.35}
 .resource-category-tabs button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .resource-category-tabs button:hover{border-color:#ffffff44}
 .profile-catalog-content{padding:0 20px}.profile-catalog-content>.field-stack{margin:0 0 12px}
+.profile-selector .field-stack{margin:0 0 16px;min-width:0}
+.profile-selector .field-stack>label{display:block;font-size:14px;font-weight:500;line-height:20px;margin-bottom:6px}
+.profile-selector select{width:100%;min-width:0}
+.catalog-section-info{margin:8px 0 0;color:#cbd5e1;font-size:11px;line-height:1.5}
+.quick-rotate-bar .rotate-space-toggle{font-size:12px;padding:5px 8px;white-space:nowrap}
 .profile-catalog-content label{font-size:13px;color:#9ca3af}
 .profile-catalog-content select{width:100%;height:42px;border:1px solid #333;background:#1a1a1a;border-radius:8px;color:#f3f4f6;padding:0 12px;font-size:13px}
 .catalog-profile-preview{display:block;width:100%;padding:12px;background:#03070c;border:1px solid #ffffff1a;border-radius:12px;cursor:pointer;text-align:left;color:#9ca3af;overflow:hidden}
@@ -831,6 +836,9 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .profile-manager-actions button:hover{background:#242a38;border-color:var(--accent);color:var(--accent)}
 .selected-title-card,.property-readonly,.connection-guide,.connection-guide.ready{background:#101320;color:#d1d5db;border-color:#ffffff1a}
 .selected-kind,.property-readonly.manufacturing-code{background:var(--accent-soft);color:var(--accent);border-color:rgba(255,138,0,.24)}
+.face-closure-buttons button{background:#101320;color:#d1d5db;border-color:#ffffff24}
+.face-closure-buttons button:is(:hover,:focus-visible,.active){background:#241b13;color:var(--accent);border-color:var(--accent)}
+.face-closure-buttons button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .quick-operation-heading{background:#020617;border-color:var(--line);color:#e5e7eb}
 .quick-operation-content .panel-heading{padding:14px}
 .profile-grip-tip{background:#101320;border-color:#ffffff1a;color:#9ca3af}
@@ -860,6 +868,11 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .draw-hud-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.draw-hud-actions .inline-check{margin:0 auto 0 0;color:#9ca3af;white-space:nowrap;font-size:11px}
 .draw-hud-actions button{height:30px;padding:0 9px;font-size:11px;white-space:nowrap}.draw-hud em{font-style:normal;color:#9ca3af;font-size:10px}
 .draw-hud kbd{border:1px solid #ffffff33;background:#ffffff14;color:#fff;padding:1px 4px;border-radius:4px;font-size:10px}
+.canvas-transform-bar .draw-hud{position:static;display:flex;flex-direction:row;align-items:center;gap:6px;inset:auto;transform:none;width:auto;max-width:none;padding:0 0 0 6px;border:0;border-left:1px solid #0000001a;border-radius:0;background:transparent;box-shadow:none;color:#334155}
+.canvas-transform-bar .draw-hud .inline-check{margin:0 4px;gap:5px;white-space:nowrap;color:#334155;font-size:11px}
+.canvas-transform-bar.is-drawing{flex-wrap:wrap;justify-content:center}
+.canvas-transform-bar.is-drawing .draw-tool>span{display:inline!important}
+.drawing-status{color:#a75c12!important}
 .profile-length-input{border-color:var(--accent)}.profile-length-input input{color:#9a4c00}
 .context-menu{background:#11131d;border-color:#ffffff24;color:#d1d5db}.context-menu-cad .context-menu-head{color:#d1d5db;border-color:var(--line)}
 .context-menu-cad button{color:#d1d5db}.context-menu-cad button:hover:not(:disabled){background:#ffffff0d;color:var(--accent)}
@@ -891,4 +904,29 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
   .quick-operation-panel{top:0;bottom:240px;border:1px solid var(--line);border-radius:8px}
   .draw-hud{z-index:35;left:12px;right:12px;transform:none;width:auto}
   .canvas-transform-bar .transform-tool{min-width:36px;padding:0 5px}.canvas-transform-bar .transform-tool>span:not(.workbench-icon){display:none}
+}
+
+/* v0.75.2：底栏参与真实布局，画布到此结束，不再用悬浮条盖住模型。 */
+.canvas-shell{display:flex;flex-direction:column}
+.canvas-stage{position:relative;flex:1;min-width:0;min-height:0;overflow:hidden;background:#e0f2fe}
+.workbench-footer{position:relative;flex:0 0 auto;min-width:0;border-top:1px solid #cad5e1;background:#eaf0f6;z-index:12}
+.workbench-tools-row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 12px;padding:6px 10px}
+.workbench-footer .canvas-transform-bar,
+.workbench-footer .quick-rotate-bar{position:relative;inset:auto;transform:none!important;max-width:100%;width:auto;height:auto;min-height:36px;flex-wrap:wrap;justify-content:center;margin:0;padding:0;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none;touch-action:auto}
+.workbench-footer .canvas-transform-bar{gap:4px;overflow:visible}
+.workbench-footer .quick-rotate-bar{gap:4px}
+.workbench-footer .canvas-transform-bar .draw-hud{flex-wrap:wrap;justify-content:center;padding-left:6px}
+.workbench-footer .canvas-bottom-bar{position:relative;inset:auto;width:100%;height:auto;min-height:34px;flex-wrap:wrap;gap:2px;padding:4px 8px;border:0;border-top:1px solid #d4dee8;border-radius:0;background:#e4ebf3!important;backdrop-filter:none;overflow:visible}
+.workbench-footer .status-label{min-width:0;max-width:240px}
+.workbench-footer .drawing-status{display:inline!important}
+.workbench-footer .toolbar-more{position:relative}
+.workbench-footer .toolbar-more .cad-menu-popover{bottom:42px;max-height:min(360px,calc(100vh - 180px));overflow-y:auto;z-index:30}
+@media(max-width:900px){
+  .workbench-tools-row{padding:5px 6px;gap:4px}
+  .workbench-footer .canvas-transform-bar .transform-tool{min-width:32px;padding:0 3px}
+  .workbench-footer .toolbar-more>summary{padding:0 5px}
+  .workbench-footer .quick-rotate-bar button{min-width:0;padding:0 6px;font-size:11px}
+  .workbench-footer .canvas-bottom-bar{padding:3px 5px}
+  .workbench-footer .canvas-bottom-bar button{padding:0 6px}
+  .workbench-footer .status-label{max-width:160px}
 }

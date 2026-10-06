@@ -6,13 +6,13 @@ const STORAGE_KEY = 'aluminum-cad-workbench-layout-v1';
  * 设计目标：
  * 1. 左/右面板默认停靠，不遮挡三维画布；拖动标题条后自动变成浮动面板。
  * 2. 浮动面板和画布浮动工具不会被拖出可视区域。
- * 3. 面板宽度、浮动位置和工具条位置保存到浏览器本地。
+ * 3. 面板宽度和视角导航位置保存到浏览器本地；主工具条固定在工作台底部。
  * 4. 布局变化后统一触发 resize，让 Three.js 立即匹配新的画布尺寸。
  */
 export default class WorkbenchLayoutManager {
   constructor(options = {}) {
     this.workspace = options.workspace || document.querySelector('.workspace');
-    this.canvas = options.canvas || document.querySelector('.canvas-shell');
+    this.canvas = options.canvas || document.querySelector('.canvas-stage');
     this.storageKey = options.storageKey || STORAGE_KEY;
     this.panels = new Map();
     this.floaters = new Map();
@@ -26,7 +26,8 @@ export default class WorkbenchLayoutManager {
     if (!this.workspace || !this.canvas) return this;
     this.bindPanel('library','.library-panel','right',344);
     this.bindPanel('inspector','.inspector-panel','right',344);
-    this.bindFloater('toolbar','.canvas-transform-bar');
+    // 底部工具条已停靠：旧的 toolbar 浮动坐标不得再覆盖正常文档布局。
+    if(this.state.floaters)delete this.state.floaters.toolbar;
     this.bindFloater('viewCube','.view-cube');
     this.applyStoredLayout();
     const onResize = () => this.clampAll();

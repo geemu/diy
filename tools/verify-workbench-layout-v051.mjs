@@ -13,7 +13,7 @@ const css=read('css/app.css');
 const app=read('js/app.js');
 const layout=read('js/ui/WorkbenchLayoutManager.js');
 
-for(const token of ['data-layout-drag="library"','data-layout-drag="inspector"','data-layout-resize="library"','data-layout-resize="inspector"','data-floating-drag="toolbar"','data-floating-drag="viewCube"','复位工作台布局']){
+for(const token of ['data-layout-drag="library"','data-layout-drag="inspector"','data-layout-resize="library"','data-layout-resize="inspector"','class="workbench-footer"','data-floating-drag="viewCube"','复位工作台布局']){
   assert.ok(html.includes(token),`index.html missing ${token}`);
 }
 for(const token of ['layout-floating','--library-track','--inspector-track','floating-drag-handle','engineering-locatable']){
@@ -32,10 +32,10 @@ assert.ok(layout.includes('window.dispatchEvent(new Event(\'resize\'))'),'布局
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.74.0',
+  version:'0.75.2',
   draggablePanels:true,
   resizablePanels:true,
-  draggableToolbar:true,
+  dockedToolbar:true,
   draggableViewCube:true,
   persistedLayout:true,
   resetLayout:true,
