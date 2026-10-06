@@ -529,7 +529,7 @@
           </div>
           <template v-if="!drawState.active">
           <div class="float-divider"></div>
-          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" data-tip="移动 W"><i class="workbench-icon" v-html="workbenchIcon('move')"></i><span>移动</span></button>
+          <button class="transform-tool" :class="{active:toolMode==='translate'&&!drawState.active}" @click="setMode('translate')" data-tip="移动 W · 方向键小步移动，Shift 加速；Tab 输入精确距离"><i class="workbench-icon" v-html="workbenchIcon('move')"></i><span>移动</span></button>
           <button class="transform-tool" :class="{active:toolMode==='rotate'&&!drawState.active}" @click="setMode('rotate')" data-tip="旋转 R"><i class="workbench-icon" v-html="workbenchIcon('rotate')"></i><span>旋转</span></button>
           <div class="float-divider"></div>
           <button class="transform-tool" @click="duplicateSelected" :disabled="!selected" data-tip="复制 控制键+D"><i class="workbench-icon" v-html="workbenchIcon('batch')"></i><span>复制</span></button>
@@ -839,7 +839,7 @@
   <div v-if="toast.visible" class="toast" :class="toast.type">{{toast.text}}</div>
 
   <div v-if="showShortcutHelp" class="modal-backdrop" @mousedown.self="showShortcutHelp=false">
-    <section class="modal-card shortcut-modal"><div class="modal-header"><div><h3>快捷键</h3><div class="modal-subtitle">常用设计操作</div></div><button class="modal-close" @click="showShortcutHelp=false">×</button></div><div class="shortcut-grid"><span>自由绘制</span><kbd>E</kbd><span>绘制时锁轴 / 解除</span><kbd>X / Y / Z</kbd><span>绘制时斜向 / 正交</span><kbd>Alt / Shift</kbd><span>移动</span><kbd>W / M</kbd><span>旋转</span><kbd>R</kbd><span>X / Y / Z 旋转 +90°</span><kbd>Alt+X / Alt+Y / Alt+Z</kbd><span>自由选择</span><kbd>L</kbd><span>组合组件</span><kbd>Ctrl+G</kbd><span>取消组合</span><kbd>Ctrl+Shift+G</kbd><span>删除</span><kbd>Del</kbd><span>取消</span><kbd>Esc</kbd><span>适配视图</span><kbd>F</kbd></div><div class="modal-actions"><button class="primary-button" @click="showShortcutHelp=false">知道了</button></div></section>
+    <section class="modal-card shortcut-modal"><div class="modal-header"><div><h3>快捷键</h3><div class="modal-subtitle">常用设计操作</div></div><button class="modal-close" @click="showShortcutHelp=false">×</button></div><div class="shortcut-grid"><span>自由绘制</span><kbd>E</kbd><span>绘制时锁轴 / 解除</span><kbd>X / Y / Z</kbd><span>绘制时斜向 / 正交</span><kbd>Alt / Shift</kbd><span>移动工具</span><kbd>W</kbd><span>按画面方向小步移动</span><kbd>↑ / ↓ / ← / →</kbd><span>快速 / 前后移动</span><kbd>Shift+方向键 / PageUp·Down</kbd><span>输入距离 / 切换移动轴</span><kbd>Tab / Shift+Tab</kbd><span>距离确认 / 取消拖动</span><kbd>Enter / Esc</kbd><span>连接件安装候选切换</span><kbd>Tab</kbd><span>测量</span><kbd>M</kbd><span>旋转</span><kbd>R</kbd><span>X / Y / Z 旋转 +90°</span><kbd>Alt+X / Alt+Y / Alt+Z</kbd><span>自由选择</span><kbd>L</kbd><span>组合组件</span><kbd>Ctrl+G</kbd><span>取消组合</span><kbd>Ctrl+Shift+G</kbd><span>删除</span><kbd>Del</kbd><span>取消</span><kbd>Esc</kbd><span>适配视图</span><kbd>F</kbd></div><div class="modal-actions"><button class="primary-button" @click="showShortcutHelp=false">知道了</button></div></section>
   </div>
 
   <div v-if="manufacturingConfigVisible" class="modal-backdrop engineering-center-backdrop" @mousedown.self="manufacturingConfigVisible=false">

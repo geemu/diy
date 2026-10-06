@@ -1088,7 +1088,7 @@ createApp({
         event.preventDefault();stopProfileDraw();return;
       }
       const target = event.target;
-      if (target && ['INPUT','SELECT','TEXTAREA'].includes(target.tagName)) return;
+      if (target && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName)||target.isContentEditable)) return;
       if(event.key==='Tab'&&connectionPlacementState.active){event.preventDefault();editor?.connectionPlacementManager.cycleCandidate(event.shiftKey?-1:1);return;}
       if(event.altKey&&!event.ctrlKey&&!event.metaKey&&['x','y','z'].includes(event.key.toLowerCase())) {
         event.preventDefault();if(!event.repeat)quickRotate(event.key.toUpperCase());return;
@@ -1096,6 +1096,9 @@ createApp({
       if (drawState.active && !event.ctrlKey && !event.metaKey) {
         const handled=editor?.profileDrawTool.handleKeyDown?.(event)===true;
         if(handled){event.preventDefault();return;}
+      }
+      if(!drawState.active&&!connectionPlacementState.active&&!accessoryPlacementState.active&&!machiningPlacementState.active&&!measureMode.value&&!dimensionMode.value&&!boxSelectMode.value&&!lassoSelectMode.value&&!featureSelectMode.value&&!contextMenu.visible&&!jointQuickMenu.visible&&!relationQuickMenu.visible){
+        if(editor?.axisClearanceManager.handleKey(event)){event.preventDefault();return;}
       }
       if (event.ctrlKey || event.metaKey) {
         if (event.key.toLowerCase() === 's') {

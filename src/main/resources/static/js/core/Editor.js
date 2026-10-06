@@ -410,26 +410,46 @@ export default class Editor {
   }
 
   /** 沿轴贴合复用 Gizmo 事务；干涉只告警并保留位置，连接和历史仍统一提交。 */
-  moveSelectionToSurface(delta,targetPartId=null){
+  moveSelectionToSurface(delta,targetPartId=null,fromDragStart=false){
     if(!this.selected||!this.isMeshTransformable(this.selected))throw new Error('先选择可移动的构件');
     if(!delta||![delta.x,delta.y,delta.z].every(Number.isFinite))throw new Error('移动距离无效');
     const controls=this.sceneManager.transformControls;
-    const expected=this.selected.position.clone().add(delta);
+    const expected=(fromDragStart&&this.transformSelectionSnapshot?this.transformSelectionSnapshot.primaryPosition:this.selected.position).clone().add(delta);
     this.axisClearanceCommit={targetPartId};this.quickRotationBlocked=false;
     try{
-      controls.dispatchEvent({type:'mouseDown'});
+      if(!this.transformSelectionSnapshot)controls.dispatchEvent({type:'mouseDown'});
       this.selected.position.copy(expected);this.selected.updateMatrixWorld(true);
       controls.dispatchEvent({type:'objectChange'});
       if(this.selected.position.distanceTo(expected)>0.1){
         const snapshot=this.transformSelectionSnapshot;
-        this.restoreTransformSnapshot(snapshot);this.transformSelectionSnapshot=null;
+        this.restoreTransformSnapshot(snapshot);this.transformSelectionSnapshot=null;controls.dragging=false;
+        this.accessoryMountManager.refreshForTargets(this.meshes.map(mesh=>mesh.userData.part?.id).filter(Boolean));this.updateDimensions();this.emitStats();this.emitProjectChanged();
         this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback();this.sceneManager.hideTransformFeedback();
         this.onSnapChanged?.(null);this.interferenceFeedbackManager.requestRefresh();
         throw new Error('当前约束不允许沿这个方向移动到目标面');
       }
+      controls.dragging=false;
       controls.dispatchEvent({type:'mouseUp'});
       return true;
     }finally{this.axisClearanceCommit=null;this.sceneManager.transformPointerActive=false;}
+  }
+
+  moveSelectionByDistance(axis,distance){
+    if(!/^[XYZ]$/.test(axis)||!Number.isFinite(distance))throw new Error('移动轴或距离无效');
+    if(!this.selected||this.selectedMeshes.some(mesh=>!this.isMeshTransformable(mesh)))throw new Error('所选构件包含锁定或已安装配件，请调整选择');
+    if(distance===0&&!this.transformSelectionSnapshot)return false;
+    const direction=new THREE.Vector3(axis==='X'?1:0,axis==='Y'?1:0,axis==='Z'?1:0);
+    if(this.transformSpace==='local')direction.applyQuaternion(this.selected.getWorldQuaternion(new THREE.Quaternion()));
+    return this.moveSelectionToSurface(direction.multiplyScalar(distance),null,true);
+  }
+
+  cancelPrecisionMove(){
+    const snapshot=this.transformSelectionSnapshot;if(!snapshot)return;
+    this.restoreTransformSnapshot(snapshot);this.transformSelectionSnapshot=null;
+    this.sceneManager.transformControls.dragging=false;this.sceneManager.transformPointerActive=false;
+    this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback();this.sceneManager.hideTransformFeedback();this.onSnapChanged?.(null);
+    this.accessoryMountManager.refreshForTargets(this.meshes.map(mesh=>mesh.userData.part?.id).filter(Boolean));
+    this.updateDimensions();this.emitStats();this.emitProjectChanged();this.interferenceFeedbackManager.requestRefresh();
   }
 
 

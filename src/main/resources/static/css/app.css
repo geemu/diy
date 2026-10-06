@@ -977,6 +977,8 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .axis-clearance-panel [data-ground="below"]{background:#fff0d6;color:#9b5800;box-shadow:inset 0 0 0 1px #efb960}
 .axis-clearance-panel button.has-interference{color:#be2525;border-color:#edb0b0;background:#fff1f1}
 .axis-clearance-panel strong{color:#315a85}
+.axis-clearance-panel input[data-distance]{width:76px;min-height:30px;padding:3px 6px;background:#f8fbff;color:#263c53;border:1px solid #b4c9df;border-radius:6px;font-size:12px;font-variant-numeric:tabular-nums}
+.axis-clearance-panel input[data-distance]:focus{background:#fff;color:#263c53;border-color:#f39322;outline:2px solid #f3932240}
 .axis-clearance-panel select{width:155px;min-height:30px;padding:3px 6px;background:#f8fbff;color:#263c53;border:1px solid #b4c9df;border-radius:6px;font-size:11px}
 .axis-clearance-panel select:focus,.axis-clearance-panel select:hover{background:#fff;color:#263c53;border-color:#f39322}
 .axis-clearance-panel select option{background:#f8fbff;color:#263c53}

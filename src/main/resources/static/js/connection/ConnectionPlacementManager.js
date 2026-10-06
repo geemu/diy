@@ -49,6 +49,7 @@ export default class ConnectionPlacementManager {
     if(part?.type!=='ACCESSORY'||!mode)throw new Error('这个组件暂未配置接头安装规则');
     if(!this.editor.isMeshTransformable(mesh)||part.generatedByConnectionId)throw new Error('请先解除安装或解锁该连接件');
     if(this.editor.constraintManager?.constraints?.some(c=>c.partA===partId||c.partB===partId||c.sourcePartId===partId||c.targetPartId===partId))throw new Error('该连接件已有约束，请先解除约束');
+    if(this.editor.userDimensions?.some(d=>[d.anchorStart?.partId,d.anchorEnd?.partId,d.binding?.partId,d.binding?.sourcePartId,d.binding?.targetPartId].includes(partId)))throw new Error('该连接件已有尺寸引用，请先移除相关标注后再吸附安装');
     this.begin(mode,{existingPartId:partId,componentDefinition:{id:part.hardwareSku,label:part.name,accessoryType:part.accessoryType,color:part.color,dimensions:structuredClone(part.dimensions)}});
   }
 
