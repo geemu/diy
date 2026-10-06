@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const html=fs.readFileSync(path.join(root,'src/main/resources/static/index.html'),'utf8');
+const app=fs.readFileSync(path.join(root,'src/main/resources/static/js/app.js'),'utf8');
+const schema=fs.readFileSync(path.join(root,'src/main/resources/static/js/io/ProjectSchema.js'),'utf8');
+assert.ok(!html.includes('世界')&&!html.includes('局部轴'),'用户界面不再暴露世界/局部轴术语');
+assert.ok(html.includes('<label>镜像方向</label>')&&html.includes('<label>对称位置</label>'));
+assert.ok(html.includes('value="WORLD_ORIGIN">以画布原点为基准')&&html.includes('value="SELECTION_CENTER">以所选构件中心为基准'),'只改文案，不改镜像参数身份');
+assert.ok(html.includes('画布原点（坐标轴交点）')&&html.includes('所选构件的整体中心'));
+assert.ok(!app.includes('构件方向（局部）')&&!app.includes('画布方向（世界）'));
+assert.ok(html.includes('batch-selection-guide')&&html.includes("selectionCount?'已选中 '")&&html.includes('先退出绘制'));
+for(const action of ['duplicateArray','mirrorSelection','circularArray'])assert.ok(html.includes(`:disabled="!selectionCount" @click="${action}"`),'批量操作仍需先选构件，不能改成对整个工程执行');
+assert.ok(html.includes('围绕下方选定的中心旋转复制'),'描述不能把画布原点错误说成所选中心');
+console.log(JSON.stringify({ok:true,version:schema.match(/CURRENT_APP_VERSION = '([^']+)'/)[1],plainChineseTerminology:true,selectionGuidance:true,batchScopeUnchanged:true,domainOptionsUnchanged:true}));
