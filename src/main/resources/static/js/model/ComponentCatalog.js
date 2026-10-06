@@ -17,6 +17,15 @@ export const APillarLengthOptions = category('连接').variants.at(-1).selects[2
 export const APillarSideOptions = category('连接').variants.at(-1).selects[3].options;
 export function profileId(label) { return label.includes('A柱')?'DESIGN-U88':`DESIGN-${label.replace('欧标','').replace('x','')}`; }
 export function connectionSpecs(type) { return category('连接').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []; }
+/** 只有已有接头规则覆盖的组件才进入自动安装；不能把任意多向件当成直角角码。 */
+export function connectionDesignType(definition) {
+  const d=definition?.dimensions||{};
+  if(Number(d.size)===15)return null;
+  if(['L_BRACKET','ANGLE_BRACKET','CORNER_CUBE','HEAVY_CORNER'].includes(d.geometryKind)&&Math.abs(Number(d.angle||90)-90)<.01)return 'ANGLE_BRACKET';
+  if(d.geometryKind==='INNER_BRACKET')return 'INTERNAL_CONNECTOR';
+  if(['FLAT_PLATE','T_PLATE','L_PLATE','CROSS_PLATE'].includes(d.geometryKind)&&Math.abs(Number(d.angle||90)-90)<.01)return 'CONNECTION_PLATE';
+  return null;
+}
 export function shaftDiametersFor(type) { return (category('光轴').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []).map(x=>Number(x.value)); }
 export function fastenerThreads(head) { return Object.keys(data.fasteners[head] || {}).map(Number); }
 export function fastenerLengths(head,diameter) { return data.fasteners[head]?.[diameter] || []; }

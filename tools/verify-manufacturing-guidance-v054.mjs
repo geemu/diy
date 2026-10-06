@@ -35,7 +35,7 @@ const editor={
 editor.manufacturingIdentityManager=new ManufacturingIdentityManager(editor);
 editor.manufacturingIdentityManager.reconcile();
 
-assert.equal(CURRENT_APP_VERSION,'0.75.10');
+assert.equal(CURRENT_APP_VERSION,'0.75.13');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 assert.equal(p1.manufacturingCode,'P001');
 assert.equal(p2.manufacturingCode,'P002');

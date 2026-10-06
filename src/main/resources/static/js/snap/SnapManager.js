@@ -97,7 +97,7 @@ export default class SnapManager {
     const snap = {...candidate.snap,candidateIndex:1,candidateCount:normalCandidates.length || 1,preview:true};
     this.editor.sceneManager.showSnapPreview(candidate.sourcePoint,candidate.targetPoint,snap);
     this.editor.sceneManager.showSnapSurface?.(this.editor.getMeshByPartId(snap.targetProfileId),snap);
-    const alignmentLabel=this.editor.sceneManager.showCoplanarPreview?.(mesh,this.editor.getMeshByPartId(snap.targetProfileId));
+    const alignmentLabel=this.editor.sceneManager.showCoplanarPreview?.(mesh,this.editor.getMeshByPartId(snap.targetProfileId),candidate.delta);
     this.editor.sceneManager.showSnapFeedback?.({
       status:'valid',
       label:snap.feedbackLabel || snapTypeLabel(snap.type),
@@ -114,6 +114,15 @@ export default class SnapManager {
     const candidate = session.candidates[session.index];
     this.previewLockKey = candidate.key;
     return this.applyCandidate(mesh,session.index);
+  }
+
+  /** 方向贴合只允许提交当前指定目标的零间隙端面候选，不重新跳向附近的槽中心。 */
+  snapToTarget(mesh,targetPartId){
+    mesh.updateMatrixWorld(true);
+    const candidate=this.collectCandidates(mesh,0.1).find(row=>row.snap.targetProfileId===targetPartId&&row.snap.type==='END_TO_FACE'&&!this.candidateCollision(mesh,row));
+    if(!candidate){mesh.userData.lastSnap=null;return null;}
+    this.lastSession={sourceId:mesh.userData.part.id,originPosition:mesh.position.clone(),candidates:[candidate],index:0};
+    return this.applyCandidate(mesh,0);
   }
 
   applyCandidate(source,index) {
@@ -173,7 +182,7 @@ export default class SnapManager {
   candidateCollision(source,candidate,originPosition=source.position){
     const manager=this.editor.interferenceFeedbackManager;
     const moving=source===this.editor.selected?this.editor.currentTransformMeshes?.()||[source]:[source];
-    const meshes=moving.includes(source)?moving:[source];
+    const meshes=moving.includes(source)?[...new Set([...moving,...(source===this.editor.selected&&!this.editor.transformSelectionSnapshot?this.editor.transformFollowersForScope?.(source)||[]:[])])]:[source];
     const movingSet=new Set(meshes);
     const delta=originPosition.clone().add(candidate.delta).sub(source.position);
     const item=(mesh,offset)=>{

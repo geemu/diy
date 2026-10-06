@@ -13,7 +13,7 @@
 
     <groupId>com.paic.stock</groupId>
     <artifactId>diy</artifactId>
-    <version>0.75.10</version>
+    <version>0.75.13</version>
     <name>diy</name>
     <description>Browser-based aluminum profile DIY builder and manufacturing assistant</description>
 

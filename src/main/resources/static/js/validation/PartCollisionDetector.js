@@ -125,6 +125,36 @@ export function pointInObbCoordinates(point,obb) {
   return obb.axes.map(axis => dot(delta,axis));
 }
 
+/**
+ * 沿单位方向平移至另一型材包络的首次接触距离，单位 mm。
+ * 对全部 SAT 轴求允许平移区间的交集；横向错开的杆件不会被当作前方目标。
+ * 这是表面间隙，不是中心距离，也不把外包络内的孔槽冒充精确实体。
+ */
+export function sweepObbContact(a,b,direction){
+  if(!a||!b||!direction)return null;
+  const length=Math.hypot(direction.x,direction.y,direction.z);
+  if(!Number.isFinite(length)||length<1e-9)return null;
+  const u=scale(direction,1/length),axes=[...a.axes,...b.axes];
+  for(const x of a.axes)for(const y of b.axes){
+    const n={x:x.y*y.z-x.z*y.y,y:x.z*y.x-x.x*y.z,z:x.x*y.y-x.y*y.x};
+    const size=Math.hypot(n.x,n.y,n.z);if(size>1e-7)axes.push(scale(n,1/size));
+  }
+  let entry=-Infinity,exit=Infinity;
+  const delta=sub(b.center,a.center);
+  for(const n of axes){
+    const radius=a.half.reduce((sum,h,i)=>sum+h*Math.abs(dot(a.axes[i],n)),0)+b.half.reduce((sum,h,i)=>sum+h*Math.abs(dot(b.axes[i],n)),0);
+    const offset=dot(delta,n),speed=dot(u,n);
+    if(Math.abs(speed)<1e-9){if(Math.abs(offset)>radius+1e-6)return null;continue;}
+    const t1=(offset-radius)/speed,t2=(offset+radius)/speed;
+    entry=Math.max(entry,Math.min(t1,t2));exit=Math.min(exit,Math.max(t1,t2));
+    if(entry>exit+1e-6)return null;
+  }
+  if(exit<-1e-6||!Number.isFinite(entry))return null;
+  // 已经贴合且朝远离方向移动时，不能把身后的零距离目标误称为前方障碍。
+  if(exit<=1e-6&&entry<-1e-6)return null;
+  return {distanceMm:Math.max(0,entry),overlapping:entry<-1e-6&&exit>1e-6};
+}
+
 export function profileEndpointWorld(part,end) {
   const obb=profileObb(part);
   if(!obb)return null;

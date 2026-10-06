@@ -575,6 +575,7 @@ body{background:linear-gradient(180deg,#eef2f6 0,#e9eef3 100%)}
 .accessory-catalog-actions button.primary.placing{background:#e8fff2;border-color:#76d6a3;color:#167b47;box-shadow:0 0 0 2px rgba(36,179,107,.08)}
 .accessory-placement-hud{border-left:3px solid #28b36b;background:rgba(19,70,49,.94)}
 .accessory-placement-hud.invalid{border-left-color:#e54848;background:rgba(91,25,25,.95)}
+.connection-placement-hud.invalid{border-left-color:#e54848;background:rgba(91,25,25,.95)}
 .placement-hud{top:78px;min-height:38px;max-width:min(760px,calc(100% - 100px));border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}
 .placement-hud strong{white-space:nowrap}.placement-hud span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.placement-hud em{white-space:nowrap;font-size:10px}
 .interference-hud{top:124px}
@@ -968,3 +969,21 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .inspector-panel .machining-head-actions button:last-child,.inspector-panel .connection-card-head>button{color:#ff9098}
 .inspector-panel .machining-head-actions button:hover,.inspector-panel .connection-card-head>button:hover{background:#293143;color:#fff}
 @media(max-width:1200px){.inspector-panel .connection-quick-change{grid-template-columns:minmax(0,1fr)}.inspector-panel .connection-quick-change .connection-recommend-button{grid-column:1}.inspector-panel .connection-card dl{grid-template-columns:62px minmax(0,1fr)}}
+/* 方向间隙与贴合属于工作台底部，不再增加盖住模型的常驻浮层。 */
+.axis-clearance-panel{display:flex;align-items:center;gap:5px;flex:0 0 auto;padding:0 8px 0 0;border-right:1px solid #b5c7d8;font-size:11px;white-space:nowrap}
+.axis-clearance-panel[hidden]{display:none}
+.axis-clearance-panel [data-ground]{padding:5px 7px;border-radius:5px;transition:background .12s,color .12s}
+.axis-clearance-panel [data-ground="contact"]{background:#d9eefb;color:#126b94;box-shadow:inset 0 0 0 1px #7ec1e3}
+.axis-clearance-panel [data-ground="below"]{background:#fff0d6;color:#9b5800;box-shadow:inset 0 0 0 1px #efb960}
+.axis-clearance-panel button.has-interference{color:#be2525;border-color:#edb0b0;background:#fff1f1}
+.axis-clearance-panel strong{color:#315a85}
+.axis-clearance-panel select{width:155px;min-height:30px;padding:3px 6px;background:#f8fbff;color:#263c53;border:1px solid #b4c9df;border-radius:6px;font-size:11px}
+.axis-clearance-panel select:focus,.axis-clearance-panel select:hover{background:#fff;color:#263c53;border-color:#f39322}
+.axis-clearance-panel select option{background:#f8fbff;color:#263c53}
+.axis-clearance-panel button{min-height:30px;padding:3px 7px;border:1px solid #b4c9df;border-radius:6px;background:#f8fbff;color:#b45d13;font-size:11px}
+.axis-clearance-panel button:disabled{opacity:.45;cursor:not-allowed}
+.axis-clearance-panel span{color:#3a526b;font-variant-numeric:tabular-nums}
+.profile-length-editor{margin:10px 0 14px;padding:10px;border:1px solid #2c303c;border-radius:8px;background:#10131f}
+.profile-length-editor .property-row{margin:0 0 8px;grid-template-columns:72px minmax(0,1fr)}
+.profile-length-editor small{display:block;color:#a6adba;line-height:1.5;font-size:11px}
+.profile-length-editor input:disabled,.profile-length-editor select:disabled{color:#858c9a;background:#151823;opacity:.7}

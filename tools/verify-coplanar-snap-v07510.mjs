@@ -22,6 +22,7 @@ const make=(id,x,y,z,rx=0,ry=0,size=[20,40],length=200)=>{
 const target=make('P1',0,20,0,0,0,[20,40],300),source=make('P2',120,20,0,0,Math.PI/2);
 const before=JSON.stringify([target.userData.part,source.userData.part]);
 assert.equal(compareProfileTopPlanes(source,target).aligned,true,'垂直框边上表面真正齐平');
+assert.equal(compareProfileTopPlanes(source,target,new THREE.Vector3(0,-10,0)).gapMm,10,'槽中心吸附可能改变上表面高度，预测不能把当前齐平当成落位后齐平');
 const sameCenter=make('short',120,20,0,0,Math.PI/2,[20,20]);
 assert.equal(compareProfileTopPlanes(sameCenter,target).aligned,false,'中心线同高不代表上表面齐平');
 assert.equal(compareProfileTopPlanes(sameCenter,target).gapMm,10);
@@ -44,6 +45,15 @@ assert.equal(editor.interferenceFeedbackManager.classify({obb:(await import(modu
 source.position.x=120;source.updateMatrixWorld(true);
 const candidate=snap.collectCandidates(source,35).find(c=>c.snap.targetFace==='RIGHT');assert.ok(candidate);
 assert.equal(snap.candidateCollision(source,candidate),null);
+// 当前位置合法，但吸附平移会穿过第三块板；不能等松手后才发现。
+const panel=new THREE.Group();panel.userData.part={id:'B1',displayId:'B1',type:'PANEL'};
+panel.add(new THREE.Mesh(new THREE.BoxGeometry(6,40,20)));panel.position.set(15,20,0);scene.add(panel);editor.meshes.push(panel);
+const panelItem={part:panel.userData.part,box:new THREE.Box3().setFromObject(panel)};
+const sourceItem={part:source.userData.part,box:new THREE.Box3().setFromObject(source)};
+assert.equal(editor.interferenceFeedbackManager.classify(sourceItem,panelItem).kind,'SEPARATE');
+assert.ok(snap.candidateCollision(source,candidate),'当前位置无干涉，但候选位置碰到板材也必须排除');
+assert.equal(snap.preview(source),null);assert.equal(feedback.status,'blocked');
+editor.meshes.pop();scene.remove(panel);
 const obstacle=make('P3',180,20,0,0,Math.PI/2,[20,40],40);editor.meshes.push(obstacle);scene.add(obstacle);
 assert.ok(snap.candidateCollision(source,candidate),'吸附对齐目标后撞到第三根必须排除');
 assert.equal(snap.preview(source),null);assert.equal(feedback.status,'blocked');assert.ok(clears>0);
@@ -57,5 +67,7 @@ assert.ok(snap.collectFaceCandidates(source,snap.endpoints(source),35).every(c=>
 source.position.set(120,20,0);source.rotation.y=Math.PI/2;
 assert.equal(JSON.stringify([target.userData.part,source.userData.part]),before,'齐平与候选预判不写业务模型');
 const editorSource=fs.readFileSync(path.join(js,'core/Editor.js'),'utf8');
-assert.ok(editorSource.includes('this.onSnapChanged?.(null)'),'回退清除 UI 吸附状态');
-console.log(JSON.stringify({ok:true,version:'0.75.10',sameTopNotCenter:true,tiltRejected:true,candidateCollision:true,thirdPartyObstacle:true,commitRecheck:true,readonly:true}));
+assert.ok(editorSource.includes('this.onSnapChanged?.(null)'),'干涉位置保留，但清除 UI 绿色吸附状态');
+const connectionSource=fs.readFileSync(path.join(js,'connection/ConnectionManager.js'),'utf8');
+assert.ok(connectionSource.includes('error:best?.valid===true?null:'),'合法连接不能同时返回几何不满足的错误提示');
+console.log(JSON.stringify({ok:true,version:'0.75.13',sameTopNotCenter:true,tiltRejected:true,candidateCollision:true,thirdPartyObstacle:true,commitRecheck:true,readonly:true}));

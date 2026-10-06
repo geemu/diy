@@ -8,6 +8,8 @@ import MachiningManager from '../machining/MachiningManager.js';
 import ConnectionManager from '../connection/ConnectionManager.js';
 import AutoConnectionResolver from '../connection/AutoConnectionResolver.js';
 import SnapManager from '../snap/SnapManager.js';
+import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
+import {groundClearance} from '../interaction/GroundClearance.js';
 import HistoryManager from '../history/HistoryManager.js';
 import BomExporter from '../export/BomExporter.js';
 import DrawingGenerator from '../export/DrawingGenerator.js';
@@ -129,6 +131,7 @@ export default class Editor {
     this.machiningPlacementManager = new MachiningPlacementManager(this);
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
+    this.axisClearanceManager = new AxisClearanceManager(this);
     this.accessoryPlacementManager = new AccessoryPlacementManager(this);
     this.manufacturingIdentityManager = new ManufacturingIdentityManager(this);
     this.assemblyInstructionGenerator = new AssemblyInstructionGenerator(this);
@@ -198,6 +201,10 @@ export default class Editor {
       if (this.profileDrawTool.isActive()) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); this.profileDrawTool.handlePointerMove(event); return; }
       const exclusiveMode = this.featureSelectionManager.enabled || this.measureMode || this.dimensionMode || this.sceneManager.marqueeMode || this.sceneManager.lassoMode || this.profileGripEditor?.drag || this.contourFrameManager?.dragIndex>=0;
       if (exclusiveMode) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); return; }
+      // 拉伸端部仅显示小箭头，不能再叠一个随模型放大的 Feature 球。
+      if(this.profileGripEditor.pickHandle(event)){
+        this.onJointHover?.(null);this.featureHoverManager.clear();this.sceneManager.clearHover();return;
+      }
 
       const jointHit=this.sceneManager.pickHit(event,this.connectionPlacementManager.profileMeshes());
       const joint=this.connectionPlacementManager.resolveJointContext(jointHit);
@@ -268,6 +275,9 @@ export default class Editor {
           quaternion:mesh.quaternion.clone()
         }))
       };
+      this.axisClearanceManager.update(this.sceneManager.transformControls.axis||this.axisClearanceManager.axis);
+      const groundHeight=groundClearance(this.currentTransformMeshes());
+      this.transformGroundSide=groundHeight>0.5?1:groundHeight<-0.5?-1:0;
     });
 
     this.sceneManager.transformControls.addEventListener('objectChange', () => {
@@ -285,6 +295,13 @@ export default class Editor {
       this.updateDimensions();
       this.emitStats();
       const liveRelation=this.interferenceFeedbackManager.preview([...changedIds,...constrainedIds]);
+      if(this.axisClearanceManager.axis)this.axisClearanceManager.update();
+      const groundHeight=groundClearance(changedMeshes);
+      if(!this.axisClearanceManager.axis){
+        const groundSide=groundHeight>0.5?1:groundHeight<-0.5?-1:0;
+        if(groundSide&&groundSide!==this.transformGroundSide)this.onGroundCrossed?.({below:groundSide<0,heightMm:groundHeight});
+        if(groundSide)this.transformGroundSide=groundSide;
+      }
       const snapshot=this.transformSelectionSnapshot;
       if(snapshot){
         this.sceneManager.showTransformFeedback({
@@ -292,12 +309,13 @@ export default class Editor {
           axis:this.sceneManager.transformControls.axis,
           delta:this.selected.position.clone().sub(snapshot.primaryPosition),
           rotation:{x:this.selected.rotation.x-snapshot.primaryEuler.x,y:this.selected.rotation.y-snapshot.primaryEuler.y,z:this.selected.rotation.z-snapshot.primaryEuler.z},
-          scopeLabel:this.transformScopeLabel(snapshot.scope)
+          scopeLabel:this.transformScopeLabel(snapshot.scope),
+          groundHeightMm:this.axisClearanceManager.axis?null:groundHeight
         });
       }
       if(liveRelation?.active){
         this.sceneManager.clearSnapPreview();
-        this.sceneManager.showSnapFeedback?.({status:'blocked',label:'实体干涉',details:[liveRelation.issues?.[0]?.message||'当前落位不可用']});
+        this.sceneManager.showSnapFeedback?.({status:'blocked',label:'实体干涉',details:[liveRelation.issues?.[0]?.message||'当前位置有干涉，请继续调整']});
         if (this.onSnapChanged) this.onSnapChanged(null);
       } else if (this.selected?.userData?.part?.type === 'PROFILE') {
         const previewSnap=this.snapManager.preview(this.selected);
@@ -317,7 +335,18 @@ export default class Editor {
       this.sceneManager.hideTransformFeedback?.();
       const snapshot=this.transformSelectionSnapshot;
       const beforeSnap = this.selected.position.clone();
-      const snap = this.quickRotationActive ? null : this.snapManager.snap(this.selected);
+      if(snapshot&&!this.axisClearanceCommit&&beforeSnap.distanceToSquared(snapshot.primaryPosition)<1e-12&&this.selected.quaternion.angleTo(snapshot.primaryQuaternion)<1e-7){
+        this.transformSelectionSnapshot=null;
+        this.sceneManager.hideSnapFeedback?.();
+        this.onSnapChanged?.(null);
+        if(this.axisClearanceManager.axis)this.axisClearanceManager.update();
+        return;
+      }
+      const currentCollision=this.interferenceFeedbackManager.refresh({focusIds:new Set(this.currentTransformMeshes().map(mesh=>mesh.userData.part.id)),live:false});
+      // 明确点选的方向目标不能在提交时被附近另一个槽位抢走；落地不执行几何自动吸附。
+      let snap = currentCollision.active ? null : this.axisClearanceCommit
+        ? (this.axisClearanceCommit.targetPartId?this.snapManager.snapToTarget(this.selected,this.axisClearanceCommit.targetPartId):null)
+        : this.quickRotationActive ? null : this.snapManager.snap(this.selected);
       const snapDelta = this.selected.position.clone().sub(beforeSnap);
       if (snapDelta.lengthSq() > 0) {
         for (const mesh of this.currentTransformMeshes()) {
@@ -332,25 +361,24 @@ export default class Editor {
       }
 
       const collisionState=this.interferenceFeedbackManager.refresh({focusIds:new Set(changedIds),live:false});
-      if(collisionState.active && snapshot){
-        this.quickRotationBlocked=true;
-        this.restoreTransformSnapshot(snapshot);
-        this.transformSelectionSnapshot=null;
+      if(collisionState.active){
         this.snapManager.clearLock();
         this.selected.userData.lastSnap=null;
         this.onSnapChanged?.(null);
         this.sceneManager.clearSnapPreview();
-        this.sceneManager.hideSnapFeedback?.();
-        this.sceneManager.setSelections(this.selectedMeshes,this.selected);
-        this.updateDimensions();
-        this.emitStats();
-        this.interferenceFeedbackManager.requestRefresh();
+        snap=null;
+        this.sceneManager.showSnapFeedback?.({status:'blocked',label:'位置已保留 · 实体干涉',details:[collisionState.issues?.[0]?.message||'请继续调整位置']});
         this.onTransformBlocked?.(collisionState);
-        return;
       }
 
       const constrainedIds = this.constraintManager.solveForChangedParts(changedIds);
       const refreshIds = new Set([...changedIds,...constrainedIds]);
+      const finalCollision=this.interferenceFeedbackManager.refresh({focusIds:refreshIds,live:false});
+      if(finalCollision.active){
+        snap=null;this.selected.userData.lastSnap=null;
+        this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.onSnapChanged?.(null);
+        if(!collisionState.active)this.onTransformBlocked?.(finalCollision);
+      }
       const profileIds=[...refreshIds].filter(partId=>this.getMeshByPartId(partId)?.userData.part?.type==='PROFILE');
       this.connectionManager.updateConnectionsForProfiles(profileIds);
       const brokenConnections=[];
@@ -377,7 +405,31 @@ export default class Editor {
       if (autoConnectionResult?.status === 'CREATED' && this.onAutoConnectionChanged) this.onAutoConnectionChanged(autoConnectionResult);
       if (brokenConnections.length && this.onConnectionsBroken) this.onConnectionsBroken(brokenConnections);
       this.interferenceFeedbackManager.requestRefresh();
+      if(this.axisClearanceManager.axis)this.axisClearanceManager.update();
     });
+  }
+
+  /** 沿轴贴合复用 Gizmo 事务；干涉只告警并保留位置，连接和历史仍统一提交。 */
+  moveSelectionToSurface(delta,targetPartId=null){
+    if(!this.selected||!this.isMeshTransformable(this.selected))throw new Error('先选择可移动的构件');
+    if(!delta||![delta.x,delta.y,delta.z].every(Number.isFinite))throw new Error('移动距离无效');
+    const controls=this.sceneManager.transformControls;
+    const expected=this.selected.position.clone().add(delta);
+    this.axisClearanceCommit={targetPartId};this.quickRotationBlocked=false;
+    try{
+      controls.dispatchEvent({type:'mouseDown'});
+      this.selected.position.copy(expected);this.selected.updateMatrixWorld(true);
+      controls.dispatchEvent({type:'objectChange'});
+      if(this.selected.position.distanceTo(expected)>0.1){
+        const snapshot=this.transformSelectionSnapshot;
+        this.restoreTransformSnapshot(snapshot);this.transformSelectionSnapshot=null;
+        this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback();this.sceneManager.hideTransformFeedback();
+        this.onSnapChanged?.(null);this.interferenceFeedbackManager.requestRefresh();
+        throw new Error('当前约束不允许沿这个方向移动到目标面');
+      }
+      controls.dispatchEvent({type:'mouseUp'});
+      return true;
+    }finally{this.axisClearanceCommit=null;this.sceneManager.transformPointerActive=false;}
   }
 
 
@@ -394,7 +446,7 @@ export default class Editor {
     mesh.updateMatrixWorld(true);
   }
 
-  /** 90°按钮复用 Gizmo 完整事务，包含作用域、约束、安装随动、干涉回滚和撤销。 */
+  /** 90°按钮复用 Gizmo 完整事务，包含作用域、约束、安装随动、干涉提示和撤销。 */
   rotateSelectionQuarterTurn(axis) {
     if(!this.selected||!this.isMeshTransformable(this.selected))throw new Error('先选择可旋转的构件；已安装配件需先解除安装');
     if(this.selectedMeshes.some(mesh=>!this.isMeshTransformable(mesh)))throw new Error('所选构件包含锁定或已安装的配件，请调整选择后再旋转');
@@ -1172,6 +1224,7 @@ export default class Editor {
   }
 
   select(mesh, options = {}) {
+    this.axisClearanceManager?.hide();
     const additive = options.additive === true;
     const toggle = options.toggle === true;
     if (!mesh) {
@@ -1196,6 +1249,7 @@ export default class Editor {
   }
 
   selectMany(meshes = []) {
+    this.axisClearanceManager?.hide();
     this.selectedMeshes = [...new Set((meshes || []).filter(Boolean))];
     this.selected = this.selectedMeshes[this.selectedMeshes.length - 1] || null;
     if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
@@ -1237,6 +1291,7 @@ export default class Editor {
   setTransformMode(mode) {
     if (!['translate','rotate','scale'].includes(mode)) return;
     this.sceneManager.transformControls.setMode(mode);
+    this.axisClearanceManager?.hide();
   }
 
   /** 在世界坐标与构件局部坐标之间切换 Gizmo。 */
@@ -1296,6 +1351,7 @@ export default class Editor {
   setSelectedProfileLengthFromEnd(end,lengthMm) {
     const mesh=this.selected;
     if(!mesh||mesh.userData?.part?.type!=='PROFILE'||!isLinearProfile(mesh.userData.part)) throw new Error('请选择直线型材');
+    if(this.selectedMeshes.length!==1||!this.isMeshTransformable(mesh))throw new Error('请选择单根可编辑的型材；锁定型材请先解锁');
     const normalized=end==='START'?'START':'END';
     if(this.profileGripEditor.isEndDrivenByConstraint(mesh.userData.part.id,normalized)) throw new Error(`${normalized==='START'?'A':'B'}端已有连接/约束，不能直接拉伸`);
     const length=Number(lengthMm);

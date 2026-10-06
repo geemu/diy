@@ -1,5 +1,11 @@
 # Reference Index
 
+## lewan-opensource-interaction-2026-10-06-v07510.md
+
+- 来源：Lewan 公开交互、用户指定 alu-studio / ALPDesigner 当前固定提交的只读检查。
+- 内容：连接预放置与 PRO 观察边界、真实源码/规格规划的区别、许可证检查，以及 DIY 候选预判/齐平/回退语义。
+- 不包含第三方源码副本、私有工程、凭据、会话或运行素材；旧参考记录保留。
+
 ## profile-section-review-2026-10-06-v0751.md
 
 - 来源：嘉立创 FA 公开 TXCJ/TXCK/TXCL 截面 PDF，只读下载、渲染并逐页核对。

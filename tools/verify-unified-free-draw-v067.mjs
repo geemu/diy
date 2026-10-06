@@ -48,4 +48,4 @@ const buildPanel=html.slice(html.indexOf('<template v-if="quickPanel===\'build\'
 for(const mode of ['RECTANGLE','BOX','CONTOUR'])assert.ok(buildPanel.includes(`startProfileDraw('${mode}')`));
 assert.ok(buildPanel.includes('contour-preset-card'));assert.ok(app.includes("startProfileDraw('FREE',{fixedLengthMm:Number(newProfile.length)})"));
 assert.ok(!app.includes("startProfileDraw('DIAGONAL')"));
-console.log(JSON.stringify({ok:true,version:'0.75.10',singleDrawEntry:true,axisAndDiagonal:true,modifierPriority:true,quickBuildPreserved:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.13',singleDrawEntry:true,axisAndDiagonal:true,modifierPriority:true,quickBuildPreserved:true}));

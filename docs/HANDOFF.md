@@ -1,4 +1,31 @@
-# 项目交接文档 — v0.75.9
+# 项目交接文档 — v0.75.12
+
+## v0.75.12 当前重点
+
+- 用户指出端部两颗球太大。ProfileGripEditor 的 Sphere/Ring/Sprite 改为两段轻量箭头，按当前相机 worldPerPixel 换算约13px。默认两端隐藏，屏幕端点18px邻域独立拾取，悬停只显示当前端，拖动只显示活动端；远离/放置工具/非单选隐藏。长短、缩放或尺寸不写回工程。
+- Editor 普通 hover 先让端部拉伸区域使用小箭头，清除 FeatureHover 的另一层球/标签，不让放大后的普通预高亮重新遮住端部；实际放置工具仍优先于端部编辑。
+- 右侧属性顶部 profile-length-editor 是直型材唯一长度输入。profileLengthForm 为 UI 草稿，固定 START 表示保持 A、移动 B；固定 END 反之。确认经 Editor.setSelectedProfileLengthFromEnd → ProfileGrip 原事务；受保护移动端的选项禁用，多选/锁定在 UI 及 Editor 入口双重守卫。输入无效恢复真实数值，重复 Enter/change 不重复提交。
+- 双击端部 onEditRequested 切换修改/属性页、设置正确固定端、focus/select 输入；不再 window.prompt。实际拖动确认后同步固定端和数值；原数值键入、Feature/Grid、加工基准、连接随动、Esc 取消继续复用旧链。
+- 真实 Chrome 在用户第二份工程隔离副本验证 P-003：470→570 固定 A 不动，570→670 固定 B 不动；每次 history+1。端部双击历史不变且聚焦输入；拖 B +70 得到540、history+1，Esc 取消后仍540。P-002 已连接 A 端，对应移动 A 选项被禁用。原 JSON 不改。
+- Schema62/业务版本字段不变；所有本地缓存映射0.75.12。验证结果见 VALIDATION，当前8083由用户进程提供，只同步静态资源、不重启进程。
+
+## v0.75.11 当前重点
+
+- 用户先提出不低于地面，随后明确修订为“也可以低于平面，只是在进出平面的时候有明显的变化”。最终实现允许负 Y 底面，GroundClearance 使用直型材业务包络和当前矩阵计算最低真实表面；非直型材回退到自身几何，辅助标签排除。没有导入抬高、地面碰撞阻止或额外业务字段。
+- AxisClearanceManager 放在现有 workbench-tools-row，保持 48 px 单行底栏，不覆盖画布。单击移动箭头出现轴方向、正反目标及表面毫米间距，最多显示每侧最近八个方向目标；完整旋转 OBB swept SAT 排除不在移动走廊/身后的目标。底面到地面蓝色，低于地面橙色；0.5 mm 跨平面去抖，竖直分量方向可显式落地。
+- 单击箭头无移动时不执行吸附和历史；SceneManager 消费真实 Gizmo pointerup，不再走构件重复选择。程序贴合复用 Editor.moveSelectionToSurface 事务，指定目标 snapToTarget 在 0.1 mm 内确认端面，不自动切换到另一个目标或槽中心。
+- 用户明确取消碰撞弹回：最终位置保留，InterferenceFeedbackManager 红色原实体三角面及红框持续；一次撤销恢复。当前位置干涉时跳过自动吸附，求解后再查干涉，红色不能生成绿色候选/自动连接。约束不允许的程序贴合仍可取消，正式 FactoryValidator 碰撞门禁不变。
+- 用户第二份工程的原坐标保持：P-002→P-001 DESIGN_VALID、接触间隙 0；立柱最低 -5 mm。一键补连接实测补出 P-001→P-003，不移动三根型材；目标指定 P-003 的 60 mm 沿 Z 贴合可生成 P-002→P-003。设计连接不等于已配置制造五金，不静默改已占用端部的连接。
+- 已有 8083 IDE 服务读取 target/classes 静态资源；同步 process-resources，不重启用户进程。完整语法、回归、JDK21/Maven 和 Chrome 证据见 VALIDATION。v0.75.10 以下回滚记录是历史，不是当前交互约定。
+
+## v0.75.10 当前重点
+
+- 用户要求接触绿色与上表面齐平颜色分开，并指出“即将吸附”与“已阻止干涉”同时显示。新增 CoplanarSurfaceFeedback，复用 ProfileFeatureCatalog 规范平面和 SurfaceFeedback 实体三角面，双方角点偏差 <=0.1 mm 才显示紫色；长杆微倾斜、不同截面厚度、竖杆不以中心线误报。
+- 紫色表达当前实际表面齐平，不承诺槽中心吸附后仍然齐平。SceneManager 比较候选平移后的只读平面，可能产生高差时同时说明“吸附后上表面未齐平”。未知/圆弧实体面不填板冒充平面。展示不修改 Part、约束、连接或历史。
+- SnapManager.sortedCandidates 对每个几何候选调用原 InterferenceFeedbackManager.classify，虚拟平移整个当前移动范围，对全部可见实体检查；沿用现有安装接触豁免和容差。applyCandidate 再检查新障碍，错误方向端面排除。不用提高容差解决穿透。
+- Editor 回退同时清 lastSnap 与 onSnapChanged(null)，app 阻止落位回调同步清 UI；合法连接推荐 error=null。浏览器已通过合法提交、Ctrl 绕过吸附造成穿透回退、第三块板候选冲突、连接鼠标预览/取消/单击提交检查。
+- Lewan 当前公开页自动生成连接为 PRO，手动连接可进入选型和预放置并拒绝无宿主；未核实其内部干涉算法。alu-studio 明确无几何吸附/碰撞，实际拖拽事务可作为设计对照；ALPDesigner 当前源码目录只有 README，相关连接检测为规格文档。两仓库未发现明确许可证，不复制源码，不改变 Vue/local JS 技术栈。
+- 本轮原 8083 服务检查时未监听，使用已有任务验证服务 8081；不重启用户 IDE。运行和参考证据见 VALIDATION 与 reference/lewan-opensource-interaction-2026-10-06-v07510.md。
 
 ## v0.75.9 当前重点
 

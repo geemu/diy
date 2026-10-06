@@ -4,7 +4,7 @@ import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import InfiniteGround from './InfiniteGround.js';
 import {createSurfaceFeedback,disposeFeedback,surfaceGeometryKey} from '../interaction/SurfaceFeedback.js';
-import {addCoplanarSurfaceFeedback,coplanarFeedbackLabel} from '../interaction/CoplanarSurfaceFeedback.js';
+import {addCoplanarSurfaceFeedback,coplanarFeedbackLabel,compareProfileTopPlanes} from '../interaction/CoplanarSurfaceFeedback.js';
 
 export default class SceneManager {
   constructor(container) {
@@ -134,6 +134,7 @@ export default class SceneManager {
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
     this.compactTranslationGizmo();
     this.transformControls.setSize(0.8);
+    this.transformControls.addEventListener('mouseDown',()=>{this.transformPointerActive=this.transformControls.dragging===true;});
     this.scene.add(this.transformControls);
     this.transformControls.addEventListener('dragging-changed', event => {
       this.orbitControls.enabled = !event.value && !this.marqueeMode && !this.lassoMode;
@@ -163,6 +164,8 @@ export default class SceneManager {
       if (this.pointerMoveHandler && !this.transformControls.dragging) this.pointerMoveHandler(event);
     });
     this.renderer.domElement.addEventListener('pointerup', event => {
+      // 点击箭头查看距离不是重新选择构件；不能让同一次 pointerup 把方向栏关闭。
+      if(this.transformPointerActive){this.transformPointerActive=false;this.pointerDownPosition=null;return;}
       // 右键只用于结束工具或平移/菜单，不能被当作左键提交几何。
       if(event.button!==0){
         const down=this.pointerDownPosition;
@@ -617,8 +620,13 @@ export default class SceneManager {
     if(helper)this.snapPreviewGroup.add(helper);
   }
 
-  showCoplanarPreview(source,target){
-    return coplanarFeedbackLabel(addCoplanarSurfaceFeedback(this.snapPreviewGroup,source,target));
+  showCoplanarPreview(source,target,delta=null){
+    const current=addCoplanarSurfaceFeedback(this.snapPreviewGroup,source,target);
+    const label=coplanarFeedbackLabel(current);
+    if(!delta||!current?.aligned)return label;
+    const proposed=compareProfileTopPlanes(source,target,delta);
+    if(proposed&&!proposed.aligned)return `${label}；吸附后${coplanarFeedbackLabel(proposed)}`;
+    return label;
   }
 
   showSnapPreview(sourcePoint,targetPoint,snap = {}) {
@@ -741,7 +749,9 @@ export default class SceneManager {
     const values = payload.mode === 'rotate'
       ? [`X ${roundDeg(payload.rotation?.x)}°`,`Y ${roundDeg(payload.rotation?.y)}°`,`Z ${roundDeg(payload.rotation?.z)}°`]
       : [`X ${roundMm(payload.delta?.x)} mm`,`Y ${roundMm(payload.delta?.y)} mm`,`Z ${roundMm(payload.delta?.z)} mm`];
-    this.transformFeedback.innerHTML = `<strong>${mode}${axis ? ` · ${axis}` : ''}</strong><span>${values.join('　')}</span>${payload.scopeLabel ? `<em>${payload.scopeLabel}</em>` : ''}`;
+      const height=payload.groundHeightMm;
+      const ground=Number.isFinite(height)?` · ${height<-0.001?'底面低于地面':'底面离地'} ${roundMm(Math.abs(height))} mm`:'';
+      this.transformFeedback.innerHTML = `<strong>${mode}${axis ? ` · ${axis}` : ''}</strong><span>${values.join('　')}${ground}</span>${payload.scopeLabel ? `<em>${payload.scopeLabel}</em>` : ''}`;
     this.transformFeedback.style.display = 'flex';
   }
 

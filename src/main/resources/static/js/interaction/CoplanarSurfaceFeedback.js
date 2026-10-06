@@ -5,7 +5,7 @@ export const COPLANAR_SURFACE_COLOR=0xa17af5;
 export const COPLANAR_TOLERANCE_MM=0.1;
 
 /** 齐平只是展示判断，不是约束/移动命令。上面指空间朝上的实体侧面，不是屏幕上方。 */
-export function compareProfileTopPlanes(source,target){
+export function compareProfileTopPlanes(source,target,sourceOffset=null){
   const topPlanes=mesh=>{
     const planes=profileSidePlanes(mesh);
     const maximum=Math.max(...planes.map(plane=>plane.normal.y));
@@ -13,7 +13,10 @@ export function compareProfileTopPlanes(source,target){
     return planes.filter(plane=>maximum-plane.normal.y<1e-6);
   };
   let best=null;
-  for(const a of topPlanes(source))for(const b of topPlanes(target)){
+  const sourcePlanes=topPlanes(source);
+  // 只读预测平移后的表面；不临时移动业务 Mesh，以免触发随动、历史或页面闪动。
+  if(sourceOffset)for(const plane of sourcePlanes){plane.point.add(sourceOffset);for(const corner of plane.corners)corner.add(sourceOffset);}
+  for(const a of sourcePlanes)for(const b of topPlanes(target)){
     if(a.normal.dot(b.normal)<0.999999)continue;
     const gapMm=Math.abs(a.normal.dot(a.point.clone().sub(b.point)));
     const deviation=Math.max(...a.corners.map(p=>Math.abs(b.normal.dot(p.clone().sub(b.point)))),...b.corners.map(p=>Math.abs(a.normal.dot(p.clone().sub(a.point)))));

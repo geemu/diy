@@ -1,4 +1,36 @@
-# Validation / Regression — v0.75.9
+# Validation / Regression — v0.75.12
+
+## v0.75.12 当前检查范围
+
+- 2026-10-07：160 个 JS/MJS 语法检查、54 项 verify 回归全部通过；JDK21.0.11 / Maven -o clean test 与最终 -o test 成功，2 项测试、0 失败/错误。全量105个本地模块版本映射0.75.12、Schema62，diff --check通过。
+- 最终 Chrome 普通刷新确认0.75.12；端部悬停时只有该端的小箭头，FeatureHover 普通圆点数量0，光标为拉伸；双击仍聚焦长度输入且history不增加。透视/正交屏幕大小回归通过，无pageerror。截图 v07512-compact-endpoint.png 位于任务可视化目录，不保存用户工程副本。
+
+- 新增 verify-compact-profile-grip-v07512：真实 Three.js 手柄默认隐藏/悬停单端、小箭头几何、不同相机距离下屏幕13px、屏幕邻域拾取、受保护端红色、放置工具不抢端点及锚定数值入口。旧 ProfileGrip 数学/加工基准回归保留。
+- Chrome 隔离副本 P-003 侧栏实际输入：470→570 固定 A，A=(420,-5,5)不变；570→670 固定 B，B=(420,565,5)不变。各一次历史，无重复 Enter/change 提交，原文件不改。
+- 真实鼠标靠近 B 只显示 B 箭头，移开两端隐藏；双击聚焦 selected-profile-length、固定 A、history不变。拖 B +70 得到总长540、history+1；再拖+100并Esc取消，长度恢复540、历史不变。P-002 已连接 A 端，固定 B/移动 A 选项禁用。无 pageerror。
+
+## v0.75.11 当前检查范围
+
+- 2026-10-06：159 个 JS/MJS 语法检查、53 个 verify 回归全部通过；JDK21.0.11 / Maven -o clean test 与最终 -o test 均成功，2 项测试、0 失败/错误。全量模块版本映射 0.75.11、Schema 62；diff --check 通过。
+- 最终真实箭头拖动跨平面监听在上方/下方各触发一次，±0.5 mm 附近去抖不重复。额外障碍隔离场景：指定 P-003 的60 mm方向贴合标注30 mm干涉但按钮可用；点击后保留 z=-425、lastSnap=null、绿色预览0、自动连接0，红色实体告警存在。正式 FactoryValidator 仍返回 PROFILE_VOLUME_COLLISION，未放宽门禁。
+
+- 新增 verify-axis-clearance-v07511：正反方向包络表面间距、方向外目标/远离零距排除、斜杆、竖杆最低端、负离地距离、辅助标记不污染高度，及干涉提交/制造门禁保留检查。纯函数回归不冒充浏览器交互。
+- Chrome 隔离副本打开用户第二份工程，P-002→P-001 设计连接 DESIGN_VALID / gap=0，立柱最低 -5 mm；原文件不改。一键补全增加 P-001→P-003 DESIGN_VALID，三个 position 与导入前相同。
+- 真实鼠标单击 Y 箭头：距离栏可见，立柱 position 不变，history.index=0；点击底栏落地得到最低 0 mm、history+1。实际 Y 箭头 Ctrl 拖动 +60 / -90 mm 得到离地60 / 地下30 mm，每次一次历史，不回弹。
+- 隔离工程 P-002 沿 Z 主事务移动10 mm，保持目标 z=-415；两个10 mm干涉、三根真实红色材料覆盖、lastSnap=null、history+1；undo 回 z=-425。方向栏指定 P-003 并点击贴合，从 z=-485 沿 Z 60 mm到 z=-425，lastSnap 指向 P-003，不被同距离 P-001 抢走，生成有效立柱设计连接、干涉0。
+- 距离栏位于 y=961.5..991.5，画布截止 y=952（1600×1000），没有覆盖画布；截图在任务可视化目录 v07511-axis-distance.png。历史 v0.75.10 回滚测试结果保留为旧版记录，当前用户约定已覆盖。
+
+## v0.75.10 当前检查范围
+
+- 2026-10-06：156 个 JS/MJS 语法检查、52 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，2 项测试、0 失败、0 错误。Schema 62 不变，全部模块版本映射保持一致。
+- verify-coplanar-snap-v07510 使用实际 Three.js 型材工厂及原干涉分类器：同截面齐平、不同厚度同中心不齐平、0.2 mm 高差、长杆微倾斜、竖杆不误报、实际双方紫色材料面、只读虚拟候选位移与提交重查；当前位置无干涉但平移后碰到第三块板的候选必须拒绝。既有第三型材障碍和反向端面检查保留。
+- 独立 Chrome 在任务验证服务 8081 构造两根直型材，实际 Editor TransformControls 事务合法吸附后零干涉、历史 index+1；Ctrl 临时绕过吸附拖入实体时真实穿透=1，松手恢复原位、历史 index 不变、lastSnap=null、没有残留“即将吸附”。这是实际事件链检查，不将静态断言算作鼠标拖动。
+- 两根 2040 型材同实际上表面得到两个紫色面和一个绿色候选面；上表面高差 10 mm 时不显示紫色并显示高差。槽中心候选可能沿 Y 移动，当前齐平与吸附后高差分开说明，不以绿提示暗示齐平。
+- 6×40×20 mm 第三块板位于候选移动带：当前位置 active=false，全部目标 RIGHT 候选均报将与板干涉 6 mm；preview=null、绿色覆盖=0。保留最终提交保护，不靠扩大容差使其通过。
+- 连接通过真实鼠标 hover 显示 3 个 Ghost 子对象且 connections=0；Esc 后 Ghost=0/connections=0。接头单击产生一条 DESIGN_VALID / ANGLE_BRACKET / 单击吸附连接，工具结束，Ctrl+Z 可撤销。合法推荐 error 修复为 null；浏览器 pageerror=[]。
+- 本轮核对时 8083 未监听，没有擅自启动或重启用户 IDE 服务。已有任务 8081 从更新后的 target/classes 读取静态资源；Maven process-resources 已同步。测试注入 Editor 引用仅存在独立响应，不写生产源码。
+- 最终普通无注入 1360 px 页面显示 v0.75.10；102 次本地 JS 请求均为当前版本，旧版本请求=0、pageerror=[]。最终齐平截图显示“当前齐平；吸附后高差 10 mm”，没有把当前表面与候选位置混为一谈；独立浏览器检查后关闭。
+- Lewan 连接选型、Tab 方向、预放置及无宿主拒绝实测；自动生成连接件 PRO 未验证，不宣称其内部干涉算法已获证。两个 GitHub 固定提交的已实现/规划/许可边界详见 reference/lewan-opensource-interaction-2026-10-06-v07510.md，不复制代码。截图 v07510-coplanar / top-offset / candidate-blocked / connection-hover 位于本轮 visualizations。
 
 ## v0.75.9 当前检查范围
 

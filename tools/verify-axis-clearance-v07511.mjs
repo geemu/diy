@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),js=path.join(root,'src/main/resources/static/js');
+const threeUrl=pathToFileURL(path.join(root,'target/classes/static/vendor/three/build/three.module.min.js')).href,cache=new Map();
+function moduleUrl(file){
+  if(cache.has(file))return cache.get(file);
+  const source=fs.readFileSync(file,'utf8').replace(/from\s+(['"])([^'"]+)\1/g,(_,q,spec)=>`from '${spec==='three'?threeUrl:spec.startsWith('.')?moduleUrl(path.resolve(path.dirname(file),spec)):spec}'`);
+  const url='data:text/javascript;base64,'+Buffer.from(source).toString('base64');cache.set(file,url);return url;
+}
+const THREE=await import(threeUrl);
+const {profileObb,sweepObbContact}=await import(moduleUrl(path.join(js,'validation/PartCollisionDetector.js')));
+const {lowestSurfaceY,groundClearance}=await import(moduleUrl(path.join(js,'interaction/GroundClearance.js')));
+const make=(x,y,z,rotation={x:0,y:0,z:0})=>({type:'PROFILE',position:{x,y,z},rotation,dimensions:{sectionSize:[30,60],length:200},profilePath:{type:'LINE',length:200}});
+const a=make(0,30,0),b=make(100,30,0);
+assert.equal(sweepObbContact(profileObb(a),profileObb(b),{x:1,y:0,z:0}).distanceMm,70,'沿箭头计算外表面间距，不是中心距离100');
+assert.equal(sweepObbContact(profileObb(a),profileObb(b),{x:-1,y:0,z:0}),null,'反方向不能显示身后目标');
+assert.equal(sweepObbContact(profileObb(a),profileObb(make(100,130,0)),{x:1,y:0,z:0}),null,'不在移动走廊的构件不是方向目标');
+const touch=profileObb(make(30,30,0));
+assert.equal(sweepObbContact(profileObb(a),touch,{x:1,y:0,z:0}).distanceMm,0);
+assert.equal(sweepObbContact(profileObb(a),touch,{x:-1,y:0,z:0}),null,'贴合后远离不再锁到零距离');
+const tilted=profileObb(make(150,30,0,{x:0,y:Math.PI/4,z:0}));
+const hit=sweepObbContact(profileObb(a),tilted,{x:1,y:0,z:0});assert.ok(hit&&hit.distanceMm>0&&hit.distanceMm<150,'斜杆也使用完整旋转包络');
+const mesh=new THREE.Mesh(new THREE.BoxGeometry(30,60,200));mesh.userData.part=a;mesh.position.set(0,30,0);
+assert.equal(lowestSurfaceY(mesh),0);
+mesh.position.y=25;assert.equal(lowestSurfaceY(mesh),-5,'允许平面以下并返回负距离');
+mesh.rotation.x=-Math.PI/2;mesh.position.y=100;assert.ok(Math.abs(lowestSurfaceY(mesh))<1e-6,'竖杆最低端不是中心Y');
+assert.ok(Math.abs(groundClearance([mesh]))<1e-6);
+const marker=new THREE.Mesh(new THREE.BoxGeometry(2000,2000,2000));marker.name='__machining_marker__';mesh.add(marker);
+assert.ok(Math.abs(lowestSurfaceY(mesh))<1e-6,'直型材距离不受巨大辅助标记污染');
+const editor=fs.readFileSync(path.join(js,'core/Editor.js'),'utf8');
+const mouseUp=editor.slice(editor.indexOf("addEventListener('mouseUp'"),editor.indexOf('moveSelectionToSurface('));
+assert.ok(!mouseUp.includes('restoreTransformSnapshot'),'干涉提交不能回退');
+assert.ok(mouseUp.includes('historyManager.capture()'),'干涉落位仍能一次撤销');
+assert.ok(mouseUp.includes('currentCollision.active ? null'),'干涉时不自动跳到其他合法候选');
+assert.ok(mouseUp.includes('snap=null'),'干涉不保留绿色吸附或产生自动连接');
+const axis=fs.readFileSync(path.join(js,'interaction/AxisClearanceManager.js'),'utf8');
+assert.ok(axis.includes("querySelector('.workbench-tools-row')"),'距离提示在底栏而非画布');
+assert.ok(axis.includes('onGroundCrossed')&&axis.includes('groundSide'),'跨平面反馈具备去抖');
+assert.ok(axis.includes('getWorldQuaternion'),'局部方向沿构件实际朝向');
+const gate=fs.readFileSync(path.join(js,'validation/FactoryValidator.js'),'utf8');assert.ok(gate.includes('PartCollisionDetector'),'制造导出干涉门禁仍保留');
+console.log(JSON.stringify({ok:true,version:'0.75.13',surfaceGap:true,directionalTarget:true,signedGroundDistance:true,allowBelowGround:true,keepInterference:true,factoryGate:true}));

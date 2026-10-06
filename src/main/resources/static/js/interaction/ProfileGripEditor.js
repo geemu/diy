@@ -20,6 +20,7 @@ export default class ProfileGripEditor {
     this.sceneManager=editor.sceneManager;
     this.options={enabled:true,minLengthMm:10,gridSnap:true,gridStepMm:10,featureSnap:true,featureSnapDistanceMm:28,axisSnapToleranceMm:3,...options};
     this.onStateChanged=null;
+    this.onEditRequested=null;
     this.drag=null;
     this.hoverEnd=null;
     this.typedBuffer='';
@@ -32,6 +33,7 @@ export default class ProfileGripEditor {
     this.canvas.addEventListener('pointerup',event=>this.handlePointerUp(event));
     this.canvas.addEventListener('pointercancel',event=>this.handlePointerUp(event));
     this.canvas.addEventListener('dblclick',event=>this.handleDoubleClick(event));
+    this.canvas.addEventListener('pointerleave',()=>{if(!this.drag){this.hoverEnd=null;this.setVisible(false);this.canvas.style.cursor='';}});
     window.addEventListener('keydown',event=>this.handleKeyDown(event));
     this.sceneManager.addFrameHandler?.(()=>this.refresh());
   }
@@ -39,26 +41,14 @@ export default class ProfileGripEditor {
   configure(options={}) { Object.assign(this.options,options||{}); this.refresh(true); }
 
   createHandle(end) {
-    const geometry=new THREE.SphereGeometry(11,20,20);
-    const material=new THREE.MeshBasicMaterial({color:end==='START'?0x2f78ff:0x24a36a,depthTest:false,transparent:true,opacity:.96});
-    const mesh=new THREE.Mesh(geometry,material);
-    mesh.renderOrder=1300;
-    mesh.userData.profileGrip=true;
-    mesh.userData.gripEnd=end;
-    const ring=new THREE.Mesh(new THREE.RingGeometry(14,17,28),new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,depthTest:false,transparent:true,opacity:.9}));
-    ring.renderOrder=1299;ring.userData.helper=true;mesh.add(ring);
-    const label=this.createLabelSprite(end==='START'?'A':'B');
-    label.position.set(0,24,0);mesh.add(label);
-    return mesh;
-  }
-
-  createLabelSprite(text) {
-    const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
-    const ctx=canvas.getContext('2d');ctx.clearRect(0,0,64,64);ctx.fillStyle='rgba(20,30,40,.86)';ctx.beginPath();ctx.arc(32,32,22,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#fff';ctx.font='700 30px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,32,33);
-    const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
-    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,transparent:true}));
-    sprite.scale.set(24,24,1);sprite.renderOrder=1302;sprite.userData.helper=true;return sprite;
+    // 以像素大小定义轻量箭头，缩放相机后仍保持约13px，不再用巨大球体遮住端面。
+    const handle=new THREE.Group();handle.userData.profileGrip=true;handle.userData.gripEnd=end;
+    const material=new THREE.MeshBasicMaterial({color:end==='START'?0x2f78ff:0x24a36a,depthTest:false,depthWrite:false,toneMapped:false});
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.85,.85,7,6),material);
+    const head=new THREE.Mesh(new THREE.ConeGeometry(2.5,5,8),material);
+    stem.position.y=4.5;head.position.y=10.5;
+    for(const mesh of [stem,head]){mesh.renderOrder=1300;mesh.userData.helper=true;handle.add(mesh);}
+    return handle;
   }
 
   selectedMesh() {
@@ -77,22 +67,24 @@ export default class ProfileGripEditor {
   refresh(force=false) {
     if(this.drag&&!force)return;
     const mesh=this.selectedMesh();
-    if(!mesh){this.setVisible(false);return;}
+    if(!mesh){this.hoverEnd=null;this.setVisible(false);return;}
+    if(this.activePartId!==mesh.userData.part.id){this.activePartId=mesh.userData.part.id;this.hoverEnd=null;}
     mesh.updateMatrixWorld(true);
     const ends=getLocalEndpoints(mesh.userData.part);
     this.handles.START.position.copy(mesh.localToWorld(new THREE.Vector3(...ends.start)));
     this.handles.END.position.copy(mesh.localToWorld(new THREE.Vector3(...ends.end)));
-    this.orientRing(this.handles.START);
-    this.orientRing(this.handles.END);
-    this.setVisible(true);
+    const direction=this.handles.END.position.clone().sub(this.handles.START.position).normalize();
+    this.handles.START.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.clone().negate());
+    this.handles.END.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
     this.refreshHandleStyles(mesh.userData.part.id);
   }
 
-  orientRing(handle){
-    const ring=handle.children[0];
-    if(!ring)return;
-    const q=this.sceneManager.camera.getWorldQuaternion(new THREE.Quaternion());
-    ring.quaternion.copy(q);
+  /** 视觉尺寸固定为屏幕像素；不可将这个比例写回型材或工程尺寸。 */
+  worldPerPixel(point){
+    const camera=this.sceneManager.camera,height=Math.max(1,this.canvas.getBoundingClientRect().height);
+    if(camera.isOrthographicCamera)return (camera.top-camera.bottom)/camera.zoom/height;
+    const depth=point.clone().sub(camera.getWorldPosition(new THREE.Vector3())).dot(camera.getWorldDirection(new THREE.Vector3()));
+    return Math.max(.001,2*Math.max(camera.near,depth)*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))/camera.zoom/height);
   }
 
   setVisible(visible){this.handles.START.visible=visible;this.handles.END.visible=visible;}
@@ -104,16 +96,25 @@ export default class ProfileGripEditor {
       const hovered=this.hoverEnd===end;
       const dragging=this.drag?.end===end;
       const color=blocked?0xd04a4a:(end==='START'?0x2f78ff:0x24a36a);
-      handle.material.color.setHex(hovered||dragging?0xf4a62a:color);
-      handle.scale.setScalar(hovered||dragging?1.22:1);
+      for(const child of handle.children)child.material.color.setHex(dragging&&!blocked?0xf4a62a:color);
+      handle.scale.setScalar(this.worldPerPixel(handle.position));
+      handle.visible=hovered||dragging;
       handle.userData.blocked=blocked;
     }
   }
 
   pickHandle(event){
-    if(!this.handles.START.visible&&!this.handles.END.visible)return null;
-    const hits=this.sceneManager.raycast(event,[this.handles.START,this.handles.END]);
-    return hits.find(hit=>hit.object?.userData?.profileGrip)?.object||null;
+    if(!this.selectedMesh()||this.sceneManager.transformControls.dragging)return null;
+    this.refresh(true);
+    const rect=this.canvas.getBoundingClientRect();
+    let best=null,bestDistance=18;
+    for(const handle of Object.values(this.handles)){
+      const point=handle.position.clone().project(this.sceneManager.camera);
+      if(point.z<-1||point.z>1||Math.abs(point.x)>1||Math.abs(point.y)>1)continue;
+      const distance=Math.hypot(event.clientX-rect.left-(point.x+1)*rect.width/2,event.clientY-rect.top-(1-point.y)*rect.height/2);
+      if(distance<bestDistance){best=handle;bestDistance=distance;}
+    }
+    return best;
   }
 
   handlePointerDown(event){
@@ -173,8 +174,9 @@ export default class ProfileGripEditor {
       this.hoverEnd=next;
       const mesh=this.selectedMesh();
       if(mesh)this.refreshHandleStyles(mesh.userData.part.id);
-      this.canvas.style.cursor=next?'ew-resize':'';
+      this.canvas.style.cursor=next?(this.handles[next].userData.blocked?'not-allowed':'ew-resize'):'';
     }
+    if(next)this.canvas.style.cursor=this.handles[next].userData.blocked?'not-allowed':'ew-resize';
   }
 
   handlePointerUp(event){
@@ -194,17 +196,7 @@ export default class ProfileGripEditor {
       this.emitState({active:false,blocked:true,end,message:`${end==='START'?'A':'B'}端已有连接/约束，不能直接拉伸`});
       return;
     }
-    const current=Number(mesh.userData.part.dimensions.length);
-    const value=window.prompt(`${end==='START'?'A':'B'}端拉伸后的型材总长度（mm）`,String(round(current,2)));
-    if(value===null)return;
-    const length=Number(value);
-    if(!Number.isFinite(length)||length<this.options.minLengthMm){
-      this.emitState({active:false,error:true,end,message:`长度必须 ≥ ${this.options.minLengthMm} mm`});
-      return;
-    }
-    this.beginProgrammatic(mesh,end);
-    this.applyCandidateLength(length,{allowFeatureSnap:false,gridSnap:false});
-    this.commitDrag();
+    this.onEditRequested?.({partId:mesh.userData.part.id,end});
   }
 
   beginProgrammatic(mesh,end){

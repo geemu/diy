@@ -181,6 +181,10 @@ export default class InterferenceFeedbackManager {
     helper.userData.__interference = kind === 'INTERFERENCE';
     helper.userData.__contact = kind === 'CONTACT';
     this.group.add(helper);
+    if(kind==='INTERFERENCE'){
+      const surface=createSurfaceFeedback(mesh,{color:0xf04444,opacity:0.45,renderOrder:1603});
+      if(surface){surface.userData.__interference=true;this.group.add(surface);}
+    }
   }
 
   clearVisuals() {
