@@ -1,4 +1,14 @@
-# 项目交接文档 — v0.75.12
+# 项目交接文档 — v0.75.13
+
+## v0.75.13 当前重点
+
+- ConnectionPlacementManager 在鼠标42px接头邻域寻找规范端点/侧槽，保留56px候选锁定距离；空隙无射线命中也可识别。候选必须满足原连接推荐、系列、源端与目标面相对、实际间隙及宿主OBB非干涉。只有合法候选参与Tab切换；确认重新判定，不以绿色外观冒充成功。
+- ComponentCatalog.connectionDesignType 集中路由支持的角槽、90度直角、角码、重型角码、内置与四种连接板；不支持的15系列、45度或复杂几何仍是显式自由放置。安装空间与第三方件的包围盒重叠会拒绝，属于保守空间检查，不是精确孔槽布尔碰撞。
+- ConnectionManager.resolveDesignComponentTransform 共用于Ghost/正式设计连接件；角码底腿法向与源材料面、立腿法向与目标面一致，根部位于源外表面加安装厚度，而不是中心线。同源端同接头复用关系，不覆盖已有制造方案或其他目标占用。
+- beginExisting 只预览，取消不动自由件；确认成功才通过Editor移除原自由件并以designComponent存储在连接关系，一次历史/撤销。锁定、约束、尺寸引用守卫防止悬空事实。该转换不等于制造五金/BOM已配置。
+- AxisClearanceManager 新增底栏±mm输入和键盘路由：方向键依相机投影选择操作轴；Shift十倍步长，PageUp/Down剩余轴。Tab从移动画布聚焦输入，输入内Tab循环轴、Enter确认、Esc取消拖动；拖动数字是起点以来总距离。刷新距离栏保持输入焦点/草稿，不新增工程字段。
+- Editor.moveSelectionByDistance 复用原mouseDown/objectChange/mouseUp事务，拖动中复用已有快照；cancelPrecisionMove恢复完整快照及随动/提示，无历史。约束拒绝仍取消，实体干涉仍保留位置并红色。绘制/放置/模态/表单/可编辑文本不抢方向键；连接安装Tab优先。
+- 162项语法、56项verify、JDK21/Maven clean test和真实Chrome通过；保存重开设计连接仍DESIGN_VALID，安装变换无可观测变化。版本0.75.13、Schema62，用户原工程不改、不重启已有8083进程。详见VALIDATION。
 
 ## v0.75.12 当前重点
 

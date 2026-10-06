@@ -1,4 +1,15 @@
-# Validation / Regression — v0.75.12
+# Validation / Regression — v0.75.13
+
+## v0.75.13 当前检查范围
+
+- 2026-10-07：162个JS/MJS语法检查通过；最终56项verify回归全部通过。JDK21.0.11 / Maven -o clean test成功，2项测试0失败/错误；Schema62、105个本地模块缓存身份0.75.13保持。
+- 新增 verify-connector-snap-v07513：真实Three.js/ConnectionManager/Placement测试规范接头、自动法向、源外表面安装角点、预览/正式变换相同、任意整体旋转、小空隙屏幕候选、只读悬停、重复安全、自由件转换、间隙/干涉/第三方空间拒绝及多候选切换。空间检查明确为保守包络，不冒充复杂件实体布尔。
+- 新增 verify-keyboard-move-v07513：八组相机/画布或构件方向下方向键投影符号正确、水平/竖直轴不同、剩余深度轴、步长/Shift、修饰键/拖动守卫、原Editor移动事务、拖动起点总距离、取消不加历史、锁定及Tab上下文顺序。
+- 实际Chrome隔离工程：4040横梁A端贴立柱，目录90度直角连接件绿色Ghost位置(22.4,40,0)、自动朝向，正式件变换相同；点击生成DESIGN_VALID、history+1，Ctrl+Z撤销。自由角码取消仍存在/history不增，确认原件移除/关系生成，Ctrl+Z恢复自由件并移除关系。
+- 实际Chrome三杆接头有2个合法候选，Tab更换接头而非聚焦距离框；点击安装，JSON导出再loadProject后designComponent/关系仍在，DESIGN_VALID，变换差异仅序列化浮点精度范围，复次保存重开位置/角度差0。无写入用户文件。
+- 真实方向键：默认5mm、Shift反向50mm，每次一次历史；Tab输入37.5mm及Y轴-20mm精确到位。自定义10mm步长和PageDown剩余轴实测；输入20mm进入另杆实体，目标坐标保留/history+1/干涉active=true。
+- 真实鼠标X箭头拖动：起点(242.5,80,0)，拖到(285,80,0)，Tab输入25并Enter后(267.5,80,0)，鼠标松开不二次提交、history+1；Ctrl+Z还原起点。另用真实TransformControls事件链验证拖出12再输入80最终为起点+80，输入中Esc还原、history不增加。
+- 独立Chrome未出现pageerror；浏览器测试Editor引用仅注入隔离响应，不写生产源码。资源同步现有8083，未启动/停止/重启用户进程；用户图片和两份原JSON保持不变。
 
 ## v0.75.12 当前检查范围
 

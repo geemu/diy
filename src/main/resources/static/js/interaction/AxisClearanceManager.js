@@ -13,7 +13,7 @@ export default class AxisClearanceManager{
     this.panel.addEventListener('pointerdown',event=>event.stopPropagation());
     this.panel.addEventListener('click',event=>{
       const action=event.target.closest('button')?.dataset.action;if(!action)return;
-      if(action==='close'){this.hide();return;}
+      if(action==='close'){this.editor.cancelPrecisionMove();this.hide();return;}
       try{action==='distance'?this.applyDistance():this.moveTo(action);}catch(error){this.showError(error);}
     });
     this.panel.addEventListener('keydown',event=>{
@@ -90,7 +90,8 @@ export default class AxisClearanceManager{
   showError(error){this.editor.sceneManager.showSnapFeedback({status:'blocked',label:'无法移动',details:[error.message]});}
 
   focusDistance(cycle=0){
-    const axes=['X','Y','Z'],axis=axes[(axes.indexOf(this.axis||this.editor.sceneManager.transformControls.axis||'X')+cycle+3)%3];
+    const axes=['X','Y','Z'],current=this.axis||this.editor.sceneManager.transformControls.axis;
+    const axis=axes[(axes.indexOf(axes.includes(current)?current:'X')+cycle+3)%3];
     if(!this.update(axis))return false;
     const input=this.panel.querySelector('[data-distance]');input.focus({preventScroll:true});input.select();return true;
   }
