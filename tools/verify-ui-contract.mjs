@@ -15,7 +15,7 @@ const css = fs.readFileSync(path.join(staticDir, 'css/app.css'), 'utf8');
 const requiredUiText = [
   '型材', '光轴', '板材', '生成器', '连接', '加工', '工程',
   '成组抽屉', '立体框架', '线性阵列', '镜像', '圆周阵列', '配件库',
-  '制造汇总', '工程树', '自动保存', '导出加工包', '正交', '吸附', '网格', '测量', '框选', '自由选择', '局部', '自定义型材', '保存到数据库'
+  '制造汇总', '工程树', '自动保存', '导出加工包', '正交', '吸附', '网格', '测量', '框选', '自由选择', '构件方向', '画布方向', '自定义型材', '保存到数据库'
 ];
 const requiredAppMethods = [
   'startProfileDrag', 'dropAsset', 'addShaft', 'addPanel', 'generateFrame',

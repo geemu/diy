@@ -41,7 +41,7 @@ export default class FactoryPackageExporter {
     zip.file('加工分组.csv',BomExporter.fileText(this.editor.bomExporter.buildMachiningRows()));
 
     const assemblyDrawings = zip.folder('装配工程图');
-    const drawingPayload = this.editor.engineeringDrawingService.build({appVersion:'0.75.7'});
+    const drawingPayload = this.editor.engineeringDrawingService.build({appVersion:'0.75.8'});
     const drawingPaper = this.editor.drawingSettings?.paper || 'A3';
     assemblyDrawings.file(`总装工程图_${drawingPaper}.svg`,this.editor.engineeringDrawingService.svgExporter.export(drawingPayload.model,drawingPayload.layout,this.editor.drawingSettings));
     assemblyDrawings.file(`总装工程图_${drawingPaper}.dxf`,this.editor.engineeringDrawingService.dxfExporter.export(drawingPayload.model,drawingPayload.layout,this.editor.drawingSettings));
@@ -49,7 +49,7 @@ export default class FactoryPackageExporter {
     assemblyDrawings.file('DXF图层说明.json',JSON.stringify(this.editor.engineeringDrawingService.dxfExporter.layerManifest(),null,2));
     const subFolder = assemblyDrawings.folder('子装配');
     let subDrawingIndex = 1;
-    for (const sheet of this.editor.engineeringDrawingService.buildSubassemblySheets({appVersion:'0.75.7'})) {
+    for (const sheet of this.editor.engineeringDrawingService.buildSubassemblySheets({appVersion:'0.75.8'})) {
       const prefix = String(subDrawingIndex++).padStart(2,'0');
       const subBase=`${prefix}_${this.safeName(sheet.name)}_${String(sheet.assemblyId).slice(0,6)}`;
       subFolder.file(`${subBase}.svg`,sheet.svg);

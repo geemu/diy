@@ -58,4 +58,4 @@ for(const plane of ['XZ','XY','YZ']) {
     assert.ok(Math.abs(min)<1e-7,`${plane} 工作平面底面应为 0，得到 ${min}`);
   }
 }
-console.log(JSON.stringify({ok:true,version:'0.75.7',viewDirections:26,faces:6,edges:12,corners:8,cubeDragCases,rectangularSectionGroundingCases:15}));
+console.log(JSON.stringify({ok:true,version:'0.75.8',viewDirections:26,faces:6,edges:12,corners:8,cubeDragCases,rectangularSectionGroundingCases:15}));

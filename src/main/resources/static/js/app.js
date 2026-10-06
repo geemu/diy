@@ -14,7 +14,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.7';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.8';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -2360,7 +2360,7 @@ createApp({
     function toggleTransformSpace() {
       transformSpace.value = transformSpace.value === 'world' ? 'local' : 'world';
       editor?.setTransformSpace(transformSpace.value);
-      notify(transformSpace.value === 'local' ? '构件方向（局部）：操作轴跟随构件旋转；旋转中心不变' : '画布方向（世界）：操作轴沿固定 X/Y/Z；旋转中心不变');
+      notify(transformSpace.value === 'local' ? '构件方向：操作轴跟随构件旋转；旋转中心不变' : '画布方向：操作轴沿固定 X/Y/Z；旋转中心不变');
     }
 
     function setTransformSpace(space) {

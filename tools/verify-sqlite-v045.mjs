@@ -26,4 +26,4 @@ assert.ok(data.includes('ON CONFLICT(model) DO UPDATE SET'));
 assert.ok(profileMapper.includes('ON CONFLICT(id) DO UPDATE SET'));
 assert.ok(!baseMapper.includes('CAST(#{geometryJson} AS JSON)'));
 
-console.log(JSON.stringify({ok:true,version:'0.75.7',database:'SQLite',jdbc:'org.xerial:sqlite-jdbc:3.53.4.0',mybatisXml:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.8',database:'SQLite',jdbc:'org.xerial:sqlite-jdbc:3.53.4.0',mybatisXml:true},null,2));

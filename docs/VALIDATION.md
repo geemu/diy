@@ -1,4 +1,13 @@
-# Validation / Regression — v0.75.7
+# Validation / Regression — v0.75.8
+
+## v0.75.8 当前检查范围
+
+2026-10-06：152 个 JS/MJS 语法检查、50 个 verify 回归通过；JDK 21.0.11 Maven -o clean test 成功，2 项测试、0 失败、0 错误。Schema 62 不变，git diff --check 通过。
+
+- verify-player-terminology-v0758 检查镜像/圆周/方向的玩家用语、WORLD_ORIGIN / SELECTION_CENTER 参数身份和三个 !selectionCount 禁用守卫保持。旧 verify-ui-contract 要求“局部”字样导致首次回归失败，已同步为“构件方向 / 画布方向”契约后重跑全部检查，不删除原方向功能断言。
+- 独立 Chrome 在本地 8083 确认批量入口始终可打开；空白无选择时三个执行按钮禁用，面板解释原因。实际绘制 500 mm 型材并退出 FREE，selectionCount=1 时三个按钮均可用；打开面板不清除选择。
+- 无测试脚本注入 Editor，使用真实 UI 执行：一根型材等距阵列 count=3/spacing=700 得到 3 根且选中 2 个副本；保留原件镜像得到 2 根、选中 1 副本；Y 方向 360° 圆周阵列 count=4 得到 4 根、选中 3 副本。动态选择数量与实际状态一致，pageerror=[]。
+- 普通刷新为 v0.75.8，所有本地 JS 请求无旧版本；v0758-batch-empty.png / v0758-batch-selected.png 截图保存在本轮 visualizations 目录。独立上下文已关闭，未触碰用户 Chrome 工程或重启用户后端。
 
 ## v0.75.7 当前检查范围
 

@@ -10,7 +10,7 @@ const schemaModule = await import(pathToFileURL(path.join(staticRoot,'js/io/Proj
 const {default:ProjectSchema,CURRENT_PROJECT_SCHEMA_VERSION,CURRENT_APP_VERSION} = schemaModule;
 
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
-assert.equal(CURRENT_APP_VERSION,'0.75.7');
+assert.equal(CURRENT_APP_VERSION,'0.75.8');
 
 const sample = {
   metadata:{name:'Schema 62 验证工程'},
@@ -49,7 +49,7 @@ assert.ok(loadedShippedSample.project.parts.every(part=>part.type!=='PROFILE'||(
 
 const loaded = ProjectSchema.load(sample);
 assert.equal(loaded.project.schemaVersion,62);
-assert.equal(loaded.project.metadata.version,'0.75.7');
+assert.equal(loaded.project.metadata.version,'0.75.8');
 assert.equal(loaded.project.parts[0].designProfile.profileId,'DESIGN-3030');
 assert.equal(loaded.project.parts[0].manufacturingProfile,null);
 assert.equal(loaded.project.connections[0].designType,'ANGLE_BRACKET');
@@ -99,7 +99,7 @@ console.log(JSON.stringify({
   ok:true,
   schema:62,
   currentOnly:true,
-  version:'0.75.7',
+  version:'0.75.8',
   designManufacturingSeparated:true,
   abstractDesignConnections:true,
   legacyProjectCompatibility:false,
