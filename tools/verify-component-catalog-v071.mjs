@@ -38,7 +38,8 @@ for(const diameter of catalog.shaftDiametersFor('L_FIX')) {
   const definition=catalog.shaftComponent({type:'L_FIX',diameter,mixed:false});
   const object=factory.create(catalog.componentPart(definition));object.updateMatrixWorld(true);
   const size=new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3());
-  assert.ok(size.distanceTo(new THREE.Vector3(diameter*2,diameter*4,diameter*4))<1e-8);
+  // 网格顶点使用 Float32；17.6 等非二进制精确尺寸允许对应的量化误差。
+  assert.ok(size.distanceTo(new THREE.Vector3(diameter*2.2,diameter*4,diameter*4))<diameter*1e-6);
   assert.equal(definition.dimensions.axisOffsetY,diameter);
   const clearRay=(from,direction)=>{
     const ray=new THREE.Raycaster(new THREE.Vector3(...from),new THREE.Vector3(...direction));

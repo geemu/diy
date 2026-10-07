@@ -989,3 +989,40 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .profile-length-editor .property-row{margin:0 0 8px;grid-template-columns:72px minmax(0,1fr)}
 .profile-length-editor small{display:block;color:#a6adba;line-height:1.5;font-size:11px}
 .profile-length-editor input:disabled,.profile-length-editor select:disabled{color:#858c9a;background:#151823;opacity:.7}
+/* 快速对齐与参考编辑器共用深色操作层；不遮盖侧栏表单。 */
+.quick-alignment-panel { position:fixed; left:calc(50% - 150px); bottom:68px; width:300px; max-width:calc(100vw - 24px); padding:12px; border:1px solid #303442; border-radius:12px; background:#10131e; box-shadow:0 10px 32px #0005; color:#ddd; z-index:230; }
+.quick-alignment-panel button { background:#191d29; border:1px solid #313644; border-radius:7px; color:#d9dce4; padding:8px 10px; cursor:pointer; }
+.quick-alignment-panel button:hover { color:#ff9800; border-color:#ff9800; background:#261b14; }
+.quick-alignment-panel button:disabled { opacity:.35; cursor:not-allowed; }
+.quick-alignment-panel > button { display:block; width:100%; text-align:left; margin-bottom:7px; }
+.quick-alignment-heading,.alignment-axis-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; }
+.quick-alignment-heading strong,.alignment-axis-row span { flex:1; }
+.quick-alignment-panel p { font-size:12px; color:#939aa9; margin:0 0 10px; }
+
+/* 实际观察的光轴智能配件流程：448px 紧凑模态，类型/孔/站位不是普通目录入口。 */
+.shaft-smart-modal{width:min(448px,calc(100vw - 32px));border:1px solid #2b3040;border-radius:12px;max-height:calc(100vh - 32px)}
+.modal-backdrop:has(.shaft-smart-modal){background:#000a;backdrop-filter:blur(4px)}
+.shaft-smart-modal .modal-header{padding:16px;border-bottom:1px solid #ffffff10}
+.shaft-smart-modal h3{font-size:20px;font-weight:700}.shaft-smart-modal .accent{color:#ff9100}
+.shaft-smart-modal .modal-subtitle{font-size:12px;line-height:18px;margin-top:6px}
+.shaft-smart-fields{padding:16px;overflow:auto}
+.shaft-smart-fields .field-stack{margin-bottom:16px}.shaft-smart-fields label{display:block;font-size:12px;font-weight:500;line-height:16px;margin-bottom:8px}
+.shaft-smart-fields select{height:42px;font-size:14px;padding:0 12px;width:100%;border:1px solid #333;box-sizing:border-box}
+.shaft-smart-fields input[type="number"]{width:100%;height:38px;box-sizing:border-box;font-size:14px;padding:8px 12px;border:1px solid #ffffff1a;border-radius:4px;background:#030712;color:#fff}
+.shaft-smart-fields small{display:block;font-size:12px;margin-top:7px;line-height:18px}
+.shaft-smart-fields input[type="range"]{width:100%;height:20px;margin:0;accent-color:#ff9100;cursor:pointer}
+.shaft-smart-stations{display:flex;justify-content:space-between;font-size:12px;color:#9ca3af;margin-top:4px}
+.shaft-smart-summary{padding:12px;margin:0 0 16px;border:1px solid #ff910033;background:#ff910014;border-radius:8px;font-size:12px;line-height:18px;color:#d7a368!important}
+.shaft-smart-fields .primary-button{height:48px;font-size:16px;background:#ff6b00;border-color:#ff6b00;border-radius:8px}
+.cad-tool-rail .rail-tool{position:relative;height:64px;min-height:64px;gap:5px}
+.cad-tool-rail .rail-tool span:last-of-type{font-size:10px;line-height:14px;white-space:normal}
+.cad-tool-rail .rail-tool kbd{position:absolute;right:3px;top:4px;background:transparent;color:#697384;border:0;font-size:8px}
+.mirror-menu>summary{display:flex;align-items:center;justify-content:center;width:36px;height:36px;box-sizing:border-box;background:#ffffffe0;border:1px solid #00000014;border-radius:8px;color:#1f2937;padding:0}
+.mirror-menu>summary:hover{background:#fff;color:#ff9100}.mirror-menu>summary.disabled{opacity:.35}
+.mirror-menu .cad-menu-popover{width:112px;min-width:112px}
+.smart-panel-card{margin:0}.smart-panel-card .muted{font-size:12px;line-height:18px}
+/* 常用变换按参考顺序紧凑排列；提示说明留在 tip，结束/确认等文字操作始终可见。 */
+.workbench-footer .canvas-transform-bar .transform-tool:has(.workbench-icon){min-width:36px;width:36px;padding:0;justify-content:center}
+.workbench-footer .canvas-transform-bar .transform-tool:has(.workbench-icon)>span{display:none}
+.workbench-footer .canvas-transform-bar .draw-tool.active{width:auto;min-width:36px;padding:0 8px}
+.workbench-footer .canvas-transform-bar .draw-tool.active>span{display:inline!important}

@@ -7,6 +7,7 @@ import {effectiveDiameter, featureFootprint, isEndMachiningFeature, normalizeMac
 import PartCollisionDetector from './PartCollisionDetector.js';
 import ConnectionCompletenessInspector from './ConnectionCompletenessInspector.js';
 import {panelDimensions,SolidPanelShapes} from '../model/PanelShapeModel.js';
+import {shaftFixturePorts} from '../model/ComponentCatalog.js';
 
 export default class FactoryValidator {
   constructor(editor) {
@@ -307,7 +308,11 @@ export default class FactoryValidator {
       errors.push(issue('ACCESSORY_MOUNT_TARGET_TYPE','ERROR',label,'该配件要求安装到板材侧面，但当前宿主不是板材',{partIds:[part.id,target.id],category:'ASSEMBLY'}));
       return;
     }
-    if(targetType==='SHAFT_AXIS'&&(target.type!=='SHAFT'||Math.abs(Number(part.mountRule?.diameter)-Number(target.dimensions?.diameter))>.01))errors.push(issue('SHAFT_CLAMP_MISMATCH','ERROR',label,'固定夹宿主类型或孔径不匹配',{partIds:[part.id,target.id],category:'ASSEMBLY'}));
+    if(targetType==='SHAFT_AXIS') {
+      const hole=reference.holeId?shaftFixturePorts(part).find(port=>port.id===reference.holeId):null;
+      const diameter=Number(hole?.diameter??part.mountRule?.diameter);
+      if(target.type!=='SHAFT'||(reference.holeId&&!hole)||!Number.isFinite(diameter)||Math.abs(diameter-Number(target.dimensions?.diameter))>.01)errors.push(issue('SHAFT_CLAMP_MISMATCH','ERROR',label,'固定夹宿主类型或所选对齐孔径不匹配',{partIds:[part.id,target.id],category:'ASSEMBLY'}));
+    }
 
     const requiredNominal = String(rule.profileNominal || '').trim();
     if (requiredNominal && target.type === 'PROFILE' && String(profileNominal(target) || '') !== requiredNominal) {

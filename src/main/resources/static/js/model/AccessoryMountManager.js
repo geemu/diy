@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {shaftFixturePorts} from './ComponentCatalog.js';
 import {getLocalEndpoints} from './ProfilePath.js';
 
 /**
@@ -62,7 +63,7 @@ export default class AccessoryMountManager {
     } else if (targetType === 'PANEL_SIDE') {
       transform = this.resolvePanelSide(part,targetMesh,{side:reference.side});
     } else if(targetType==='SHAFT_AXIS') {
-      transform=this.resolveShaftAxis(part,targetMesh,{stationS:reference.stationS});
+      transform=this.resolveShaftAxis(part,targetMesh,{stationS:reference.stationS,holeId:reference.holeId});
     }
     if (!transform) return false;
 
@@ -147,10 +148,32 @@ export default class AccessoryMountManager {
   resolveShaftAxis(source,targetMesh,options={}) {
     const part=targetMesh?.userData?.part;if(part?.type!=='SHAFT')return null;
     const length=Number(part.dimensions.length),stationS=Math.max(0,Math.min(length,Number(options.stationS??length/2)));
-    const d=source.dimensions||source,offset=Number(d.axisOffsetY||0);
-    const position=targetMesh.localToWorld(new THREE.Vector3(0,offset,stationS-length/2));
-    const quaternion=targetMesh.getWorldQuaternion(new THREE.Quaternion());
-    return {position:this.toPlainPoint(position),rotation:this.toPlainEuler(quaternion),mountReference:{targetType:'SHAFT_AXIS',targetPartId:part.id,stationS}};
+    if(!Number.isFinite(stationS))throw new Error('夹具位置必须是有限毫米数');
+    const ports=shaftFixturePorts(source);
+    const hole=options.holeId?ports.find(port=>port.id===options.holeId):ports.find(port=>['Z','LOWER'].includes(port.id))||ports[0];
+    if(options.holeId&&!hole)throw new Error('当前夹具不存在所选光轴孔');
+    if(hole&&Math.abs(hole.diameter-Number(part.dimensions.diameter))>.01)throw new Error('所选对齐孔与光轴直径不匹配');
+    if(!hole&&Math.abs(Number(source.mountRule?.diameter)-Number(part.dimensions.diameter))>.01)throw new Error('固定夹孔径与光轴不匹配');
+    // 先把所选孔轴转到宿主局部 Z，再扣除旋转后的孔中心；不能只改角度而仍用旧孔偏移。
+    const alignment=hole?new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(...hole.axis),new THREE.Vector3(0,0,1)):new THREE.Quaternion();
+    const localCenter=hole?new THREE.Vector3(...hole.center).applyQuaternion(alignment):new THREE.Vector3(0,-Number(source.dimensions?.axisOffsetY||0),0);
+    const position=targetMesh.localToWorld(new THREE.Vector3(0,0,stationS-length/2).sub(localCenter));
+    const quaternion=targetMesh.getWorldQuaternion(new THREE.Quaternion()).multiply(alignment);
+    return {position:this.toPlainPoint(position),rotation:this.toPlainEuler(quaternion),mountReference:{targetType:'SHAFT_AXIS',targetPartId:part.id,stationS,...(options.holeId?{holeId:hole.id}:{})}};
+  }
+
+  /** 反向生成使用孔的轴心/方向和有符号起点偏移；生成普通可编辑光轴，不臆造额外约束。 */
+  resolveShaftForFixture(targetMesh,options={}) {
+    const port=shaftFixturePorts(targetMesh?.userData?.part).find(hole=>hole.id===options.holeId);
+    if(!port)throw new Error('当前夹具不存在所选光轴孔');
+    const length=Number(options.length),offset=Number(options.startOffset);
+    if(!Number.isFinite(length)||length<=0)throw new Error('光轴长度必须大于 0 mm');
+    if(!Number.isFinite(offset))throw new Error('起点偏移必须是有限毫米数');
+    const axis=new THREE.Vector3(...port.axis),center=new THREE.Vector3(...port.center).addScaledVector(axis,offset+length/2);
+    const position=targetMesh.localToWorld(center);
+    const alignment=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),axis);
+    const quaternion=targetMesh.getWorldQuaternion(new THREE.Quaternion()).multiply(alignment);
+    return {position:this.toPlainPoint(position),rotation:this.toPlainEuler(quaternion),diameter:port.diameter,length};
   }
 
   applyTransform(mesh,transform) {

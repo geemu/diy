@@ -59,6 +59,8 @@ export default class ProfileGripEditor {
     if(part?.type!=='PROFILE'||!isLinearProfile(part))return null;
     if(!this.editor.isMeshTransformable(mesh))return null;
     if(this.editor.profileDrawTool?.isActive())return null;
+    if(this.editor.profilePlacementManager?.isActive())return null;
+    if(this.editor.wholeStretchManager?.isActive())return null;
     // 放置端盖/连接/加工时，端点是安装目标，不是拉伸手柄；不能抢走确认点击。
     if(this.editor.accessoryPlacementManager?.isActive()||this.editor.connectionPlacementManager?.isActive()||this.editor.machiningPlacementManager?.isActive())return null;
     return mesh;

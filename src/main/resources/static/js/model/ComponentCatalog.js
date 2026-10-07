@@ -67,8 +67,22 @@ export function shaftComponent(form) {
   if(type==='HORIZONTAL_SHF')Object.assign(dimensions,{width:d*4,height:d*2,length:d*1.2,thickness:d*1.2});
   if(type==='LIMIT_RING')Object.assign(dimensions,{size:d*1.9,width:d*1.9,height:d*1.9,length:d*.65,thickness:d*.65});
   // L 夹是前低后高的实体阶梯块，主轴孔位于下层；不能沿用通用立板尺寸。
-  if(type==='L_FIX')Object.assign(dimensions,{width:d*2,height:d*4,length:d*4,thickness:d*4,axisOffsetY:d});
+  // 公开修改页 Φ8 的宽/高/长为 17.6/32/32；只用于设计参考几何，不是厂商料号尺寸。
+  if(type==='L_FIX')Object.assign(dimensions,{width:d*2.2,height:d*4,length:d*4,thickness:d*4,axisOffsetY:d});
   return definition(`SHAFT_${type}`,`${name} ${form.mixed?`异径Φ${dimensions.secondDiameter}-${d}`:`Φ${d}`}mm`,dimensions,{category:'光轴配件',mountRule:{target:'SHAFT_AXIS',diameter:d}});
+}
+
+/** 夹具可安装主孔的轴心。坐标取自共用几何，不将紧固螺钉孔当作光轴孔。 */
+export function shaftFixturePorts(source) {
+  const d=source?.dimensions||{},type=String(d.geometryKind||'').replace(/^SHAFT_/,''),a=Number(d.diameter),b=Number(d.secondDiameter||a);
+  const port=(id,label,axis,center,diameter=a)=>({id,label,axis,center,diameter});
+  const z=port('Z','前后孔 (Z轴)',[0,0,1],[0,-Number(d.axisOffsetY||0),0]);
+  if(type==='L_FIX')return [port('X','水平孔（转角）',[1,0,0],[0,-Number(d.axisOffsetY),Number(d.length)/4],b),port('Y','垂直孔（顶部）',[0,1,0],[0,0,Number(d.length)/4],b),{...z,label:'前后孔（末端）'}];
+  if(type==='CROSS_FIX')return [port('X','水平孔 (X轴)',[1,0,0],[0,a,0],b),z];
+  if(type==='T_FIX')return [port('Y','垂直孔',[0,1,0],[0,0,0],b),{...z,label:'前后孔'}];
+  if(type.startsWith('PARALLEL_FIX'))return [port('UPPER','上孔',[0,0,1],[0,Number(d.spacing)/2,0],b),{...z,id:'LOWER',label:'下孔'}];
+  if(['VERTICAL_SK','HORIZONTAL_SHF','LIMIT_RING'].includes(type))return [{...z,label:'轴心孔'}];
+  return [];
 }
 export function accessoryComponent(form,profile) {
   if(form.type==='SLIDE_RAIL')return definition('SLIDE_RAIL',`${SlideTypeOptions.find(x=>x.value===form.slideType)?.label} ${SlideLengthOptions.find(x=>String(x.value)===String(form.slideLength))?.label||`${form.slideLength}mm`}`,

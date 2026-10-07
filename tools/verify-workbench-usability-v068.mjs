@@ -55,4 +55,4 @@ assert.ok(app.includes("window.addEventListener('click',handleCadMenuClick,true)
 assert.ok(!app.slice(app.indexOf('function handleCadMenuPointerDown'),app.indexOf('function handleCadMenuClick')).includes('queueMicrotask'));
 assert.ok(scene.includes('if(event.button!==0)')&&scene.includes('secondaryClickHandler'),'右键不得通过左键提交链');
 assert.ok(overlay.includes('event.preventDefault();tool.stop();'),'长度输入聚焦时 Esc 也结束');
-console.log(JSON.stringify({ok:true,version:'0.75.13',oneShotDefault:true,explicitRepeat:true,oneEscapeExit:true,cancelKeepsCommitted:true,noModeSplit:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.15',oneShotDefault:true,explicitRepeat:true,oneEscapeExit:true,cancelKeepsCommitted:true,noModeSplit:true}));
