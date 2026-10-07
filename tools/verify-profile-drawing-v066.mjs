@@ -66,7 +66,7 @@ ed.autoConnectProfiles=ids=>{assert.ok(ids.includes(host.userData.part.id),'自�
 assert.equal(tool.commitLength(600),true);assert.equal(ed.parts[2].dimensions.length,600);
 tool.begin('FREE');tool.start={point:new THREE.Vector3(0,15,0)};tool.hover={point:new THREE.Vector3(100,15,0)};
 ed.interferenceFeedbackManager.refresh=()=>({active:true});const captures=ed.captures,count=ed.parts.length;
-assert.equal(tool.commitLength(100),false);assert.equal(ed.parts.length,count);assert.equal(ed.captures,captures,'拒绝干涉不写历史');
+assert.equal(tool.commitLength(100),true);assert.equal(ed.parts.length,count+1);assert.equal(ed.captures,captures+1,'明确确认的 FREE 干涉位置保留并标红，一次撤销；不能派生假连接');
 tool.begin('DIAGONAL');tool.start={point:new THREE.Vector3(0,15,0)};tool.hover={point:new THREE.Vector3(300,15,400)};
 assert.equal(tool.typedCandidate(500).point.x,300);assert.equal(tool.typedCandidate(500).point.z,400,'斜角模式不能被默认正交开关掰直');
-console.log(JSON.stringify({ok:true,version:'0.75.16',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,collisionRollback:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.17',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,explicitInterferencePlacement:true}));

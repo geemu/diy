@@ -9,15 +9,22 @@ export default class ProfileDrawOverlay {
     this.element.hidden=true;
     this.input=document.createElement('input');
     this.input.type='text';this.input.inputMode='decimal';
+    this.input.placeholder='输入长度';
     this.input.setAttribute('aria-label','绘制型材长度');
     this.input.setAttribute('autocomplete','off');
     const unit=document.createElement('span');unit.textContent='mm';
-    this.element.append(this.input,unit);
+    this.confirm=document.createElement('button');this.confirm.type='button';this.confirm.textContent='确定';
+    this.confirm.setAttribute('aria-label','确认型材长度');
+    this.confirm.addEventListener('click',event=>{event.stopPropagation();if(!tool.commitLength(this.input.value))this.input.setAttribute('aria-invalid','true');});
+    this.element.append(this.input,unit,this.confirm);
     this.sceneManager.container.appendChild(this.element);
     this.input.addEventListener('focus',()=>this.input.select());
+    this.input.addEventListener('input',()=>tool.updateLengthDraft(this.input.value));
     this.input.addEventListener('keydown',event=>{
       event.stopPropagation();
-      if(event.key==='Enter') {
+      if(event.key==='Tab'&&tool.mode==='FREE'){
+        event.preventDefault();tool.handleKeyDown(event);
+      }else if(event.key==='Enter') {
         event.preventDefault();
         if(!tool.commitLength(this.input.value))this.input.setAttribute('aria-invalid','true');
       }else if(event.key==='Escape') {
@@ -26,6 +33,8 @@ export default class ProfileDrawOverlay {
     });
     this.removeFrameHandler=this.sceneManager.addFrameHandler(()=>this.position());
   }
+
+  beginAt(point){this.update(point,point,0);this.input.value='';this.input.focus();}
 
   update(start,end,length,typed='') {
     this.anchor=start.clone().add(end).multiplyScalar(.5);
@@ -40,7 +49,7 @@ export default class ProfileDrawOverlay {
     const p=this.anchor.clone().project(this.sceneManager.camera);
     const width=this.sceneManager.container.clientWidth,height=this.sceneManager.container.clientHeight;
     this.element.style.visibility=p.z<-1||p.z>1?'hidden':'';
-    this.element.style.left=`${Math.max(4,Math.min(width-112,(p.x+1)*width/2+14))}px`;
+    this.element.style.left=`${Math.max(4,Math.min(width-this.element.offsetWidth-4,(p.x+1)*width/2+14))}px`;
     this.element.style.top=`${Math.max(4,Math.min(height-32,(1-p.y)*height/2-34))}px`;
   }
 

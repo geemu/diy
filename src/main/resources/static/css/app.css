@@ -874,7 +874,8 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .canvas-transform-bar.is-drawing{flex-wrap:wrap;justify-content:center}
 .canvas-transform-bar.is-drawing .draw-tool>span{display:inline!important}
 .drawing-status{color:#a75c12!important}
-.profile-length-input{border-color:var(--accent)}.profile-length-input input{color:#9a4c00}
+.profile-length-input{max-width:170px;height:30px;border-color:#31475c;background:#142436}.profile-length-input input{height:28px;color:#e7f3fa;background:#142436}.profile-length-input span{color:#98adbf}.profile-length-input button{height:24px;margin:2px 3px 2px 0;padding:0 7px;border:0;border-radius:3px;color:#062131;background:#49c8e8;font-size:11px;white-space:nowrap;cursor:pointer}.profile-length-input button:focus-visible{outline:2px solid #fff;outline-offset:-2px}
+.viewport canvas.profile-drawing-active{cursor:var(--profile-draw-cursor,crosshair)!important}
 .context-menu{background:#11131d;border-color:#ffffff24;color:#d1d5db}.context-menu-cad .context-menu-head{color:#d1d5db;border-color:var(--line)}
 .context-menu-cad button{color:#d1d5db}.context-menu-cad button:hover:not(:disabled){background:#ffffff0d;color:var(--accent)}
 .modal-card,.engineering-center-modal{background:#020617;border-color:#ffffff1a;color:#d1d5db}

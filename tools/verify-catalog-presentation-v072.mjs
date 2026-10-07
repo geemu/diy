@@ -39,4 +39,4 @@ ground.dispose();
 const preview=fs.readFileSync(path.join(js,'interaction/ProfileSectionPreview3D.js'),'utf8');
 assert.ok(preview.includes('style.referenceSpan/2')&&preview.includes('MeshLambertMaterial'));
 assert.ok(!preview.includes('this.mesh.scale.set'),'不能用改变真实几何尺寸的方式校准目录展示');
-console.log(JSON.stringify({ok:true,version:'0.75.16',boreCases,presentationOnly:true,rProfileNameAndView:true,canvasGroundAndFade:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.17',boreCases,presentationOnly:true,rProfileNameAndView:true,canvasGroundAndFade:true}));

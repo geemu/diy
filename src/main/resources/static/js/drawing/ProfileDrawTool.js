@@ -24,6 +24,7 @@ export default class ProfileDrawTool {
     this.axisLock=null;
     this.lastPointer=null;
     this.lengthOverlay=null;
+    this.idlePreviewLengthMm=0;
     this.onStateChanged=null;
   }
 
@@ -37,17 +38,28 @@ export default class ProfileDrawTool {
     if(!['FREE','DIAGONAL','LINE','POLYLINE','RECTANGLE','BOX','CONTOUR'].includes(next))throw new Error(`不支持的绘制模式：${mode}`);
     this.axisLock=null;this.lastPointer=null;
     if(typeof document!=='undefined'&&!this.lengthOverlay)this.lengthOverlay=new ProfileDrawOverlay(this);
-    this.mode=next;this.configure(options);this.start=null;this.hover=null;this.contourPoints=[];this.polylinePreviousMesh=null;this.polylineOrigin=null;this.sessionSegments=[];this.typedLength='';this.clearPreview();
+    // 首击前只显示截面对应的一小段，不把侧栏长度当成已生成的型材。
+    const {previewLengthMm=0,...drawingOptions}=options;
+    const definition=getDesignProfileDefinition(drawingOptions.catalogId||this.options.catalogId);
+    this.idlePreviewLengthMm=next==='FREE'?Math.max(40,Math.min(120,Math.max(Number(definition?.width||30),Number(definition?.height||30))*2)):0;
+    this.mode=next;this.configure(drawingOptions);this.start=null;this.hover=null;this.contourPoints=[];this.polylinePreviousMesh=null;this.polylineOrigin=null;this.sessionSegments=[];this.typedLength='';this.clearPreview();
     this.editor.sceneManager.setMarqueeMode(false);
     this.editor.sceneManager.transformControls.detach();
-    this.editor.sceneManager.renderer.domElement.style.cursor='crosshair';
+    const canvas=this.editor.sceneManager.renderer.domElement,cursor=next==='FREE'?profileDrawingCursor():'crosshair';
+    canvas.style.cursor=cursor;
+    // 普通悬停/端部手柄的清理会重置inline cursor；独占画笔不能被这些清理吞掉。
+    canvas.style.setProperty?.('--profile-draw-cursor',cursor);
+    canvas.classList?.toggle('profile-drawing-active',next==='FREE');
     this.emit();return this.state();
   }
 
   stop(){
+    this.idlePreviewLengthMm=0;
     this.axisLock=null;this.lastPointer=null;
     this.mode='OFF';this.start=null;this.hover=null;this.contourPoints=[];this.polylinePreviousMesh=null;this.polylineOrigin=null;this.sessionSegments=[];this.typedLength='';this.clearPreview();
     this.editor.sceneManager.renderer.domElement.style.cursor='';
+    this.editor.sceneManager.renderer.domElement.classList?.remove('profile-drawing-active');
+    this.editor.sceneManager.renderer.domElement.style.removeProperty?.('--profile-draw-cursor');
     if(this.editor.sceneManager.snapMarker)this.editor.sceneManager.snapMarker.visible=false;
     this.editor.sceneManager.hideSnapFeedback?.();
     this.editor.sceneManager.clearSnapPreview?.();
@@ -74,6 +86,12 @@ export default class ProfileDrawTool {
     const key=String(event?.key||'');
     if(key==='Escape'){this.stop();return true;}
     if(key==='Enter'&&this.mode==='FREE'&&!this.start){this.stop();return true;}
+    if(key==='Tab'&&this.mode==='FREE'){
+      const axes=['Z','X','Y'],index=Math.max(0,axes.indexOf(this.axisLock||'Z'));
+      this.axisLock=axes[(index+(event.shiftKey?2:1))%3];
+      if(this.lastPointer)this.handlePointerMove(this.lastPointer);
+      this.emit();return true;
+    }
     if(this.mode==='FREE'&&['Alt','Shift'].includes(key)){
       this.handleModifierChange(event);return true;
     }
@@ -113,6 +131,13 @@ export default class ProfileDrawTool {
     const candidate=this.typedCandidate(length);
     if(this.mode==='CONTOUR'){this.typedLength='';this.handleContourClick(candidate);return true;}
     return this.commitLinearCandidate(candidate);
+  }
+
+  updateLengthDraft(value){
+    const text=String(value||''),length=Number(text);
+    const valid=text&&Number.isFinite(length)&&length>0&&length<=50000;
+    this.typedLength=valid?text:'';
+    if(valid)this.refreshTypedPreview();
   }
 
   /** 修饰键在鼠标静止时也重新计算方向，避免松开 Alt 后仍沿用旧斜向预览。 */
@@ -168,7 +193,7 @@ export default class ProfileDrawTool {
     const candidate=this.resolvePointer(event);
     if(!candidate)return;
     this.hover=candidate;
-    this.editor.sceneManager.showSnapPoint(candidate.point);
+    if(this.mode!=='FREE')this.editor.sceneManager.showSnapPoint(candidate.point);
     const draft=this.typedLength?this.typedCandidate(Number(this.typedLength)||0):candidate;
     this.updatePreview(draft);
     this.showDraftFeedback(draft);
@@ -198,7 +223,9 @@ export default class ProfileDrawTool {
     if(!this.start){
       this.start=cloneCandidate(candidate);
       if(this.mode==='POLYLINE')this.polylineOrigin=cloneCandidate(candidate);
-      this.hover=candidate;this.updatePreview(candidate);this.emit();return true;
+      this.hover=candidate;this.updatePreview(candidate);
+      if(this.mode==='FREE')this.lengthOverlay?.beginAt(candidate.point);
+      this.emit();return true;
     }
     if(this.mode==='RECTANGLE'){
       const end=candidate;
@@ -220,15 +247,17 @@ export default class ProfileDrawTool {
     const startCandidate=cloneCandidate(this.start);
     const mesh=this.editor.addProfileBetweenPoints(this.options.catalogId,physicalStart,logicalEnd,{captureHistory:false,crossSectionUp:workPlaneNormal(this.options.plane),faceClosures:[...(this.options.faceClosures||[])]});
     const collision=this.editor.interferenceFeedbackManager.refresh({focusIds:new Set([mesh.userData.part.id]),live:false});
-    if(collision.active){
+    if(collision.active&&this.mode!=='FREE'){
       this.editor.removePartByIdSilently(mesh.userData.part.id);
       this.editor.interferenceFeedbackManager.requestRefresh();
       this.editor.onTransformBlocked?.(collision);
       this.editor.emitStats();
       return false;
     }
+    // 玩家可显式保留红色干涉位置；不能把红色构件继续当成成功吸附来派生连接。
+    if(collision.active)this.editor.onTransformBlocked?.(collision);
     const autoResults=[];
-    if(this.editor.autoConnectionEnabled){
+    if(this.editor.autoConnectionEnabled&&!collision.active){
       const startSnap=connectionSnapFromFeature(this.start.feature,'START');
       const endSnap=connectionSnapFromFeature(end.feature,'END');
       for(const snap of [startSnap,endSnap]){
@@ -240,7 +269,7 @@ export default class ProfileDrawTool {
         }
       }
     }
-    if(this.editor.autoConnectionEnabled&&this.mode==='FREE'){
+    if(this.editor.autoConnectionEnabled&&!collision.active&&this.mode==='FREE'){
       // 端点特征没有 face，搭接后交给既有几何连接解析，不在绘制层另写连接规则。
       const ids=[mesh.userData.part.id,this.start.feature?.partId,end.feature?.partId].filter(Boolean);
       const result=this.editor.autoConnectProfiles([...new Set(ids)],{source:'PROFILE_DRAW_FREE'});
@@ -580,9 +609,28 @@ export default class ProfileDrawTool {
   }
 
   updateSolidPreview(candidate){
-    if(!this.start){this.clearPreview();return;}
+    if(!this.start){this.updateIdlePreview(candidate);return;}
     const segment=this.linearSegment(candidate),length=segment.start.distanceTo(segment.end);
     if(length<1){this.clearPreview();return;}
+    this.renderSolidSegment(segment,candidate);
+    this.lengthOverlay?.update(segment.start,segment.end,length,this.typedLength);
+  }
+
+  /** 同一绘制流程的起点提示，仍只有一份临时几何；首击不能创建默认长度的正式构件。 */
+  updateIdlePreview(candidate){
+    if(this.idlePreviewLengthMm<1||!candidate?.point){this.clearPreview();return;}
+    const direction=new THREE.Vector3();direction[(this.axisLock||'Z').toLowerCase()]=1;
+    const normal=workPlaneNormal(this.options.plane),start=candidate.point.clone();
+    if(!candidate.feature&&Math.abs(direction.dot(normal))>.999999){
+      const halfHeight=Number(getDesignProfileDefinition(this.options.catalogId)?.height||30)/2;
+      start.addScaledVector(normal,-halfHeight);
+    }
+    this.renderSolidSegment({start,end:start.clone().addScaledVector(direction,this.idlePreviewLengthMm)},candidate);
+    this.lengthOverlay?.hide();
+  }
+
+  renderSolidSegment(segment,candidate){
+    const length=segment.start.distanceTo(segment.end);
     if(!this.previewGroup){
       const part=draftProfilePart(this.options.catalogId,segment.start,segment.end,this.options.plane);
       part.dimensions.length=1;part.profilePath.length=1;
@@ -598,9 +646,8 @@ export default class ProfileDrawTool {
     this.previewGroup.position.copy(segment.start).add(segment.end).multiplyScalar(.5);
     this.previewGroup.quaternion.copy(profileQuaternion(direction,workPlaneNormal(this.options.plane)));
     this.previewGroup.scale.set(1,1,length);
-    const collision=this.previewCollision(candidate),color=collision?0xe24848:candidate.feature?0x36c978:0xc0c8d1;
+    const collision=this.previewCollision(candidate),color=collision?0xe24848:0xc0c8d1;
     this.previewGroup.traverse(object=>{if(object.isMesh)object.material.color.setHex(color);});
-    this.lengthOverlay?.update(segment.start,segment.end,length,this.typedLength);
   }
 
   clearPreview(){
@@ -611,6 +658,12 @@ export default class ProfileDrawTool {
     this.previewGroup=null;
   }
   emit(extra={}){this.onStateChanged?.(this.state(extra));}
+}
+
+/** 通用瞄准器式画笔，固定屏幕像素，不是世界尺寸球体，也不参与拾取。 */
+function profileDrawingCursor(){
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><g fill="none" stroke="#f59e0b" stroke-width="1.8"><circle cx="16" cy="16" r="9.5"/><path d="M16 2V12M16 20V30M2 16H12M20 16H30"/></g><circle cx="16" cy="16" r="1.8" fill="#f59e0b"/></svg>';
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 16 16, crosshair`;
 }
 
 function connectionSnapFromFeature(feature,sourceEnd){

@@ -6,7 +6,7 @@ import {addCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
 /**
  * 设计阶段实时接触 / 干涉反馈。
  *
- * 红色只表示“超过制造容差的实体穿透”；操作中绿色贴合，结束后保留蓝色接触带。
+ * 红色表示实体穿透；操作中绿色候选，实际贴合后保留黄色接头带。
  * 这样连续搭框时可以直接判断是正确贴面还是已经互相插进去了。
  */
 export default class InterferenceFeedbackManager {
@@ -161,8 +161,10 @@ export default class InterferenceFeedbackManager {
       const [a,b]=contact.partIds.map(id=>items.get(id));
       // 近似 AABB 不冒充真实接触面；直型材才有稳定的领域 OBB。
       if(!a?.obb||!b?.obb)continue;
+      // 黄色只提示已实际贴合的局部材料面；近距离候选或已有设计关系不是零间隙证据。
+      if(!options.live&&contact.gapMm>.1)continue;
       for(const [source,target] of [[a,b],[b,a]]) {
-        const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),color:options.live?0x25c778:0x315cff,opacity:options.live?0.36:0.52,renderOrder:1601});
+        const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),color:options.live?0x25c778:0xffc400,opacity:options.live?0.36:0.55,renderOrder:1601});
         if(helper){helper.userData.__contact=true;this.group.add(helper);}
       }
       // 静止时仅解释当前选择的邻接面，不把整个框架每层都染成紫色；拖动由 Snap 候选负责。

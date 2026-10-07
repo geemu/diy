@@ -3,7 +3,7 @@ import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/D
 import {panelDimensions} from '../model/PanelShapeModel.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.16';
+export const CURRENT_APP_VERSION = '0.75.17';
 
 /**
  * Current-only project schema gate.

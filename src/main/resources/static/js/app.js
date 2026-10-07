@@ -15,7 +15,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.16';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.17';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -1317,12 +1317,9 @@ createApp({
       if (asset.type === 'PROFILE') {
         const definition = getDesignProfileDefinition(asset.catalogId);
         if (!definition) return;
-        const placed = editor.placeProfileWithSnap(definition.id,Number(newProfile.length),{
-          faceClosures:[...(newProfile.faceClosures||[])],
-          position:{x:Math.round(point.x),y:Number(definition.height)/2,z:Math.round(point.z)}
-        });
-        const autoLabel = placed.autoConnection?.status === 'CREATED' ? ' · 已自动连接' : (placed.snap ? ' · 已吸附' : '');
-        notify(`已放置 ${definition.name}${autoLabel}`);
+        // 拖到画布只是选材并拿起画笔，与点击预览共用流程；不能落一根默认长料。
+        quickAddProfile(definition.id);
+        editor.profileDrawTool.handlePointerMove(event);
       }
     }
 
@@ -1340,8 +1337,8 @@ createApp({
         return beginCatalogPlacement({id:'DIY-U88',label:`A柱 U型 8x8 L=${length}`,mountRule:{target:'FREE'},partSpec:{type:'PROFILE',dimensions:{length,sectionSize:[...definition.sectionSize]},designProfile:{profileId:definition.id,faceClosures:[...newProfile.faceClosures]},color:'#d9d9d9'}});
       }
       cancelPlacementTools();
-      try{editor.profilePlacementManager.begin(definition.id,Number(newProfile.length),{faceClosures:[...newProfile.faceClosures]});rightPanelMode.value='create';activeLibrary.value='profile';notify(`已选 ${definition.name} · 点击落位，Tab 切换方向，Esc 退出`);}
-      catch(error){notify(error.message,'warning');}
+      startProfileDraw('FREE',{fixedLengthMm:0,continueDrawing:false});
+      notify(`已选 ${definition.name} · 点击起点，再点击终点或输入长度；Tab 换方向，Esc 退出`);
     }
 
     function openInspectorForNewProfile() {
@@ -1378,7 +1375,7 @@ createApp({
       quickPanel.value=['RECTANGLE','BOX','CONTOUR'].includes(mode)?'build':'';
       rightPanelMode.value='create';activeLibrary.value='profile';
       if(Object.hasOwn(options,'fixedLengthMm'))drawForm.fixedLengthMm=Number(options.fixedLengthMm||0);
-      editor.profileDrawTool.begin(mode,{...drawForm,faceClosures:[...(newProfile.faceClosures||[])]});
+      editor.profileDrawTool.begin(mode,{...drawForm,...options,faceClosures:[...(newProfile.faceClosures||[])]});
       if(mode!=='FREE')notify('快捷搭建：点击画布定位并生成框架','warning');
     }
 

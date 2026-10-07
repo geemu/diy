@@ -14,10 +14,10 @@ const html=read('src/main/resources/static/index.html');
 const css=read('src/main/resources/static/css/app.css');
 const sample=JSON.parse(read('src/main/resources/static/samples/型材架子_610x670_H2050.json'));
 
-assert.equal(CURRENT_APP_VERSION,'0.75.16');
+assert.equal(CURRENT_APP_VERSION,'0.75.17');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 assert.equal(sample.schemaVersion,62);
-assert.equal(sample.metadata.version,'0.75.16');
+assert.equal(sample.metadata.version,'0.75.17');
 for(const token of ["'CONTOUR'",'finishContour()','validateSimpleContour','PROFILE_DRAW_CONTOUR','轮廓生成框架']) assert.ok(draw.includes(token),`轮廓生成缺少 ${token}`);
 assert.ok(html.includes("startProfileDraw('CONTOUR')"));
 assert.ok(html.includes('完成闭合并生成'));
