@@ -112,9 +112,10 @@ export default class SceneManager {
 
     this.selectionHelper = null;
 
-    const snapGeometry = new THREE.SphereGeometry(7, 20, 20);
-    const snapMaterial = new THREE.MeshBasicMaterial({color:0x27b36a, depthTest:false});
-    this.snapMarker = new THREE.Mesh(snapGeometry, snapMaterial);
+    // 提示点固定为 5 个屏幕像素，不随拉近相机膨胀成盖住接头的球体。
+    const snapGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]);
+    const snapMaterial = new THREE.PointsMaterial({color:0x27b36a,size:5,sizeAttenuation:false,depthTest:false,depthWrite:false});
+    this.snapMarker = new THREE.Points(snapGeometry, snapMaterial);
     this.snapMarker.visible = false;
     this.snapMarker.renderOrder = 1001;
     this.scene.add(this.snapMarker);
@@ -608,6 +609,7 @@ export default class SceneManager {
 
 
   clearSnapPreview() {
+    this.hideSnapPoint();
     if (!this.snapPreviewGroup) return;
     while (this.snapPreviewGroup.children.length) {
       disposeFeedback(this.snapPreviewGroup.children[0]);
@@ -623,9 +625,10 @@ export default class SceneManager {
   showCoplanarPreview(source,target,delta=null){
     const current=addCoplanarSurfaceFeedback(this.snapPreviewGroup,source,target);
     const label=coplanarFeedbackLabel(current);
-    if(!delta||!current?.aligned)return label;
+    if(!delta)return label;
     const proposed=compareProfileTopPlanes(source,target,delta);
-    if(proposed&&!proposed.aligned)return `${label}；吸附后${coplanarFeedbackLabel(proposed)}`;
+    if(proposed&&!proposed.aligned&&current?.aligned)return `${label}；松手后${coplanarFeedbackLabel(proposed)}`;
+    if(proposed?.aligned&&!current?.aligned)return `${label}${label?'；':''}松手后上表面齐平`;
     return label;
   }
 
@@ -638,21 +641,12 @@ export default class SceneManager {
     line.renderOrder = 1501;
     this.snapPreviewGroup.add(line);
 
-    for (const point of [sourcePoint,targetPoint]) {
-      const marker = new THREE.Mesh(new THREE.SphereGeometry(6,14,14),new THREE.MeshBasicMaterial({color:0x22b36d,transparent:true,opacity:0.92,depthTest:false}));
-      marker.position.copy(point);
-      marker.renderOrder = 1502;
-      this.snapPreviewGroup.add(marker);
-    }
-    const targetRing = new THREE.Mesh(
-      new THREE.TorusGeometry(10,1.5,8,32),
-      new THREE.MeshBasicMaterial({color:0x8cffbd,transparent:true,opacity:0.92,depthTest:false})
+    const points=new THREE.Points(
+      new THREE.BufferGeometry().setFromPoints([sourcePoint,targetPoint]),
+      new THREE.PointsMaterial({color:0x22b36d,size:5,sizeAttenuation:false,depthTest:false,depthWrite:false})
     );
-    targetRing.position.copy(targetPoint);
-    targetRing.lookAt(this.camera.position);
-    targetRing.renderOrder = 1503;
-    targetRing.userData.snap = snap;
-    this.snapPreviewGroup.add(targetRing);
+    points.renderOrder=1502;points.userData.snap=snap;
+    this.snapPreviewGroup.add(points);
   }
 
   setGridVisible(visible) {

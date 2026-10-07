@@ -93,4 +93,4 @@ assert.ok(appSource.includes('toggleAutoConnection'));
 assert.ok(html.includes('自动连接'));
 assert.ok(html.includes('自动建立推荐的设计连接；真实连接件与加工在制造配置中选择'));
 
-console.log(JSON.stringify({ok:true,version:'0.75.15',autoConnection:true,designOnlyConnection:true,manufacturingDeferred:true,drag:true,profileGrip:true,libraryDrop:true,profileDraw:true,diyBatch:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.16',autoConnection:true,designOnlyConnection:true,manufacturingDeferred:true,drag:true,profileGrip:true,libraryDrop:true,profileDraw:true,diyBatch:true},null,2));

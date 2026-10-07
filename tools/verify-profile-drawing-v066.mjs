@@ -69,4 +69,4 @@ ed.interferenceFeedbackManager.refresh=()=>({active:true});const captures=ed.cap
 assert.equal(tool.commitLength(100),false);assert.equal(ed.parts.length,count);assert.equal(ed.captures,captures,'拒绝干涉不写历史');
 tool.begin('DIAGONAL');tool.start={point:new THREE.Vector3(0,15,0)};tool.hover={point:new THREE.Vector3(300,15,400)};
 assert.equal(tool.typedCandidate(500).point.x,300);assert.equal(tool.typedCandidate(500).point.z,400,'斜角模式不能被默认正交开关掰直');
-console.log(JSON.stringify({ok:true,version:'0.75.15',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,collisionRollback:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.16',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,collisionRollback:true}));

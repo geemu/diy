@@ -97,7 +97,7 @@ for(const token of ['DIY 铝型材设计器','扫描整个结构并补全连接'
   assert.ok(html.includes(token),`UI missing ${token}`);
 }
 assert.ok(css.includes('.connection-overview-card'));
-assert.equal(CURRENT_APP_VERSION,'0.75.15');
+assert.equal(CURRENT_APP_VERSION,'0.75.16');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 
 console.log(JSON.stringify({

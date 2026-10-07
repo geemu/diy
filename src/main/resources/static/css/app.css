@@ -1026,3 +1026,5 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .workbench-footer .canvas-transform-bar .transform-tool:has(.workbench-icon)>span{display:none}
 .workbench-footer .canvas-transform-bar .draw-tool.active{width:auto;min-width:36px;padding:0 8px}
 .workbench-footer .canvas-transform-bar .draw-tool.active>span{display:inline!important}
+.cad-project-chip .project-dot.save-error{background:#ef4444;box-shadow:0 0 0 3px #ef44441f}
+.cad-project-chip .autosave-error{font-size:11px;color:#ff8b8b;white-space:nowrap}

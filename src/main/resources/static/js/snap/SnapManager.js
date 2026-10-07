@@ -7,7 +7,7 @@ import {profileObb,intersectObb} from '../validation/PartCollisionDetector.js';
  * 基础 DIY 几何吸附。
  *
  * v0.63 的重点不是继续增加“能吸”的类型，而是让吸附稳定、可解释：
- * - 候选有明确优先级；
+ * - 优先选择改动最小的真实贴面位置，槽中心不能覆盖已经齐平的端面；
  * - 当前候选带滞回锁定，鼠标轻微抖动不会在多个面之间跳；
  * - Ctrl 可临时绕过几何吸附；
  * - SceneManager 统一显示“端面贴合 / 槽中心 / 端点对齐”等反馈。
@@ -19,8 +19,7 @@ export default class SnapManager {
     this.temporaryDisabled = false;
     this.distance = 35;
     this.releaseDistance = 55;
-    this.rotationSnapEnabled = true;
-    this.rotationStep = Math.PI / 2;
+    this.surfaceAlignDistance = 3;
     this.lastSession = null;
     this.previewLockKey = null;
   }
@@ -49,19 +48,14 @@ export default class SnapManager {
     const part = mesh.userData?.part;
     if (!part) return null;
 
-    if (this.rotationSnapEnabled && part.type === 'PROFILE' && isLinearProfile(part)) {
-      mesh.rotation.x = this.snapAngle(mesh.rotation.x);
-      mesh.rotation.y = this.snapAngle(mesh.rotation.y);
-      mesh.rotation.z = this.snapAngle(mesh.rotation.z);
-      mesh.updateMatrixWorld(true);
-    }
+    // 平移吸附不得在松手时把已有斜杆/滚转角偷偷取整；旋转步长由 TransformControls 负责。
     if (part.type !== 'PROFILE' || !isLinearProfile(part)) {
       this.lastSession = null;
       return null;
     }
 
     const originPosition = mesh.position.clone();
-    const candidates = this.sortedCandidates(mesh,this.distance);
+    const candidates = this.previewCandidates(mesh);
     if (!candidates.length) {
       mesh.userData.lastSnap = null;
       this.lastSession = null;
@@ -69,7 +63,7 @@ export default class SnapManager {
       this.editor.sceneManager.hideSnapFeedback?.();
       return null;
     }
-    const preferred = this.preferredCandidate(candidates) || candidates[0];
+    const preferred = this.preferredCandidate(candidates);
     const index = Math.max(0,candidates.indexOf(preferred));
     this.lastSession = {sourceId:part.id,originPosition,candidates,index};
     this.previewLockKey = preferred.key;
@@ -83,9 +77,8 @@ export default class SnapManager {
       return null;
     }
     mesh.updateMatrixWorld(true);
-    const normalCandidates = this.sortedCandidates(mesh,this.distance);
-    const releaseCandidates = this.previewLockKey ? this.sortedCandidates(mesh,this.releaseDistance) : normalCandidates;
-    let candidate = releaseCandidates.find(item => item.key === this.previewLockKey) || normalCandidates[0] || null;
+    const candidates = this.previewCandidates(mesh);
+    const candidate = this.preferredCandidate(candidates);
     if (!candidate) {
       this.previewLockKey = null;
       this.editor.sceneManager.clearSnapPreview();
@@ -94,13 +87,13 @@ export default class SnapManager {
       return null;
     }
     this.previewLockKey = candidate.key;
-    const snap = {...candidate.snap,candidateIndex:1,candidateCount:normalCandidates.length || 1,preview:true};
+    const snap = {...candidate.snap,candidateIndex:candidates.indexOf(candidate)+1,candidateCount:candidates.length,preview:true};
     this.editor.sceneManager.showSnapPreview(candidate.sourcePoint,candidate.targetPoint,snap);
     this.editor.sceneManager.showSnapSurface?.(this.editor.getMeshByPartId(snap.targetProfileId),snap);
     const alignmentLabel=this.editor.sceneManager.showCoplanarPreview?.(mesh,this.editor.getMeshByPartId(snap.targetProfileId),candidate.delta);
     this.editor.sceneManager.showSnapFeedback?.({
       status:'valid',
-      label:snap.feedbackLabel || snapTypeLabel(snap.type),
+      label:`松手贴合 · ${snap.feedbackLabel || snapTypeLabel(snap.type)}`,
       details:[...this.feedbackDetails(snap),...(alignmentLabel?[alignmentLabel]:[])]
     });
     return snap;
@@ -145,8 +138,8 @@ export default class SnapManager {
       candidateCount:session.candidates.length
     };
     source.userData.lastSnap = snap;
-    this.editor.sceneManager.showSnapPoint(candidate.targetPoint);
-    this.editor.sceneManager.showSnapFeedback?.({status:'valid',label:snap.feedbackLabel || snapTypeLabel(snap.type),details:this.feedbackDetails(snap)});
+    // 已提交时由真实接触面的蓝色反馈说明关系，不再在接头上叠球体和圆环。
+    this.editor.sceneManager.showSnapFeedback?.({status:'valid',label:`已贴合 · ${snap.feedbackLabel || snapTypeLabel(snap.type)}`,details:this.feedbackDetails(snap)});
     return snap;
   }
 
@@ -171,7 +164,7 @@ export default class SnapManager {
 
   sortedCandidates(source,maxDistance=this.distance) {
     this.blockedCandidate=null;
-    return this.collectCandidates(source,maxDistance).sort((a,b) => a.priority - b.priority || a.score - b.score).filter(candidate=>{
+    return this.collectCandidates(source,maxDistance).sort(compareCandidates).filter(candidate=>{
       const collision=this.candidateCollision(source,candidate);
       if(collision&&!this.blockedCandidate)this.blockedCandidate=collision;
       return !collision;
@@ -207,8 +200,25 @@ export default class SnapManager {
   }
 
   preferredCandidate(candidates) {
-    if (!this.previewLockKey) return null;
-    return candidates.find(item => item.key === this.previewLockKey) || null;
+    const best=candidates[0]||null;
+    const locked=candidates.find(item=>item.key===this.previewLockKey);
+    // 小抖动保留同一特征；用户明显朝更近的面移动时允许切换，不能永远锁住旧槽。
+    return locked&&(!best||locked.score<=best.score+2)?locked:best;
+  }
+
+  /** 预览和提交共用捕获/释放范围；新候选不得借锁定扩大捕获半径。 */
+  previewCandidates(mesh){
+    const candidates=this.sortedCandidates(mesh,this.distance);
+    if(!this.previewLockKey)return candidates;
+    const locked=this.sortedCandidates(mesh,this.releaseDistance).find(item=>item.key===this.previewLockKey);
+    if(locked&&!candidates.some(item=>item.key===locked.key))candidates.push(locked);
+    return candidates.sort(compareCandidates);
+  }
+
+  /** 约束求解后再次确认三维接头，不把松手前的绿色提示沿用到已经被移动的位置。 */
+  isSnapSatisfied(mesh,snap){
+    if(!mesh||!snap)return false;
+    return this.collectCandidates(mesh,0.1).some(candidate=>sameFeature(candidate.snap,snap)&&candidate.delta.length()<=0.1);
   }
 
   collectCandidates(source,maxDistance=this.distance) {
@@ -250,7 +260,7 @@ export default class SnapManager {
           if (distance > slotDistance) continue;
           // 源端朝外的法向必须与目标面相对；绝对值会把伸入目标内部的反面当成可贴合。
           const alignment = -axis.dot(this.faceNormal(target,item.face));
-          if (alignment < 0.86) continue;
+          if (alignment < 0.999999) continue;
           output.push(this.candidate(sourcePoint,worldPoint,0,distance + (1-alignment)*14,{
             type:'END_TO_SLOT',feedbackLabel:'槽中心对齐',targetProfileId:targetPart.id,targetDisplayId:targetPart.displayId,sourceEnd,targetFace:item.face,slot:'CENTER',slotIndex:item.slotIndex,slotOffset:item.slotOffset,distance:Number(distance.toFixed(3)),alignment:Number(alignment.toFixed(3))
           }));
@@ -273,18 +283,26 @@ export default class SnapManager {
         const sourceEnd = sourceName === 'start' ? 'START' : 'END';
         const axis = this.sourceAxis(source,sourceEnd);
         const local = target.worldToLocal(sourcePoint.clone());
+        // 按整个端面在目标坐标中的投影范围落位，不只把中心点塞进侧面边界。
+        const half=this.endpointHalfSpans(source,target);
+        const aligned=(value,extent,span)=>{
+          const limit=Math.abs(extent-span);
+          const fitted=clamp(value,-limit,limit);
+          if(maxDistance>0.1&&Math.abs(Math.abs(fitted)-limit)<=this.surfaceAlignDistance)return fitted<0?-limit:limit;
+          return fitted;
+        };
         const points = [
-          {face:'FRONT',point:new THREE.Vector3(clamp(local.x,-width/2,width/2),height/2,clamp(local.z,-length/2,length/2))},
-          {face:'BACK',point:new THREE.Vector3(clamp(local.x,-width/2,width/2),-height/2,clamp(local.z,-length/2,length/2))},
-          {face:'RIGHT',point:new THREE.Vector3(width/2,clamp(local.y,-height/2,height/2),clamp(local.z,-length/2,length/2))},
-          {face:'LEFT',point:new THREE.Vector3(-width/2,clamp(local.y,-height/2,height/2),clamp(local.z,-length/2,length/2))}
+          {face:'FRONT',point:new THREE.Vector3(aligned(local.x,width/2,half.x),height/2,aligned(local.z,length/2,half.z))},
+          {face:'BACK',point:new THREE.Vector3(aligned(local.x,width/2,half.x),-height/2,aligned(local.z,length/2,half.z))},
+          {face:'RIGHT',point:new THREE.Vector3(width/2,aligned(local.y,height/2,half.y),aligned(local.z,length/2,half.z))},
+          {face:'LEFT',point:new THREE.Vector3(-width/2,aligned(local.y,height/2,half.y),aligned(local.z,length/2,half.z))}
         ];
         for (const item of points) {
           const worldPoint = target.localToWorld(item.point.clone());
           const distance = sourcePoint.distanceTo(worldPoint);
           if (distance > maxDistance) continue;
           const alignment = -axis.dot(this.faceNormal(target,item.face));
-          if (alignment < 0.82) continue;
+          if (alignment < 0.999999) continue;
           output.push(this.candidate(sourcePoint,worldPoint,1,distance + (1-alignment)*20,{
             type:'END_TO_FACE',feedbackLabel:'端面贴合',targetProfileId:targetPart.id,targetDisplayId:targetPart.displayId,sourceEnd,targetFace:item.face,distance:Number(distance.toFixed(3)),alignment:Number(alignment.toFixed(3))
           }));
@@ -301,6 +319,9 @@ export default class SnapManager {
       const targetEndpoints = this.endpoints(target);
       for (const [sourceName,sourcePoint] of Object.entries(sourceEndpoints)) {
         for (const [targetName,targetPoint] of Object.entries(targetEndpoints)) {
+          const sourceEnd=sourceName==='start'?'START':'END';
+          const targetEnd=targetName==='start'?'START':'END';
+          if(-this.sourceAxis(source,sourceEnd).dot(this.sourceAxis(target,targetEnd))<0.999999)continue;
           const distance = sourcePoint.distanceTo(targetPoint);
           if (distance > maxDistance) continue;
           output.push(this.candidate(sourcePoint,targetPoint,2,distance,{
@@ -317,12 +338,26 @@ export default class SnapManager {
     if(snap.targetDisplayId)items.push(snap.targetDisplayId);
     if(snap.targetFace)items.push(faceLabel(snap.targetFace));
     if(snap.alignment>=0.96)items.push('垂直');
-    if(Number.isFinite(Number(snap.distance)))items.push(`${Number(snap.distance).toFixed(1)} mm`);
+    if(snap.preview){
+      const corrections=Object.entries(snap.offsetMm||{}).filter(([,value])=>Math.abs(value)>=0.005).map(([axis,value])=>`${axis.toUpperCase()} ${value>0?'+':''}${Number(value.toFixed(2))} mm`);
+      items.push(corrections.length?`将移动 ${corrections.join(' / ')}`:'当前位置已贴面');
+    }else items.push('接头间隙 0 mm');
     return items;
   }
 
   candidate(sourcePoint,targetPoint,priority,score,snap) {
-    return {priority,score,snap,sourcePoint:sourcePoint.clone(),targetPoint:targetPoint.clone(),delta:targetPoint.clone().sub(sourcePoint)};
+    const delta=targetPoint.clone().sub(sourcePoint);
+    return {priority,score,snap:{...snap,offsetMm:{x:delta.x,y:delta.y,z:delta.z}},sourcePoint:sourcePoint.clone(),targetPoint:targetPoint.clone(),delta};
+  }
+
+  /** 截面两轴投到目标坐标中，得到端面在三个方向的半跨度；与相机/屏幕投影无关。 */
+  endpointHalfSpans(source,target){
+    const [width,height]=source.userData.part.dimensions.sectionSize;
+    const inverse=target.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const quaternion=source.getWorldQuaternion(new THREE.Quaternion());
+    const x=new THREE.Vector3(1,0,0).applyQuaternion(quaternion).applyQuaternion(inverse);
+    const y=new THREE.Vector3(0,1,0).applyQuaternion(quaternion).applyQuaternion(inverse);
+    return new THREE.Vector3(...['x','y','z'].map(axis=>Math.abs(x[axis])*width/2+Math.abs(y[axis])*height/2));
   }
 
   targets(source) {
@@ -334,10 +369,6 @@ export default class SnapManager {
       if(moving.has(part?.id))return false;
       return part?.type === 'PROFILE' && isLinearProfile(part);
     });
-  }
-
-  snapAngle(value) {
-    return Math.round(value / this.rotationStep) * this.rotationStep;
   }
 
   endpoints(mesh) {
@@ -371,8 +402,12 @@ function clamp(value,min,max) {
 
 function candidateKey(item) {
   const snap=item.snap;
-  return [snap.type,snap.targetProfileId,snap.sourceEnd,snap.targetFace || snap.targetEnd || '',snap.slotIndex ?? '',Math.round(item.targetPoint.x*10),Math.round(item.targetPoint.y*10),Math.round(item.targetPoint.z*10)].join('|');
+  // 锁定的是同一面/槽，不是不断改变的轴向站位；沿着侧面拖动不能每 0.1 mm 丢锁。
+  return [snap.type,snap.targetProfileId,snap.sourceEnd,snap.targetFace || snap.targetEnd || '',snap.slotIndex ?? ''].join('|');
 }
+
+function sameFeature(a,b){return a.type===b.type&&a.targetProfileId===b.targetProfileId&&a.sourceEnd===b.sourceEnd&&a.targetFace===b.targetFace&&a.targetEnd===b.targetEnd&&a.slotIndex===b.slotIndex;}
+function compareCandidates(a,b){return Math.abs(a.score-b.score)<1e-6?a.priority-b.priority:a.score-b.score;}
 
 function dedupe(items) {
   const seen = new Set();

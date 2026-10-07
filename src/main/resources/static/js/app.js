@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Editor from './core/Editor.js';
 import ProjectIO from './io/ProjectIO.js';
+import LocalProjectDraft from './io/LocalProjectDraft.js';
 import {CURRENT_APP_VERSION} from './io/ProjectSchema.js';
 import DxfSectionParser from './io/DxfSectionParser.js';
 import {
@@ -14,7 +15,7 @@ import {getPathMetrics} from './model/ProfilePath.js';
 import {fetchDatabaseProfiles,saveDatabaseProfile,deleteDatabaseProfile} from './model/ProfileCatalogApi.js';
 import {fetchAccessoryCatalog,saveAccessoryCatalog,deleteAccessoryCatalog} from './model/AccessoryCatalogApi.js';
 import {ProfileSectionTemplateOptions,buildSectionFromEditor,readSectionEditorState,sectionStyleForTemplate} from './model/ProfileSectionEditor.js';
-import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.15';
+import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js?v=0.75.16';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
@@ -215,6 +216,7 @@ createApp({
     const dirty = ref(false);
     const autosaveInfo = ref('');
     const hasAutosave = ref(false);
+    const autosaveError = ref('');
     const contextMenu = reactive({visible:false,x:0,y:0,partType:null,partId:null,worldPoint:null,end:null,lengthMm:0,nearJoint:false,connectionCandidates:[],accessoryCandidates:[]});
     const jointQuickMenu = reactive({visible:false,x:0,y:0,partId:null,worldPoint:null,end:null,connectionCandidates:[],accessoryCandidates:[]});
     const relationQuickMenu = reactive({visible:false,x:0,y:0,constraintId:null,type:null,edgeA:0,edgeB:1,pointA:0,pointB:1,mode:'HORIZONTAL'});
@@ -236,10 +238,9 @@ createApp({
     let diyGenerator = null;
     let timer = null;
     let profileSectionPreview3d = null;
-    let autosaveTimer = null;
     let layoutManager = null;
-    const AUTOSAVE_KEY = 'alu-cad-autosave';
-    const LEGACY_AUTOSAVE_KEYS = [];
+    const localDraft = new LocalProjectDraft();
+    let autosaveReady = false;
 
     // 用户确认尺寸归组后选择具体型号。只投影几何，不提前绑定制造材料属性。
     const designProfiles = DesignProfileList;
@@ -957,6 +958,7 @@ createApp({
         projectRevision.value++;
         if(document.activeElement?.id!=='selected-profile-length')syncProfileLengthForm();
         dirty.value = true;
+        saveAutosave();
       };
       editor.onContextMenu = payload => {
         jointQuickMenu.visible=false;
@@ -1101,8 +1103,11 @@ createApp({
       userDimensions.value = structuredClone(editor.userDimensions || []);
       await loadDatabaseProfiles({silent:true});
       await loadAccessoryCatalog({silent:true});
-      hasAutosave.value = !!getAutosaveText();
-      autosaveTimer = setInterval(saveAutosave,8000);
+      // 目录注册和回调就绪后再恢复；成功或确认新建以前，启动空白状态不得覆盖旧草稿。
+      initializeLocalDraft();
+      window.addEventListener('pagehide',flushLocalDraft);
+      window.addEventListener('beforeunload',flushLocalDraft);
+      document.addEventListener('visibilitychange',handleDraftVisibility);
       window.addEventListener('pointerdown',closeContextMenu,true);
       window.addEventListener('pointerdown',handleCadMenuPointerDown,true);
       window.addEventListener('click',handleCadMenuClick,true);
@@ -1124,7 +1129,10 @@ createApp({
       window.removeEventListener('pointerdown',closeContextMenu,true);
       window.removeEventListener('pointerdown',handleCadMenuPointerDown,true);
       window.removeEventListener('click',handleCadMenuClick,true);
-      if (autosaveTimer) clearInterval(autosaveTimer);
+      flushLocalDraft();
+      window.removeEventListener('pagehide',flushLocalDraft);
+      window.removeEventListener('beforeunload',flushLocalDraft);
+      document.removeEventListener('visibilitychange',handleDraftVisibility);
       profileSectionPreview3d?.dispose();
       catalogProfilePreview?.dispose();
       profileSectionPreview3d=null;
@@ -2019,50 +2027,90 @@ createApp({
       Object.assign(engineeringDrawingForm,editor.drawingSettings || {});
       userDimensions.value = structuredClone(editor.userDimensions || []);
       dimensionState.value = null;
+      Object.assign(drawForm,editor.profileDrawTool.options);
+      transformSpace.value=editor.transformSpace;movementStepMm.value=editor.movementStepMm;
+      transformMoveScope.value=editor.transformMoveScope;workPlaneVisible.value=editor.workPlaneVisualizer.visible;
+      autoConnectionEnabled.value=editor.autoConnectionEnabled;
     }
 
     function getAutosaveText() {
-      const current = localStorage.getItem(AUTOSAVE_KEY);
-      if (current) return current;
-      for (const key of LEGACY_AUTOSAVE_KEYS) {
-        const value = localStorage.getItem(key);
-        if (value) return value;
-      }
-      return null;
+      return localDraft.raw();
     }
 
-    function saveAutosave() {
-      if (!editor || !dirty.value) return;
+    function localDraftSaved(savedAt){
+      if(!savedAt)return;
+      autosaveInfo.value=new Date(savedAt).toLocaleTimeString('zh-CN',{hour12:false});
+      hasAutosave.value=true;autosaveError.value='';dirty.value=false;
+    }
+
+    function localDraftFailed(error,restoreFailure=false){
+      const first=!autosaveError.value;
+      autosaveError.value=error?.message||'浏览器存储不可用';dirty.value=true;
+      if(first)notify(restoreFailure?'本地草稿无法恢复，原文件已保留；请从“文件 → 导出本地草稿原文件”备份':'本地草稿未保存，请从“文件 → 保存项目”导出 JSON 备份','error');
+    }
+
+    function initializeLocalDraft(){
       try {
-        localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(editor.exportProject()));
-        const now = new Date();
-        autosaveInfo.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-        hasAutosave.value = true;
-        dirty.value = false;
-      } catch (error) {
-        console.warn('自动保存失败',error);
+        hasAutosave.value=!!getAutosaveText();
+        const project=localDraft.read();
+        if(project){
+          editor.loadProject(project);syncManufacturingForm();sectionRevision.value++;projectRevision.value++;
+          autosaveInfo.value=localDraft.savedAt()?new Date(localDraft.savedAt()).toLocaleTimeString('zh-CN',{hour12:false}):'上次会话';
+          notify('已自动继续上次的本地工程');
+        }
+        autosaveReady=true;dirty.value=false;
+      }catch(error){
+        // 损坏/不支持的草稿保留原文，直到用户明确打开/新建覆盖或确认清除。
+        autosaveReady=false;localDraftFailed(error,true);
       }
+    }
+
+    function saveAutosave(force=false) {
+      if(!editor||(!autosaveReady&&!force))return;
+      try{localDraftSaved(localDraft.capture(editor.exportProject()));autosaveReady=true;}
+      catch(error){localDraftFailed(error);}
+    }
+
+    function flushLocalDraft(){
+      if(!autosaveReady)return;
+      try{localDraftSaved(localDraft.flush());}catch(error){localDraftFailed(error);}
+    }
+
+    function handleDraftVisibility(){if(document.visibilityState==='hidden')flushLocalDraft();}
+
+    function confirmLocalDraftReplacement(){
+      return autosaveReady||!hasAutosave.value||confirm('现有本地草稿无法恢复。继续会覆盖它；建议先用“文件 → 导出本地草稿原文件”备份。确定继续？');
     }
 
     function restoreAutosave() {
-      const text = getAutosaveText();
-      if (!text || !editor) return notify('没有自动保存记录','warning');
       try {
-        editor.loadProject(JSON.parse(text));
+        const project=localDraft.read();
+        if(!project||!editor)return notify('没有本地草稿记录','warning');
+        if(dirty.value&&!confirm('恢复本地草稿会替换当前未保存的修改。确定继续？'))return;
+        const previous=autosaveReady;autosaveReady=false;
+        try{editor.loadProject(project);}catch(error){autosaveReady=previous;throw error;}
         syncManufacturingForm();
-        projectRevision.value++;
-        notify('已恢复自动保存工程');
+        sectionRevision.value++;projectRevision.value++;autosaveReady=true;autosaveError.value='';dirty.value=false;
+        notify('已恢复本地草稿');
       } catch (error) {
-        notify(`自动保存恢复失败：${error.message}`,'error');
+        notify(`本地草稿恢复失败：${error.message}`,'error');
       }
     }
 
+    function downloadLocalDraft(){
+      try{
+        const text=getAutosaveText();if(!text)return notify('没有本地草稿记录','warning');
+        const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));
+        const link=document.createElement('a');link.href=url;link.download='本地工程草稿.json';link.click();URL.revokeObjectURL(url);
+      }catch(error){notify(`读取本地草稿失败：${error.message}`,'error');}
+    }
+
     function clearAutosave() {
-      localStorage.removeItem(AUTOSAVE_KEY);
-      for (const key of LEGACY_AUTOSAVE_KEYS) localStorage.removeItem(key);
-      hasAutosave.value = false;
-      autosaveInfo.value = '';
-      notify('自动保存记录已清除','warning');
+      if(!confirm('清除当前浏览器的本地草稿？不会删除当前画布或已导出的 JSON；以后修改工程仍会自动保存。'))return;
+      try{
+        localDraft.clear();autosaveReady=true;hasAutosave.value=false;autosaveInfo.value='';autosaveError.value='';
+        notify('本地草稿已清除；当前画布和已导出的文件保留','warning');
+      }catch(error){notify(`清除本地草稿失败：${error.message}`,'error');}
     }
 
     function selectProjectPart(part,event) {
@@ -2327,6 +2375,7 @@ createApp({
     function updateAnnotationOptions() {
       editor?.setAnnotationOptions({...annotationOptions});
       dirty.value = true;
+      saveAutosave();
     }
 
     function removeUserDimension(dimension) {
@@ -2732,12 +2781,15 @@ createApp({
     async function handleFile(event) {
       const file = event.target.files?.[0];
       if (!file) return;
+      if(!confirmLocalDraftReplacement()){event.target.value='';return;}
       if(dirty.value&&editor.parts.length&&!confirm('打开工程将替换当前未保存的设计。确定继续？')){event.target.value='';return;}
       try {
-        editor.loadProject(await ProjectIO.read(file));
+        const project=await ProjectIO.read(file),previous=autosaveReady;autosaveReady=false;
+        try{editor.loadProject(project);}catch(error){autosaveReady=previous;throw error;}
         Object.assign(engineeringDrawingForm,editor.drawingSettings);
         syncManufacturingForm();
         sectionRevision.value++; dirty.value=false; projectRevision.value++;
+        saveAutosave(true);
         notify('工程已打开');
       } catch (error) {
         notify(`JSON 导入失败：${error.message}`,'error');
@@ -2748,6 +2800,7 @@ createApp({
     function exportJson() {
       if(!editor)return;
       ProjectIO.download(editor.exportProject(),`${editor.drawingSettings.projectName||'铝型材工程'}.json`);
+      saveAutosave();
       dirty.value=false;notify('工程文件已导出，请保留下载的 JSON 文件');
     }
 
@@ -2760,6 +2813,7 @@ createApp({
 
     function newProject() {
       if(!editor)return;
+      if(!confirmLocalDraftReplacement())return;
       if(dirty.value&&editor.parts.length&&!confirm('当前工程有未保存的修改。确定新建空白工程？建议先保存。'))return;
       returnToSelection();
       // 新建走 Editor 清理领域模型，不在 UI 删改领域数组；示例另设明确入口。
@@ -2771,10 +2825,12 @@ createApp({
       editor.profileDrawTool.configure({...drawForm});syncManufacturingForm();
       editor.historyManager.reset();
       sectionRevision.value++;projectRevision.value++;dirty.value=false;
+      saveAutosave(true);
       editor.sceneManager.resetInitialView();notify('已新建空白工程');
     }
 
     async function loadSample() {
+      if(!confirmLocalDraftReplacement())return;
       if(dirty.value&&editor.parts.length&&!confirm('打开示例将替换当前工程。确定继续？建议先保存。'))return;
       try {
         editor.clear();
@@ -2787,6 +2843,7 @@ createApp({
         });
         syncManufacturingForm();
         sectionRevision.value++; dirty.value=false; projectRevision.value++;
+        saveAutosave(true);
         notify(`已生成鱼缸 / 龟缸架示例 · ${result.createdPartCount} 个构件`);
       } catch (error) {
         notify(error.message,'error');
@@ -3459,7 +3516,7 @@ createApp({
       importSectionDxf,handleSectionDxf,restoreReferenceSection,
       startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
       propertyChanged,applyTransformFromFields,setRotationField,radToDeg,
-      importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
+      importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,downloadLocalDraft,autosaveError,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
       addThroughHole,addCountersink,addStartTap,addEndTap,addSlot,addObroundSlot,addMillingRegion,addStartEndHole,addEndEndHole,machiningChanged,deleteMachining,machiningTypeName,machiningLinearPattern,machiningRectangularPattern,machiningEditPattern,machiningDissolvePattern,machiningCopy,machiningPaste,machiningMirrorOffset,machiningMirrorFace,machiningMirrorEnd,toggleMachiningSelection,applyMachiningBatchFace,clearMachiningSelection,
       renameProjectGroup,makeSubassembly,moveAssemblyStep,editAssemblyNote,isolateProjectGroup,explodeAssemblyView,collapseAssemblyView,runAssemblyDiagnostics,focusAssemblyIssue,toggleAssemblyVisibility,toggleAssemblyLock,dissolveProjectGroup,focusConstraintIssue,setConnectionSource,createEndScrewConnection,smartConnect,autoSmartConnect,removeConnection,connectionRuleLabel,connectionSwitchOptions,switchConnectionRule,switchConnectionRecommended,changeSelectionFilter,createConstraintFromSnap,removeConstraint,toggleConstraintSuppressed,applyConstraintSuppressionSuggestion,isolateSelectedParts,toggleFeatureSelectMode,clearFeatureSelection,createFeatureMate,featureLabel,
       openManufacturingConfig,configureManufacturingProfile,clearManufacturingProfile,configureManufacturingConnection,clearManufacturingConnection,recommendManufacturingConfig,clearManufacturingConfig,openEngineeringCenter,resetWorkbenchLayout,engineeringRowHasParts,engineeringRowSelected,focusEngineeringRow,focusAssemblyInstructionStep,startAssemblyPlayback,toggleAssemblyPlayback,previousAssemblyPlaybackStep,nextAssemblyPlaybackStep,showAssemblyPlaybackStep,previousAssemblyGuidePage,nextAssemblyGuidePage,selectAssemblyGuidePage,printAssemblyGuide,restoreAssemblyInstructionView,engineeringDrawingChanged,exportEngineeringDrawing,exportEngineeringDrawingDxf,runFactoryValidation,closeValidation,focusValidationIssue,exportFactoryPackage,confirmFactoryExport

@@ -269,6 +269,7 @@ export default class Editor {
       }
       const primary = this.selected;
       primary.updateMatrixWorld(true);
+      this.snapManager.clearLock();
       const followers = this.selectedMeshes.length > 1
         ? this.selectedMeshes.filter(mesh => mesh !== primary)
         : this.transformFollowersForScope(primary);
@@ -394,6 +395,11 @@ export default class Editor {
         snap=null;this.selected.userData.lastSnap=null;
         this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.onSnapChanged?.(null);
         if(!collisionState.active)this.onTransformBlocked?.(finalCollision);
+      }
+      if(snap&&!this.snapManager.isSnapSatisfied(this.selected,snap)){
+        snap=null;this.selected.userData.lastSnap=null;
+        this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.onSnapChanged?.(null);
+        this.sceneManager.showSnapFeedback?.({status:'blocked',label:'位置已调整 · 未贴合',details:['约束调整后接头不再贴合，请重新选择目标']});
       }
       const profileIds=[...refreshIds].filter(partId=>this.getMeshByPartId(partId)?.userData.part?.type==='PROFILE');
       this.connectionManager.updateConnectionsForProfiles(profileIds);
@@ -1299,6 +1305,8 @@ export default class Editor {
   select(mesh, options = {}) {
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
+    this.featureHoverManager?.clear();
+    this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback?.();this.onSnapChanged?.(null);
     const additive = options.additive === true;
     const toggle = options.toggle === true;
     if(mesh&&!additive&&!toggle&&!options.individual&&mesh.userData.part?.assemblyId){
@@ -1330,6 +1338,8 @@ export default class Editor {
   selectMany(meshes = []) {
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
+    this.featureHoverManager?.clear();
+    this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback?.();this.onSnapChanged?.(null);
     this.selectedMeshes = [...new Set((meshes || []).filter(Boolean))];
     this.selected = this.selectedMeshes[this.selectedMeshes.length - 1] || null;
     if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);

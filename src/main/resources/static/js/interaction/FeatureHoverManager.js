@@ -69,9 +69,9 @@ export default class FeatureHoverManager {
     const color = feature.type === 'PROFILE_END' ? 0x28c76f : feature.type === 'PROFILE_SLOT' ? 0x4d8dff : 0xffb020;
     const point = feature.worldPoint.clone();
 
-    const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(feature.type === 'PROFILE_END' ? 8 : 6, 18, 18),
-      new THREE.MeshBasicMaterial({color, depthTest:false, transparent:true, opacity:0.94})
+    const marker = new THREE.Points(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()]),
+      new THREE.PointsMaterial({color,size:5,sizeAttenuation:false,depthTest:false,depthWrite:false})
     );
     marker.position.copy(point);
     marker.renderOrder = 1202;
@@ -98,7 +98,8 @@ export default class FeatureHoverManager {
 
   clearGraphics() {
     while (this.group.children.length) {
-      const child = this.group.children.pop();
+      const child = this.group.children[0];
+      child.removeFromParent();
       child.geometry?.dispose?.();
       if (Array.isArray(child.material)) child.material.forEach(material => material.dispose?.());
       else child.material?.dispose?.();

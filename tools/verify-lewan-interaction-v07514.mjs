@@ -59,4 +59,4 @@ assert.ok(app.includes("['w','m'].includes(event.key.toLowerCase())"));
 assert.ok(app.includes("event.code==='Space'"));assert.ok(app.includes("event.key.toLowerCase()==='b'&&event.shiftKey"));
 assert.ok(html.includes('添加构件中…按 Esc 退出'));assert.ok(!html.includes('自由绘制 · E'));
 for(const mesh of editor.meshes)Factory.disposeObject(mesh);
-console.log(JSON.stringify({ok:true,version:'0.75.15',ghostNotPersistent:true,repeatPlacement:true,tabDirections:true,groundSurface:true,alignment:true,stretchFixedEnd:true,noSectionScale:true,cancelNoHistory:true,shortcutConflictRemoved:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.16',ghostNotPersistent:true,repeatPlacement:true,tabDirections:true,groundSurface:true,alignment:true,stretchFixedEnd:true,noSectionScale:true,cancelNoHistory:true,shortcutConflictRemoved:true}));
