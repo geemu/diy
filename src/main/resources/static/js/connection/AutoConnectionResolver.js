@@ -172,7 +172,7 @@ export default class AutoConnectionResolver {
     const skippedItems = [];
     const usedSourceEnds = new Set();
     for (const connection of this.editor.connectionManager.connections || []) {
-      if (allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
+      if (connection.jointKind!=='SIDE_CORNER'&&allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
     }
     for (const proposal of ordered) {
       const sourceId = proposal.source.userData.part.id;
@@ -214,7 +214,7 @@ export default class AutoConnectionResolver {
   findConnectionAtSourceEnd(sourceId,sourceEnd) {
     const normalizedEnd = sourceEnd === 'END' ? 'END' : 'START';
     return (this.editor.connectionManager.connections || []).find(connection => {
-      return connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
+      return connection.jointKind!=='SIDE_CORNER'&&connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
     }) || null;
   }
 

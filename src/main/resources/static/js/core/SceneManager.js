@@ -490,7 +490,8 @@ export default class SceneManager {
     return {
       object:this.resolveRoot(hits[0].object),
       point:hits[0].point.clone(),
-      face:hits[0].face || null
+      face:hits[0].face || null,
+      surfaceNormal:hits[0].face?.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(hits[0].object.matrixWorld)).normalize() || null
     };
   }
 

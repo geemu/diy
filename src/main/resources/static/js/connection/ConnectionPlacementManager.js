@@ -20,6 +20,7 @@ export default class ConnectionPlacementManager {
     this.directPreview=null;
     this.candidates=[];
     this.candidateKey=null;
+    this.candidateLocked=false;
     this.lastEvent=null;
     this.onChanged=null;
     this.previewGroup=new THREE.Group();
@@ -33,7 +34,7 @@ export default class ConnectionPlacementManager {
     this.mode=String(mode || 'ANGLE_BRACKET').toUpperCase();
     this.componentDefinition=options.componentDefinition?structuredClone(options.componentDefinition):null;
     this.existingPartId=options.existingPartId||null;
-    this.candidates=[];this.candidateKey=null;this.lastEvent=null;
+    this.candidates=[];this.candidateKey=null;this.candidateLocked=false;this.lastEvent=null;
     this.first=null;
     this.hover=null;
     this.directPreview=null;
@@ -72,7 +73,7 @@ export default class ConnectionPlacementManager {
     const wasActive=this.isActive();
     this.mode=null;
     this.componentDefinition=null;
-    this.existingPartId=null;this.candidates=[];this.candidateKey=null;this.lastEvent=null;
+    this.existingPartId=null;this.candidates=[];this.candidateKey=null;this.candidateLocked=false;this.lastEvent=null;
     this.first=null;
     this.hover=null;
     this.directPreview=null;
@@ -101,7 +102,7 @@ export default class ConnectionPlacementManager {
     if(!this.first){
       const direct=this.resolveDirectJoint(hit,event);
       if(direct?.valid){
-        this.installConnection(direct.source,direct.target,direct.item.type,'单击吸附');
+        this.installConnection(direct.source,direct.target,direct.item.type,'单击吸附',{sourceMountFace:direct.item.geometry.sourceMountFace});
         return true;
       }
       if(direct){this.directPreview=direct;this.renderPreview();this.emit(direct.message||'当前位置不能安装');return true;}
@@ -127,8 +128,22 @@ export default class ConnectionPlacementManager {
   resolveDirectJoint(hit,event=null) {
     const nearby=this.nearbyJoints(hit,event);
     this.candidates=nearby.map(context=>this.evaluateCandidate(context)).filter(Boolean);
-    this.candidates.sort((a,b)=>Number(b.valid)-Number(a.valid)||a.distance-b.distance);
-    const locked=this.candidates.find(c=>c.key===this.candidateKey&&c.valid);
+    const keys=new Set();this.candidates=this.candidates.filter(candidate=>{
+      const key=candidate.valid&&candidate.item.geometry.jointKind==='SIDE_CORNER'&&candidate.envelope
+        ?[...([candidate.source.mesh.userData.part.id,candidate.target.mesh.userData.part.id].sort()),...candidate.envelope.center.toArray().map(value=>value.toFixed(3))].join('|'):candidate.key;
+      if(keys.has(key))return false;keys.add(key);return true;
+    });
+    for(const candidate of this.candidates){
+      const point=candidate.envelope?.center||candidate.transform?.position;
+      if(!point)continue;
+      if(event){
+        const rect=this.editor.sceneManager.renderer.domElement.getBoundingClientRect(),p=point.clone().project(this.editor.sceneManager.camera);
+        candidate.distance=Math.hypot(rect.left+(p.x+1)*rect.width/2-event.clientX,rect.top+(1-p.y)*rect.height/2-event.clientY);
+      }else if(hit?.point)candidate.distance=point.distanceTo(hit.point);
+    }
+    this.candidates.sort((a,b)=>Number(b.valid)-Number(a.valid)||Number(b.item.valid)-Number(a.item.valid)||a.distance-b.distance);
+    const locked=this.candidateLocked&&this.candidates.find(c=>c.key===this.candidateKey&&c.valid);
+    if(this.candidateLocked&&!locked)this.candidateLocked=false;
     const choice=locked||this.candidates[0]||null;
     this.candidateKey=choice?.key||null;
     return choice;
@@ -142,7 +157,7 @@ export default class ConnectionPlacementManager {
     if(choices.length<2)return false;
     const index=choices.findIndex(c=>c.key===this.candidateKey);
     this.directPreview=choices[(index+delta+choices.length)%choices.length];
-    this.candidateKey=this.directPreview.key;this.renderPreview();this.emit(this.statusText(),false);return true;
+    this.candidateKey=this.directPreview.key;this.candidateLocked=true;this.renderPreview();this.emit(this.statusText(),false);return true;
   }
 
   /** 找真实端点附近的接头，不要求射线恰好命中槽中心；空隙中也按屏幕邻域识别。 */
@@ -165,13 +180,19 @@ export default class ConnectionPlacementManager {
       }
       for(const targetMesh of profiles){
         if(sourceMesh===targetMesh||(!event&&sourceMesh!==hit.object&&targetMesh!==hit.object))continue;
-        // Canonical surface resolver bounds the candidate to the actual target. Geometry/rule validation stays in ConnectionManager.
-        const targetFeature=resolveProfileSurfaceFeature(targetMesh,point,{slotToleranceMm:24});
-        const targetPoint=targetFeature&&profileFeatureWorldPoint(targetMesh,targetFeature);
-        if(!targetPoint||targetPoint.distanceTo(point)>12.01)continue;
-        const target={mesh:targetMesh,feature:targetFeature,point:targetPoint,displayId:targetMesh.userData.part.displayId||targetMesh.userData.part.name};
-        this.pushJointCandidate(list,source,target,point);
-        list[list.length-1].distance=distance;
+        if(event&&hit?.object&&sourceMesh!==hit.object&&targetMesh!==hit.object&&point.distanceTo(hit.point)>Math.max(56,...sourceMesh.userData.part.dimensions.sectionSize))continue;
+        const faces=this.componentDefinition&&this.mode==='ANGLE_BRACKET'?[null,'FRONT','BACK','LEFT','RIGHT']:[null];
+        for(const face of faces){
+          // 目录角码的接触角点在源侧面，不只在端中心；两根梁的侧面内角也可按真实腿/孔位检查。
+          const contact=point.clone();
+          if(face){const size=sourceMesh.userData.part.dimensions.sectionSize;contact.addScaledVector(slotWorldNormal(sourceMesh,face),Number(['FRONT','BACK'].includes(face)?size[1]:size[0])/2);}
+          const targetFeature=resolveProfileSurfaceFeature(targetMesh,contact,{slotToleranceMm:24});
+          const targetPoint=targetFeature&&profileFeatureWorldPoint(targetMesh,targetFeature);
+          if(!targetPoint||targetPoint.distanceTo(contact)>12.01)continue;
+          const target={mesh:targetMesh,feature:targetFeature,point:targetPoint,displayId:targetMesh.userData.part.displayId||targetMesh.userData.part.name};
+          this.pushJointCandidate(list,source,target,point,{sourceMountFace:face});
+          list[list.length-1].distance=distance;
+        }
       }
     }
     return list;
@@ -179,11 +200,13 @@ export default class ConnectionPlacementManager {
 
   evaluateCandidate(context,options={}) {
     const mode=options.mode||this.mode,componentDefinition=options.componentDefinition??this.componentDefinition,existingPartId=options.existingPartId??this.existingPartId;
+    const preserveExisting=options.preserveExisting??this.isActive();
     const ranked=componentDefinition?this.editor.connectionManager.recommendDesignFor(context.source.mesh,context.target.mesh,{sourceEnd:context.source.feature.end,targetFace:context.target.feature.face,sourceMountFace:context.sourceMountFace,componentDefinition}):context.designCandidates;
     const item=ranked.find(row=>row.type===mode);
     if(!item)return null;
     const {source,target}=context,geometry=item.geometry;
-    const key=`${source.mesh.userData.part.id}|${source.feature.end}|${target.mesh.userData.part.id}|${target.feature.face}`;
+    const mountFace=geometry?.sourceMountFace||context.sourceMountFace;
+    const key=`${source.mesh.userData.part.id}|${source.feature.end}|${target.mesh.userData.part.id}|${target.feature.face}|${mountFace||''}`;
     let message=item.error||'',valid=item.valid===true;
     const fail=reason=>{valid=false;message=reason;};
     if(componentDefinition&&Number(componentDefinition.dimensions?.size)!==Number(profileSeries(source.mesh.userData.part)))fail('连接件规格与型材系列不匹配，请调整适用规格');
@@ -191,18 +214,27 @@ export default class ConnectionPlacementManager {
     if(outward.dot(slotWorldNormal(target.mesh,target.feature.face))>-.99)fail('端面方向不相对，请先把两根型材正确贴合');
     if(Number(geometry?.contactGapMm)>.10001)fail('两根型材还没有贴合，请先吸附型材后安装连接件');
     if(intersectObb(profileObb(source.mesh.userData.part),profileObb(target.mesh.userData.part),Number(this.editor.projectSettings?.collisionToleranceMm??.5)).intersects)fail('两根型材发生干涉，请先移开穿透位置');
-    const occupied=this.editor.connectionManager.connections.find(c=>c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end);
-    if(occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接');
+    if(valid&&this.editor.isMeshTransformable&&(!this.editor.isMeshTransformable(source.mesh)||!this.editor.isMeshTransformable(target.mesh)))fail('安装位置包含锁定构件，请先解锁');
+    const occupied=this.editor.connectionManager.connections.find(c=>c.jointKind!=='SIDE_CORNER'&&c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end);
+    if(geometry?.jointKind!=='SIDE_CORNER'&&occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接');
     const same=this.editor.connectionManager.connections.find(c=>c.sourceProfileId===source.mesh.userData.part.id&&c.targetProfileId===target.mesh.userData.part.id&&c.sourceEnd===source.feature.end&&c.targetFace===target.feature.face);
-    if(same?.manufacturingRuleId)fail('接头已配置制造方案，请到连接页修改');
+    if(valid&&same?.manufacturingRuleId)fail('接头已配置制造方案，请到连接页修改');
+    if(valid&&preserveExisting&&same&&(same.status==='INVALID'||same.validation?.ok===false))fail('这个接头已有失效连接，请先在连接页检查；原记录保持不变');
+    if(valid&&preserveExisting&&same?.designComponent){
+      const faces=same.designComponentMountFaces?.length?same.designComponentMountFaces:[same.designComponentMountFace||same.sourceMountFace];
+      if(same.designType!==mode||same.designComponent.id!==componentDefinition?.id)fail('这里已有其他型号的连接件，请到连接页修改；不会自动替换');
+      else if(faces.includes(mountFace))fail('这一侧已经安装连接件，请切换到空闲侧');
+      else if(mode!=='ANGLE_BRACKET'||faces.length!==1||oppositeFace(faces[0])!==mountFace)fail('该接头没有可追加的空闲侧，请选择其他安装位置');
+    }
     const descriptor={designType:mode,designComponent:componentDefinition,sourceEnd:source.feature.end,targetFace:target.feature.face,validation:geometry,sourceMountFace:geometry?.sourceMountFace,targetSlot:geometry?.targetSlot};
     const transform=geometry&&this.editor.connectionManager.resolveDesignComponentTransform(descriptor,source.mesh,target.mesh);
     if(!transform)fail('无法确定连接件安装方向');
+    let envelope=null;
     if(valid&&componentDefinition){
       const ghost=connectorGhost(mode,transform.position,0x24b36b,componentDefinition,transform);
       ghost.updateMatrixWorld(true);
       if(mode==='ANGLE_BRACKET'&&!connectorFootprintFits(ghost,source.mesh,target.mesh,geometry.sourceMountFace,target.feature.face))fail('所选方向没有足够的型材安装面，请换另一面或更小的连接件');
-      const envelope=connectorEnvelope(ghost);
+      envelope=connectorEnvelope(ghost);
       // 复杂配件只承诺安装包络检查，不将包络重叠当成精确实体布尔。
       for(const mesh of this.editor.meshes){
         const part=mesh.userData?.part;
@@ -210,9 +242,14 @@ export default class ConnectionPlacementManager {
         const other=profileObb(part)||connectorEnvelope(mesh);
         if(envelopesOverlap(envelope,other,Number(this.editor.projectSettings?.collisionToleranceMm??.5))){fail(`安装空间与 ${part.displayId||part.name} 重叠，请移开障碍或切换候选`);break;}
       }
+      if(preserveExisting)for(const connection of this.editor.connectionManager.connections){
+        const helper=this.editor.connectionManager.helperMeshes.get(connection.id);
+        if(!connection.designComponent||connection.manufacturingRuleId||!helper||helper.visible===false)continue;
+        if(helper.children.some(child=>envelopesOverlap(envelope,connectorEnvelope(child),Number(this.editor.projectSettings?.collisionToleranceMm??.5)))){fail('这个位置已有连接件占用，请切换空闲安装侧');break;}
+      }
       disposePreview(ghost);
     }
-    return {...context,item,key,valid,message,transform};
+    return {...context,item,key,valid,message,transform,envelope};
   }
 
   /**
@@ -277,10 +314,10 @@ export default class ConnectionPlacementManager {
     return {mesh,feature,point,displayId:mesh.userData.part.displayId || mesh.userData.part.name};
   }
 
-  installConnection(sourceAnchor,targetAnchor,designType,inputMode) {
+  installConnection(sourceAnchor,targetAnchor,designType,inputMode,options={}) {
     try{
-      const candidate=[];this.pushJointCandidate(candidate,sourceAnchor,targetAnchor,sourceAnchor.point);
-      const fresh=this.evaluateCandidate(candidate[0]);
+      const candidate=[];this.pushJointCandidate(candidate,sourceAnchor,targetAnchor,sourceAnchor.point,options);
+      const fresh=this.evaluateCandidate(candidate[0],{mode:designType,preserveExisting:true});
       if(!fresh?.valid)throw new Error(fresh?.message||'接头已变化，请重新选择');
       if(this.existingPartId){
         const existing=this.editor.getMeshByPartId(this.existingPartId);
@@ -289,8 +326,10 @@ export default class ConnectionPlacementManager {
       const connection=this.editor.connectionManager.installDesignComponent(sourceAnchor.mesh,targetAnchor.mesh,{
         sourceEnd:sourceAnchor.feature.end,
         targetFace:targetAnchor.feature.face,
+        sourceMountFace:fresh.item.geometry.sourceMountFace,
         designType,
-        componentDefinition:this.componentDefinition
+        componentDefinition:this.componentDefinition,
+        preserveExisting:true
       });
       connection.placement={
         mode:this.mode,
@@ -345,7 +384,7 @@ export default class ConnectionPlacementManager {
     if(this.directPreview){
       if(!this.directPreview.valid)return `不可安装：${this.directPreview.message}`;
       const choices=this.candidates.filter(c=>c.valid),index=choices.findIndex(c=>c.key===this.directPreview.key)+1;
-      return `自动对齐：${this.directPreview.source.displayId} → ${this.directPreview.target.displayId} · 单击确认${choices.length>1?` · ${index}/${choices.length}，Tab 切换`:''}`;
+      return `自动对齐：${this.directPreview.source.displayId} → ${this.directPreview.target.displayId} · ${this.directPreview.item.geometry.jointKind==='SIDE_CORNER'?'两梁内角 · ':''}${faceName(this.directPreview.item.geometry.sourceMountFace)}安装 · 单击确认${choices.length>1?` · ${index}/${choices.length}，Tab 切换`:''}`;
     }
     if(!this.first)return this.hover ? `可选：${this.hover.displayId} ${featureLabel(this.hover.feature)}` : '请点击接头附近；无法自动判断时再按提示选择两个位置';
     if(!this.hover)return '请选择第二根型材的侧面或槽位';
@@ -433,3 +472,5 @@ export function connectorFootprintFits(object,source,target,sourceFace,targetFac
   return true;
 }
 function modeLabel(mode){return ({ANGLE_BRACKET:'角码连接',INTERNAL_CONNECTOR:'内置连接',ANCHOR_CONNECTOR:'锚式连接',CONNECTION_PLATE:'连接板'})[mode] || '连接方式';}
+function oppositeFace(face){return ({FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'})[face];}
+function faceName(face){return ({FRONT:'正面',BACK:'背面',LEFT:'左侧',RIGHT:'右侧'})[face]||'所选面';}

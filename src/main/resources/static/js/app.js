@@ -19,7 +19,7 @@ import ProfileSectionPreview3D from './interaction/ProfileSectionPreview3D.js';
 import PrimitiveGeometryFactory from './geometry/PrimitiveGeometryFactory.js';
 import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileReferenceOptions,ProfileClosureOptions,
   FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
-  connectionSpecs,connectionDesignType,shaftDiametersFor,shaftFixturePorts,fastenerThreads,fastenerLengths,closureFaces,connectionComponent,shaftComponent,accessoryComponent,componentPart} from './model/ComponentCatalog.js';
+  connectionSpecs,connectionDesignType,connectionPlacementMode,preferredConnectionSpec,shaftDiametersFor,shaftFixturePorts,fastenerThreads,fastenerLengths,closureFaces,connectionComponent,shaftComponent,accessoryComponent,componentPart} from './model/ComponentCatalog.js';
 import {PanelShapeFields,panelDefaults,panelDimensions} from './model/PanelShapeModel.js';
 import {
   getSectionDefinition,
@@ -354,7 +354,11 @@ createApp({
     const panelShapeLabel=computed(()=>PanelShapeOptions.find(x=>x.value===newPanel.shape)?.label);
     const currentPanelDimensions=computed(()=>{try{return panelDimensions(newPanel.shape,newPanel.parameters,newPanel.edgeMode);}catch{return null;}});
     const panelPreviewLabel=computed(()=>{const d=currentPanelDimensions.value;return d?`${d.width}×${d.height}×${d.thickness}mm`:panelShapeLabel.value;});
-    watch(()=>catalogConnectionForm.type,()=>{catalogConnectionForm.spec=connectionSpecOptions.value[0]?.value;});
+    watch(()=>catalogConnectionForm.type,()=>{
+      const profile=selectedPart.value?.type==='PROFILE'?selectedPart.value.designProfile:getDesignProfileDefinition(newProfile.catalogId);
+      catalogConnectionForm.spec=preferredConnectionSpec(catalogConnectionForm.type,profile?.series);
+      catalogConnectionForm.free=false;
+    },{immediate:true});
     watch(()=>newShaft.type,()=>{if(!shaftDiameters.value.includes(newShaft.diameter))newShaft.diameter=shaftDiameters.value[0];newShaft.mixed=false;});
     watch(()=>newShaft.diameter,()=>{if(!secondShaftDiameters.value.length)newShaft.mixed=false;if(!secondShaftDiameters.value.includes(newShaft.secondDiameter))newShaft.secondDiameter=secondShaftDiameters.value.at(-1);});
     watch(()=>newPanel.shape,shape=>{newPanel.parameters=panelDefaults(shape);newPanel.edgeMode=false;});
@@ -520,7 +524,7 @@ createApp({
     });
     // 只有可见目录和选中的规格变化才重建预览；切换分类立即释放旧 WebGL 上下文。
     watch([()=>newProfile.catalogId,()=>newProfile.faceClosures,()=>newProfile.length,()=>newProfile.free,activeLibrary,rightPanelMode,
-      ()=>JSON.stringify(newShaft),()=>JSON.stringify(newPanel),currentConnectionComponent,currentAccessoryComponent],()=>{
+      ()=>JSON.stringify(newShaft),()=>JSON.stringify(newPanel),()=>catalogConnectionForm.free,currentConnectionComponent,currentAccessoryComponent],()=>{
       if(accessoryPlacementState.active)cancelAccessoryPlacement();
       if(connectionPlacementState.active)cancelConnectionPlacement();
       refreshCatalogPreview();
@@ -1530,7 +1534,9 @@ createApp({
     function placeConnectionComponent() {
       const definition=currentConnectionComponent.value;
       const designType=connectionDesignType(definition);
-      if(catalogConnectionForm.free||!designType||definition.dimensions.size===15)return beginCatalogPlacement(definition,true);
+      const placementMode=connectionPlacementMode(definition,catalogConnectionForm.free);
+      if(placementMode==='FREE')return beginCatalogPlacement(definition,true);
+      if(placementMode==='UNSUPPORTED')return notify('这个类型 / 规格暂未配置接头吸附规则。请选择适配规格；若只想摆放模型，请明确勾选“自由放置”','warning');
       cancelPlacementTools();editor.connectionPlacementManager.begin(designType,{componentDefinition:structuredClone(definition)});
       notify('靠近接头自动吸附、自动转向；绿色后单击确认，Tab 切换，Esc 取消');
     }

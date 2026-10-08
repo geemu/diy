@@ -3,7 +3,7 @@ import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/D
 import {panelDimensions} from '../model/PanelShapeModel.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.23';
+export const CURRENT_APP_VERSION = '0.75.24';
 
 /**
  * Current-only project schema gate.
@@ -55,6 +55,7 @@ export default class ProjectSchema {
       if(!connection?.id)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接缺少 id`);
       if(!allowed.has(connection.designType))throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少有效 designType`);
       if(!connection.sourceProfileId || !connection.targetProfileId)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少源/目标型材`);
+      if(connection.jointKind!=null&&(connection.jointKind!=='SIDE_CORNER'||connection.designType!=='ANGLE_BRACKET'||!connection.designComponent||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的侧面内角只支持未配置制造方案的目录角码`);
       const faces=connection.designComponentMountFaces;
       const validFaces=['FRONT','BACK','LEFT','RIGHT'],opposite={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
       if(connection.designComponentMountFace!=null&&!validFaces.includes(connection.designComponentMountFace))throw new Error(`连接 ${connection.id} 的主安装面无效`);

@@ -109,16 +109,30 @@ export default class AccessoryPlacementManager {
   /** 自由添加仍是 hover -> click；截面最低点落在当前工作面，不把构件中心埋在网格里。 */
   resolveFree(event) {
     const plane=this.editor.workPlaneVisualizer?.plane||'XZ',normal=workPlaneNormal(plane);
-    const point=this.editor.sceneManager.worldPointOnPlane(event,normal);
+    // 连接目录自由摆放优先取前方可见表面，空白处才取工作面；这不是接头安装关系。
+    const roots=this.definition.category==='连接件'?[...this.editor.meshes.filter(mesh=>mesh.visible!==false&&!mesh.userData?.part?.hidden),...(this.editor.connectionManager?.selectableHelpers?.()||[])]:[];
+    const hit=roots.length?this.editor.sceneManager.pickHit(event,roots):null;
+    const surface=hit?.object&&hit.surfaceNormal;
+    if(surface)normal.copy(hit.surfaceNormal);
+    const point=surface?hit.point.clone():this.editor.sceneManager.worldPointOnPlane(event,normal);
     if(!point)return null;
     const rotation=this.definition.partSpec?.type==='PANEL'&&!['sphere','cylinder','cone','torus'].includes(this.definition.dimensions?.panelShape)
       ?(plane==='XZ'?{x:-Math.PI/2,y:0,z:0}:plane==='YZ'?{x:0,y:Math.PI/2,z:0}:{x:0,y:0,z:0}):{x:0,y:0,z:0};
+    if(surface){
+      const euler=new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),normal));
+      Object.assign(rotation,{x:euler.x,y:euler.y,z:euler.z});
+    }
     const transform={position:{x:0,y:0,z:0},rotation};
     const ghost=this.createGhostMesh(transform,0x24b36b,.5),box=new THREE.Box3().setFromObject(ghost);
-    const axis=plane==='XZ'?'y':plane==='XY'?'z':'x';point[axis]-=box.min[axis];disposeObject(ghost);
+    let support=Infinity;
+    if(surface){
+      const vertex=new THREE.Vector3();
+      ghost.traverse(child=>{const positions=child.isMesh&&child.geometry?.attributes.position;if(positions)for(let index=0;index<positions.count;index++)support=Math.min(support,vertex.fromBufferAttribute(positions,index).applyMatrix4(child.matrixWorld).dot(normal));});
+    }else for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z])support=Math.min(support,new THREE.Vector3(x,y,z).dot(normal));
+    point.addScaledVector(normal,-support);disposeObject(ghost);
     transform.position={x:point.x,y:point.y,z:point.z};
-    const collision=this.previewCollision(transform,null);
-    return {free:true,targetPart:{displayId:'工作面'},transform,valid:!collision.blocked,reason:collision.blocked?`与 ${collision.label} 干涉`:''};
+    const collision=this.previewCollision(transform,surface?hit.object.userData.part?.id:null);
+    return {free:true,targetPart:surface?(hit.object.userData.part||{displayId:'连接件表面'}):{displayId:'工作面'},transform,valid:!collision.blocked,reason:collision.blocked?`与 ${collision.label} 干涉`:''};
   }
 
   resolveTarget(mesh,worldPoint,targetType,preferred = {}) {

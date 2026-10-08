@@ -66,4 +66,4 @@ assert.ok(footObject.children.some(mesh=>mesh.material.isMeshPhongMaterial&&mesh
 assert.ok(footObject.children.some(mesh=>mesh.material.isMeshPhongMaterial&&mesh.material.shininess===8),'橡胶底不能与金属杯共用强高光');
 signature(footObject);
 assert.ok(fs.readFileSync(path.join(root,'src/main/resources/static/index.html'),'utf8').includes('适配 {{currentAccessoryComponent.dimensions.width}}'));
-console.log(JSON.stringify({ok:true,version:'0.75.23',cases,footSpecs:catalog.FootCupOptions.length,slideOpenSide:true,selectedCapSection:true,previewCommitSameGeometryAndMaterial:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.24',cases,footSpecs:catalog.FootCupOptions.length,slideOpenSide:true,selectedCapSection:true,previewCommitSameGeometryAndMaterial:true}));

@@ -52,8 +52,9 @@ const installed=editor.connectionManager.helperMeshes.get(connection.id).childre
 assert.ok(installed.position.distanceTo(preview.position)<1e-6);assert.ok(installed.quaternion.angleTo(preview.quaternion)<1e-6,'预览和正式连接件共用安装计算');
 placement.begin('ANGLE_BRACKET',{componentDefinition:definition});
 const update=placement.resolveDirectJoint({object:target,point:joint});
-assert.ok(placement.installConnection(update.source,update.target,'ANGLE_BRACKET','单击吸附'));
-assert.equal(editor.connectionManager.connections.length,1,'同接头不重复建连接');
+assert.equal(placement.installConnection(update.source,update.target,'ANGLE_BRACKET','单击吸附'),null);
+assert.equal(editor.connectionManager.connections.length,1,'已安装侧不重复建连接、不覆盖原件');assert.equal(captures,1,'重复点击不增加历史');
+editor.connectionManager.clear();
 // 任意整体旋转、平移后仍匹配同一真实安装角点和两个法向。
 const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(.4,.7,-.25)),offset=new THREE.Vector3(100,-50,80);
 for(const mesh of [source,target]){
@@ -80,4 +81,4 @@ const collision=placement.resolveDirectJoint({object:source,point:rotated.source
 source.position.addScaledVector(new THREE.Vector3(1,0,0).applyQuaternion(q),5);source.userData.part.position={x:source.position.x,y:source.position.y,z:source.position.z};source.updateMatrixWorld(true);
 const second=profile('第二横梁',300,[0,20,170],[0,0,0]);second.position.applyQuaternion(q).add(offset);second.quaternion.premultiply(q);second.updateMatrixWorld(true);second.userData.part.position={x:second.position.x,y:second.position.y,z:second.position.z};second.userData.part.rotation={x:second.rotation.x,y:second.rotation.y,z:second.rotation.z};editor.meshes.push(second);
 placement.begin('ANGLE_BRACKET',{componentDefinition:definition});placement.handlePointerMove(event);assert.ok(placement.candidates.filter(c=>c.valid).length>=2,'一个角点多接头可以列出合法候选');const previous=placement.directPreview.key;assert.equal(placement.cycleCandidate(1),true);assert.notEqual(placement.directPreview.key,previous,'Tab 只切换候选不让用户手动旋转');
-console.log(JSON.stringify({ok:true,version:'0.75.23',canonicalJoint:true,autoOrientation:true,previewEqualsInstalled:true,arbitraryRotation:true,screenGapSnap:true,duplicateSafe:true,existingConversion:true,hoverReadOnly:true,gapAndCollisionGuard:true,thirdPartySpaceGuard:true,candidateCycle:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.24',canonicalJoint:true,autoOrientation:true,previewEqualsInstalled:true,arbitraryRotation:true,screenGapSnap:true,duplicateSafe:true,existingConversion:true,hoverReadOnly:true,gapAndCollisionGuard:true,thirdPartySpaceGuard:true,candidateCycle:true}));

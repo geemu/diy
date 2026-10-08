@@ -26,6 +26,15 @@ export function connectionDesignType(definition) {
   if(['FLAT_PLATE','T_PLATE','L_PLATE','CROSS_PLATE'].includes(d.geometryKind)&&Math.abs(Number(d.angle||90)-90)<.01)return 'CONNECTION_PLATE';
   return null;
 }
+/** 没有接头规则时必须显式选择自由放置，不能静默穿过模型落到工作面。 */
+export function connectionPlacementMode(definition,free=false) {
+  return free?'FREE':connectionDesignType(definition)?'JOINT':'UNSUPPORTED';
+}
+export function preferredConnectionSpec(type,series) {
+  const choices=connectionSpecs(type).filter(option=>!option.disabled);
+  const mapped=choices.filter(option=>connectionDesignType(connectionComponent({type,spec:option.value})));
+  return (mapped.find(option=>Number(connectionComponent({type,spec:option.value}).dimensions.size)===Number(series))||mapped[0]||choices[0])?.value;
+}
 export function shaftDiametersFor(type) { return (category('光轴').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []).map(x=>Number(x.value)); }
 export function fastenerThreads(head) { return Object.keys(data.fasteners[head] || {}).map(Number); }
 export function fastenerLengths(head,diameter) { return data.fasteners[head]?.[diameter] || []; }
