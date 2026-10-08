@@ -454,6 +454,8 @@ export default class SceneManager {
 
   resolveRoot(object) {
     if (!object) return null;
+    // 连接目录几何内部也有只读 part 标签；优先返回连接根，不能把示意对象当可编辑零件。
+    for(let ancestor=object;ancestor;ancestor=ancestor.parent)if(ancestor.userData.connectionId)return ancestor;
     if (object.userData.profileRoot) return object.userData.profileRoot;
     let current = object;
     while (current && !current.userData.part) current = current.parent;

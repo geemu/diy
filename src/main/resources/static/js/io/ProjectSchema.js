@@ -3,7 +3,7 @@ import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/D
 import {panelDimensions} from '../model/PanelShapeModel.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.17';
+export const CURRENT_APP_VERSION = '0.75.20';
 
 /**
  * Current-only project schema gate.
@@ -55,6 +55,12 @@ export default class ProjectSchema {
       if(!connection?.id)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接缺少 id`);
       if(!allowed.has(connection.designType))throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少有效 designType`);
       if(!connection.sourceProfileId || !connection.targetProfileId)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少源/目标型材`);
+      const faces=connection.designComponentMountFaces;
+      const validFaces=['FRONT','BACK','LEFT','RIGHT'],opposite={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
+      if(connection.designComponentMountFace!=null&&!validFaces.includes(connection.designComponentMountFace))throw new Error(`连接 ${connection.id} 的主安装面无效`);
+      if(faces!=null&&(!Array.isArray(faces)||faces.length>2||faces.some(face=>!validFaces.includes(face))||new Set(faces).size!==faces.length))throw new Error(`连接 ${connection.id} 的安装面列表无效`);
+      if(faces?.length===2&&(connection.designType!=='ANGLE_BRACKET'||opposite[faces[0]]!==faces[1]))throw new Error(`连接 ${connection.id} 的双侧安装面必须互为反面`);
+      if(faces?.length&&connection.designComponentMountFace!=null&&connection.designComponentMountFace!==faces[0])throw new Error(`连接 ${connection.id} 的主安装面与列表不一致`);
     }
   }
 

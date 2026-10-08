@@ -91,6 +91,6 @@ assert.ok(drawSource.includes("source:'PROFILE_DRAW'"));
 assert.ok(drawSource.includes("source:'PROFILE_DRAW_BOX'"));
 assert.ok(appSource.includes('toggleAutoConnection'));
 assert.ok(html.includes('自动连接'));
-assert.ok(html.includes('自动建立推荐的设计连接；真实连接件与加工在制造配置中选择'));
+assert.ok(html.includes('自动建立接头关系（不直接生成实体连接件）'));
 
-console.log(JSON.stringify({ok:true,version:'0.75.17',autoConnection:true,designOnlyConnection:true,manufacturingDeferred:true,drag:true,profileGrip:true,libraryDrop:true,profileDraw:true,diyBatch:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.20',autoConnection:true,designOnlyConnection:true,manufacturingDeferred:true,drag:true,profileGrip:true,libraryDrop:true,profileDraw:true,diyBatch:true},null,2));

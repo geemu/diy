@@ -10,8 +10,8 @@ const templates = [
     label:'基础空间框',
     icon:'▦',
     category:'基础结构',
-    summary:'四立柱 + 上下框，适合从最简单的骨架继续修改。',
-    generator:'FRAME',
+    summary:'两层、无中间承托梁的空间框起始参数。',
+    generator:'LAYERED_RACK',
     defaults:{width:1000, depth:600, height:1000, levels:2, centerBeamCount:0}
   },
   {
@@ -19,7 +19,7 @@ const templates = [
     label:'多层置物架',
     icon:'▤',
     category:'架体',
-    summary:'自动生成多层框架，可追加每层中间承托梁。',
+    summary:'四层、每层一根中间承托梁的起始参数。',
     generator:'LAYERED_RACK',
     defaults:{width:1000, depth:500, height:1800, levels:4, centerBeamCount:1}
   },
@@ -28,7 +28,7 @@ const templates = [
     label:'鱼缸 / 龟缸架',
     icon:'▥',
     category:'架体',
-    summary:'五层架体起步，每层默认增加两根中间承托梁，后续可继续改尺寸和加工。',
+    summary:'五层、每层两根中间承托梁的起始参数；不代表承重已验算。',
     generator:'LAYERED_RACK',
     defaults:{width:1000, depth:650, height:2000, levels:5, centerBeamCount:2}
   },
@@ -37,7 +37,7 @@ const templates = [
     label:'设备机架',
     icon:'◇',
     category:'设备框架',
-    summary:'上下框 + 中间承托梁，适合 3D 打印机、设备箱体和小型机架。',
+    summary:'两层、每层一根中间承托梁的起始参数。',
     generator:'LAYERED_RACK',
     defaults:{width:900, depth:700, height:1200, levels:2, centerBeamCount:1}
   }

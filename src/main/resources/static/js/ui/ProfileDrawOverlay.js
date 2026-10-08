@@ -19,7 +19,12 @@ export default class ProfileDrawOverlay {
     this.element.append(this.input,unit,this.confirm);
     this.sceneManager.container.appendChild(this.element);
     this.input.addEventListener('focus',()=>this.input.select());
-    this.input.addEventListener('input',()=>tool.updateLengthDraft(this.input.value));
+    this.input.addEventListener('input',()=>{
+      tool.updateLengthDraft(this.input.value);
+      const value=Number(this.input.value);
+      if(this.input.value&&(!Number.isFinite(value)||value<1||value>50000))this.input.setAttribute('aria-invalid','true');
+      else this.input.removeAttribute('aria-invalid');
+    });
     this.input.addEventListener('keydown',event=>{
       event.stopPropagation();
       if(event.key==='Tab'&&tool.mode==='FREE'){

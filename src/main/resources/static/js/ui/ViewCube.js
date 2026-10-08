@@ -31,7 +31,7 @@ export default class ViewCube {
     for(const direction of VIEW_DIRECTIONS) {
       const dimensions=[direction.x,direction.y,direction.z].map(value=>value===0?1.28:.34);
       const geometry=new THREE.BoxGeometry(...dimensions);
-      const material=new THREE.MeshLambertMaterial({color:direction.kind==='面'?0xc5d1df:0x9cacc0});
+      const material=new THREE.MeshLambertMaterial({color:direction.kind==='面'?0xd9e3ee:0x8297af});
       const mesh=new THREE.Mesh(geometry,material);
       mesh.position.set(direction.x*.82,direction.y*.82,direction.z*.82);
       mesh.userData.direction=direction;

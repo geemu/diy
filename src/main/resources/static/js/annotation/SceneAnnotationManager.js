@@ -12,7 +12,7 @@ export default class SceneAnnotationManager {
     this.sceneManager = sceneManager;
     this.options = {
       showOverall:true,
-      showPartDimensions:true,
+      showPartDimensions:false,
       showMachiningLabels:true,
       showMachiningDimensions:true,
       showUserDimensions:true
@@ -47,7 +47,7 @@ export default class SceneAnnotationManager {
   refresh() {
     this.clearGraphics();
     if (this.options.showOverall) this.addOverallDimensions();
-    if (this.options.showPartDimensions) this.addProfileDimensions();
+    this.addProfileDimensions();
     if (this.options.showMachiningDimensions) this.addMachiningDimensions();
     if (this.options.showMachiningLabels) this.addMachiningLabels();
     if (this.options.showUserDimensions) this.addUserDimensions();
@@ -99,8 +99,10 @@ export default class SceneAnnotationManager {
   }
 
   addProfileDimensions() {
+    const selected=new Set(this.editor.selectedMeshes||[]);
     for (const mesh of this.editor.meshes) {
       if (mesh.visible === false || mesh.userData.part?.type !== 'PROFILE') continue;
+      if(!this.options.showPartDimensions&&!selected.has(mesh)&&this.editor.featureHoverManager?.mesh!==mesh&&this.sceneManager.hoveredObject!==mesh)continue;
       const part = mesh.userData.part;
       normalizeProfilePath(part);
       if (!isLinearProfile(part)) continue;
@@ -311,8 +313,8 @@ export default class SceneAnnotationManager {
     const b = end.clone();
     const oa = a.clone().add(offset);
     const ob = b.clone().add(offset);
-    const color = kind === 'overall' ? 0x28dc66 : 0xe0aa16;
-    const opacity = kind === 'overall' ? 1 : 0.92;
+    const color = kind === 'overall' ? 0x536b83 : 0xe0aa16;
+    const opacity = kind === 'overall' ? .72 : 0.92;
     this.addSegments([[a,oa],[b,ob],[oa,ob]],color,opacity);
     this.addArrowHeads(oa,ob,color);
     const midpoint = oa.clone().lerp(ob,0.5);

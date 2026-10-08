@@ -54,6 +54,7 @@ export default class ProfileGripEditor {
   selectedMesh() {
     const mesh=this.editor.selected;
     if(!this.options.enabled||!mesh||this.editor.selectedMeshes.length!==1)return null;
+    if(this.editor.isBuilderReviewActive?.())return null;
     if(this.sceneManager.marqueeMode||this.editor.featureSelectionManager?.enabled||this.editor.measureMode||this.editor.dimensionMode)return null;
     const part=mesh.userData?.part;
     if(part?.type!=='PROFILE'||!isLinearProfile(part))return null;

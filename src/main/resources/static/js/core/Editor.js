@@ -7,6 +7,7 @@ import {getDesignProfileDefinition,profileDisplayName,profileNominal} from '../m
 import MachiningManager from '../machining/MachiningManager.js';
 import ConnectionManager from '../connection/ConnectionManager.js';
 import AutoConnectionResolver from '../connection/AutoConnectionResolver.js';
+import ConnectionBatchManager from '../connection/ConnectionBatchManager.js';
 import SnapManager from '../snap/SnapManager.js';
 import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
 import {groundClearance} from '../interaction/GroundClearance.js';
@@ -134,6 +135,7 @@ export default class Editor {
     this.panelDoorConfigurator = new PanelDoorConfigurator(this);
     this.profileReplacementManager = new ProfileReplacementManager(this);
     this.connectionPlacementManager = new ConnectionPlacementManager(this);
+    this.connectionBatchManager = new ConnectionBatchManager(this);
     this.machiningPlacementManager = new MachiningPlacementManager(this);
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
@@ -166,7 +168,7 @@ export default class Editor {
     };
     this.sceneManager.clickHandler = event => {
       if (this.sceneManager.transformControls.dragging) return;
-      if (this.wholeStretchManager.isActive()) return;
+      if (this.isBuilderReviewActive() || this.wholeStretchManager.isActive()) return;
       if (this.profilePlacementManager.isActive()) { this.profilePlacementManager.handleClick(event); return; }
       if (this.connectionPlacementManager.isActive()) { this.connectionPlacementManager.handleClick(event); return; }
       if (this.accessoryPlacementManager.isActive()) { this.accessoryPlacementManager.handleClick(event); return; }
@@ -191,6 +193,11 @@ export default class Editor {
         return;
       }
       let mesh;
+      if(!event.altKey){
+        const hit=this.sceneManager.pickHit(event,[...this.selectableMeshes(),...this.connectionManager.selectableHelpers()]);
+        const connectionId=hit?.object?.userData?.connectionId||hit?.object?.userData?.part?.generatedByConnectionId;
+        if(connectionId){this.selectConnection(connectionId);return;}
+      }
       // Alt + 单击用于“穿透/循环选择”，解决复杂装配中前方构件遮挡后方构件的问题。
       if (event.altKey) {
         const candidates = this.sceneManager.pickRoots(event, this.selectableMeshes());
@@ -207,7 +214,7 @@ export default class Editor {
     };
 
     this.sceneManager.pointerMoveHandler = event => {
-      if(this.wholeStretchManager.isActive()){this.featureHoverManager.clear();this.sceneManager.clearHover();return;}
+      if(this.isBuilderReviewActive()||this.wholeStretchManager.isActive()){this.onJointHover?.(null);this.featureHoverManager.clear();this.sceneManager.clearHover();return;}
       if (this.profilePlacementManager.isActive()) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); this.profilePlacementManager.handlePointerMove(event); return; }
       if (this.connectionPlacementManager.isActive()) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); this.connectionPlacementManager.handlePointerMove(event); return; }
       if (this.accessoryPlacementManager.isActive()) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); this.accessoryPlacementManager.handlePointerMove(event); return; }
@@ -236,7 +243,7 @@ export default class Editor {
     };
 
     this.sceneManager.contextMenuHandler = event => {
-      if (this.sceneManager.transformControls.dragging || this.profileDrawTool.isActive() || this.connectionPlacementManager.isActive() || this.accessoryPlacementManager.isActive() || this.machiningPlacementManager.isActive() || this.contourFrameManager?.dragIndex>=0) return;
+      if (this.isBuilderReviewActive() || this.sceneManager.transformControls.dragging || this.profileDrawTool.isActive() || this.connectionPlacementManager.isActive() || this.accessoryPlacementManager.isActive() || this.machiningPlacementManager.isActive() || this.contourFrameManager?.dragIndex>=0) return;
       this.featureHoverManager.clear();
       const hit = this.sceneManager.pickHit(event,this.selectableMeshes());
       const mesh = hit?.object || null;
@@ -1008,20 +1015,24 @@ export default class Editor {
     const definition = getDesignProfileDefinition(catalogId);
     if (!definition) throw new Error('多层架型材型号不存在');
 
-    const width = Math.max(200, Number(options.width || 1000));
-    const depth = Math.max(200, Number(options.depth || 600));
-    const height = Math.max(300, Number(options.height || 1800));
-    const levels = Math.max(2, Math.min(12, Math.round(Number(options.levels || 4))));
-    const centerBeamCount = Math.max(0, Math.min(4, Math.round(Number(options.centerBeamCount || 0))));
+    const width = Number(options.width ?? 1000);
+    const depth = Number(options.depth ?? 600);
+    const height = Number(options.height ?? 1800);
+    const levels = Number(options.levels ?? 4);
+    const centerBeamCount = Number(options.centerBeamCount ?? 0);
     const sx = Number(definition.sectionSize[0]);
     const sy = Number(definition.sectionSize[1]);
     const origin = normalizeVector(options.position);
     const assemblyId = crypto.randomUUID();
     const common = {select:false, captureHistory:false, assemblyId};
 
+    if (![width,depth,height].every(value=>Number.isFinite(value)&&value>0))throw new Error('框架宽、深、高必须是大于零的有效数值');
+    if (!Number.isInteger(levels)||levels<2||levels>12||!Number.isInteger(centerBeamCount)||centerBeamCount<0||centerBeamCount>4)throw new Error('层数为2~12，每层中间承托梁为0~4根');
     if (width <= sx * 2 || depth <= sy * 2) {
       throw new Error('外形尺寸过小，无法容纳当前型材截面');
     }
+    if(height<sy*levels)throw new Error('高度不足以容纳这些层，横梁会重叠；请增加高度或减少层数');
+    if(centerBeamCount&&(width-sx)/(centerBeamCount+1)<sx)throw new Error('宽度不足以容纳中间承托梁，请增加宽度或减少承托梁');
 
     const postX = (width - sx) / 2;
     const postZ = (depth - sy) / 2;
@@ -1038,6 +1049,9 @@ export default class Editor {
 
     const beamWidthLength = Math.max(10, width - sx * 2);
     const beamDepthLength = Math.max(10, depth - sy * 2);
+    // 中间梁接到横梁侧面，扣除的是“立柱深度 + 横梁厚度”，不是两次立柱深度。
+    // 3060 等非方截面沿用外圈纵梁长度会在两端各留15mm缝，导致一键连接漏掉中间梁。
+    const centerBeamLength = depth - sy - sx;
     const bottomY = sy / 2;
     const topY = height - sy / 2;
     const levelSpan = levels <= 1 ? 0 : (topY - bottomY) / (levels - 1);
@@ -1065,7 +1079,7 @@ export default class Editor {
       for (let beamIndex = 1; beamIndex <= centerBeamCount; beamIndex++) {
         const ratio = beamIndex / (centerBeamCount + 1);
         const x = -postX + ratio * postX * 2;
-        this.addProfile(catalogId, beamDepthLength, {
+        this.addProfile(catalogId, centerBeamLength, {
           ...common,
           position:{x:origin.x + x, y:origin.y + y, z:origin.z},
           rotation:{x:0, y:0, z:0},
@@ -1268,6 +1282,8 @@ export default class Editor {
   }
 
   clear(clearHistory = true) {
+    this.quickAlignmentManager?.cancel();
+    this.connectionBatchManager?.cancel();
     this.wholeStretchManager?.cancel();
     this.selectionGestureManager?.reset();
     this.profilePlacementManager?.cancel();
@@ -1303,6 +1319,7 @@ export default class Editor {
   }
 
   select(mesh, options = {}) {
+    this.annotationManager?.requestRefresh();
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
     this.featureHoverManager?.clear();
@@ -1336,6 +1353,7 @@ export default class Editor {
   }
 
   selectMany(meshes = []) {
+    this.annotationManager?.requestRefresh();
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
     this.featureHoverManager?.clear();
@@ -1349,6 +1367,18 @@ export default class Editor {
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
   }
+
+  /** 点击角码只定位其连接，不把派生展示对象作为可移动 Part 或新增业务记录。 */
+  selectConnection(connectionId) {
+    const connection=this.connectionManager.connections.find(item=>item.id===connectionId);
+    if(!connection)return false;
+    const hosts=[connection.sourceProfileId,connection.targetProfileId].map(id=>this.getMeshByPartId(id)).filter(mesh=>mesh&&mesh.visible!==false);
+    if(!hosts.length)return false;
+    this.selectMany(hosts);this.sceneManager.transformControls.detach();
+    this.onConnectionSelected?.(connection);return true;
+  }
+
+  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive();}
 
   isMeshTransformable(mesh) {
     const part = mesh?.userData?.part;
@@ -1587,8 +1617,8 @@ export default class Editor {
   }
 
   /** 拖拽副本独立于原组件；只复制所选范围内部的连接/约束，松手才记录历史。 */
-  copySelectedForDrag() {
-    const targets=this.selectedMeshes.filter(mesh=>!mesh.userData.part.generatedByConnectionId);
+  copySelectedForDrag(sourceMeshes = this.selectedMeshes, options = {}) {
+    const targets=sourceMeshes.filter(mesh=>!mesh.userData.part.generatedByConnectionId);
     const sourceIds=new Set(targets.map(mesh=>mesh.userData.part.id)),mapping=new Map();
     const fullAssemblies=this.assemblyManager.assemblies.filter(assembly=>{
       const ids=this.assemblyManager.partIds(assembly.id).filter(id=>!this.parts.find(part=>part.id===id)?.generatedByConnectionId);
@@ -1598,7 +1628,9 @@ export default class Editor {
     for(const mesh of targets){mapping.set(mesh.userData.part.id,crypto.randomUUID());for(const feature of mesh.userData.part.machiningItems||[])mapping.set(feature.id,crypto.randomUUID());}
     const remap=value=>typeof value==='string'?(mapping.get(value)||value):Array.isArray(value)?value.map(remap):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,remap(item)])):value;
     const assemblies=fullAssemblies.map(item=>{
-      const assembly={...remap(structuredClone(item)),parentId:mapping.get(item.parentId)||null,name:item.name+' 副本'};
+      const assembly={...remap(structuredClone(item)),parentId:mapping.get(item.parentId)||null,name:item.name+' 副本',locked:false,hidden:false};
+      // 批量姿态变化后的组件保留层级，但不冒充原参数化生成器仍可按旧坐标重建。
+      if(options.detachConfigurator){assembly.configurator=null;assembly.parameters=null;}
       if(item.parameters?.sourcePartIds?.some(id=>!sourceIds.has(id))){assembly.configurator=null;assembly.parameters=null;}
       return assembly;
     });
@@ -1606,90 +1638,164 @@ export default class Editor {
     const copies=targets.map(mesh=>{
       const original=mesh.userData.part,copy=remap(this.clonePart(original,{x:0,y:0,z:0}));
       copy.id=mapping.get(original.id);copy.assemblyId=mapping.get(original.assemblyId)||null;
+      if(original.type==='PROFILE')copy.machiningItems=(original.machiningItems||[]).filter(item=>!item.generatedByConnectionId)
+        .map(item=>({...remap(structuredClone(item)),generatedByConnectionId:null}));
       if(original.mountReference&&sourceIds.has(original.mountReference.targetPartId))copy.mountReference=remap(structuredClone(original.mountReference));
       // 部分复制不能保留指向原框口的参数化宿主关系。
-      if(original.configuratorId&&!mapping.has(original.configuratorId)){delete copy.configuratorId;delete copy.configuratorRole;}
-      if(original.panelSpec?.sourcePartIds?.some(id=>!sourceIds.has(id))){delete copy.panelSpec.configurator;delete copy.panelSpec.sourcePartIds;}
+      if(original.configuratorId&&(options.detachConfigurator||!mapping.has(original.configuratorId))){delete copy.configuratorId;delete copy.configuratorRole;}
+      if(options.detachConfigurator||original.panelSpec?.sourcePartIds?.some(id=>!sourceIds.has(id))){if(copy.panelSpec){delete copy.panelSpec.configurator;delete copy.panelSpec.sourcePartIds;}}
       return this.insertPart(copy,{select:false,captureHistory:false});
     });
     const connections=this.connectionManager.export().filter(item=>sourceIds.has(item.sourceProfileId)&&sourceIds.has(item.targetProfileId)).map(item=>({...remap(item),id:crypto.randomUUID(),generatedHardwareIds:[]}));
     for(const connection of connections){this.connectionManager.connections.push(connection);this.connectionManager.rebuild(connection);}
     const constraints=this.constraintManager.export().filter(item=>sourceIds.has(item.sourcePartId)&&sourceIds.has(item.targetPartId)).map(item=>({...remap(item),id:crypto.randomUUID()}));
-    this.constraintManager.constraints.push(...constraints);this.selectMany(copies);this.emitStats();
+    this.constraintManager.constraints.push(...constraints);
+    if(options.select!==false){this.selectMany(copies);this.emitStats();}
     return copies;
   }
 
-  duplicateArray(options = {}) {
-    const targets = this.selectedMeshes.length ? [...this.selectedMeshes] : (this.selected ? [this.selected] : []);
-    if (!targets.length) throw new Error('请先选择构件');
-    const count = Math.max(2,Math.min(100,Math.round(Number(options.count || 2))));
-    const spacing = Number(options.spacing || 100);
-    const axis = ['X','Y','Z'].includes(options.axis) ? options.axis : 'X';
-    const created = [];
-    for (let index=1; index<count; index++) {
-      const offset = {x:0,y:0,z:0};
-      offset[axis.toLowerCase()] = spacing * index;
-      for (const mesh of targets) {
-        this.syncPartFromMesh(mesh);
-        const part = this.clonePart(mesh.userData.part,offset);
-        created.push(this.insertPart(part,{select:false,captureHistory:false}));
+  /** 所有批量入口复制同一业务子图；派生五金由连接重建，不逐件重复克隆。 */
+  batchCopyTargets() {
+    const targets=(this.selectedMeshes.length?[...this.selectedMeshes]:this.selected?[this.selected]:[])
+      .filter(mesh=>!mesh.userData.part.generatedByConnectionId);
+    if(!targets.length)throw new Error('请先选择主体构件；自动生成的五金请随连接一起复制');
+    if(this.assemblyPresentationManager?.isExploded())throw new Error('请先收起爆炸图再复制或镜像');
+    for(const mesh of targets)mesh.updateMatrixWorld(true);
+    return targets;
+  }
+
+  /** 反射不能靠负缩放持久化。沿型材局部 Z 反向，使截面和槽面保持真实身份，A/B 对换。 */
+  reflectedPose(mesh, axis, center) {
+    const position=mesh.position.clone(),key=axis.toLowerCase();
+    position[key]=2*center[key]-position[key];
+    const reflection=new THREE.Matrix4().makeScale(axis==='X'?-1:1,axis==='Y'?-1:1,axis==='Z'?-1:1);
+    const rotation=reflection.multiply(new THREE.Matrix4().makeRotationFromQuaternion(mesh.quaternion))
+      .multiply(new THREE.Matrix4().makeScale(1,1,-1));
+    return {position,quaternion:new THREE.Quaternion().setFromRotationMatrix(rotation)};
+  }
+
+  /** 使用实际材料顶点检查完全重合，不把普通接触或局部干涉当作重复零件。 */
+  placementFingerprint(mesh, pose) {
+    mesh.updateMatrixWorld(true);
+    const delta=new THREE.Matrix4().compose(pose.position,pose.quaternion,new THREE.Vector3(1,1,1))
+      .multiply(mesh.matrixWorld.clone().invert()),points=new Set(),point=new THREE.Vector3();
+    mesh.traverse(object=>{
+      if(!object.isMesh||!object.geometry?.attributes.position)return;
+      const matrix=delta.clone().multiply(object.matrixWorld),positions=object.geometry.attributes.position;
+      for(let index=0;index<positions.count;index++){
+        point.fromBufferAttribute(positions,index).applyMatrix4(matrix);
+        points.add([point.x,point.y,point.z].map(value=>Math.round(value*1000)).join(','));
       }
+    });
+    return [...points].sort().join(';');
+  }
+
+  validateMirrorTargets(targets, makeCopy) {
+    for(const mesh of targets){
+      const part=mesh.userData.part;
+      if(!makeCopy&&!this.isMeshTransformable(mesh))throw new Error('所选构件已锁定或已安装，不能原地镜像；请先解除保护');
+      if(!makeCopy&&this.constraintManager.listForPart(part.id).some(item=>item.enabled!==false&&!item.suppressed))throw new Error('所选构件有有效约束，请先解除约束再原地镜像');
+      if(!makeCopy&&(part.configuratorId||this.assemblyManager.get(part.assemblyId)?.parameters))throw new Error('参数化组件请使用生成器编辑，或先复制为普通组件再镜像');
+      if((part.type==='PROFILE'&&(!isLinearProfile(part)||(part.machiningItems||[]).some(item=>!item.generatedByConnectionId)||part.endCuts?.START?.angleDeg||part.endCuts?.END?.angleDeg))
+        ||!['PROFILE','SHAFT','PANEL'].includes(part.type)
+        ||(part.type==='PANEL'&&(part.panelSpec||part.dimensions?.panelShape&&part.dimensions.panelShape!=='RECTANGLE')))
+        throw new Error('弯曲、已加工型材和异形/配件镜像尚未支持精确反射；请调整选择，原构件不会改变');
     }
-    if (created.length) {
-      this.selectedMeshes = created;
-      this.selected = created[created.length - 1];
-      if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
-      this.sceneManager.setSelections(created,this.selected);
-      if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...created]);
+  }
+
+  applyBatchPose(mesh, pose) {
+    mesh.position.copy(pose.position);mesh.quaternion.copy(pose.quaternion);mesh.updateMatrixWorld(true);this.syncPartFromMesh(mesh);
+  }
+
+  /** 镜像后重算 A/B 端引用和刚性相对矩阵，不能留下指向原端点的连接或约束。 */
+  refreshBatchGraph(meshes, mirrored = false) {
+    const ids=new Set(meshes.map(mesh=>mesh.userData.part.id));
+    const reverseEnd=end=>end==='START'?'END':end==='END'?'START':end;
+    const reverseFeature=(feature,partId)=>{
+      if(!feature)return;
+      if(feature.end)feature.end=reverseEnd(feature.end);
+      if(feature.local?.z!==undefined)feature.local.z=-feature.local.z;
+      const length=Number(this.getMeshByPartId(partId)?.userData.part.dimensions?.length);
+      if(Number.isFinite(length)&&Number.isFinite(feature.stationS))feature.stationS=length-feature.stationS;
+    };
+    if(mirrored){
+      for(const connection of this.connectionManager.connections)if(ids.has(connection.sourceProfileId))connection.sourceEnd=reverseEnd(connection.sourceEnd);
     }
-    this.historyManager.capture();
-    this.emitProjectChanged();
-    return created;
+    for(const constraint of this.constraintManager.constraints){
+      if(!ids.has(constraint.sourcePartId)||!ids.has(constraint.targetPartId))continue;
+      if(mirrored){
+        reverseFeature(constraint.sourceAnchor,constraint.sourcePartId);reverseFeature(constraint.targetAnchor,constraint.targetPartId);
+        reverseFeature(constraint.semantic?.sourceFeature,constraint.sourcePartId);reverseFeature(constraint.semantic?.targetFeature,constraint.targetPartId);
+        // 以目标型材正向轴定义的偏移在 A/B 对换后必须反号；侧面法向偏移不变。
+        if(['REVOLUTE','SLOT_TO_SLOT'].includes(constraint.mateKind))constraint.offsetMm=-Number(constraint.offsetMm||0);
+      }
+      const source=this.getMeshByPartId(constraint.sourcePartId),target=this.getMeshByPartId(constraint.targetPartId);
+      constraint.relativeMatrix=target.matrixWorld.clone().invert().multiply(source.matrixWorld).toArray();
+      const q=target.quaternion.clone().invert().multiply(source.quaternion);
+      constraint.referenceRelativeQuaternion=q.toArray();
+    }
+    this.connectionManager.updateConnectionsForProfiles([...ids]);
+    this.accessoryMountManager.refreshForTargets([...ids]);
+    this.assemblyManager.refreshPartVisibility();
+  }
+
+  /** 一个批次一次历史；发生异常恢复原子图和原选择，不留半份组件。 */
+  commitBatchCopies(targets, poses, mirrored = false) {
+    const before=this.exportProject(),selectedIds=this.selectedMeshes.map(mesh=>mesh.userData.part.id),created=[];
+    try{
+      for(const group of poses){
+        const copies=this.copySelectedForDrag(targets,{select:false,detachConfigurator:true});
+        copies.forEach((mesh,index)=>this.applyBatchPose(mesh,group[index]));
+        this.refreshBatchGraph(copies,mirrored);created.push(...copies);
+      }
+      this.selectMany(created);this.updateDimensions();this.emitStats();
+      this.historyManager.capture();this.emitProjectChanged();return created;
+    }catch(error){
+      this.restoreProject(before);this.selectMany(selectedIds.map(id=>this.getMeshByPartId(id)).filter(Boolean));throw error;
+    }
+  }
+
+  duplicateArray(options = {}) {
+    const targets = this.batchCopyTargets();
+    const count = Math.max(2,Math.min(100,Math.round(Number(options.count || 2))));
+    const spacing = Number(options.spacing ?? 100);
+    if(!Number.isFinite(count)||!Number.isFinite(spacing)||Math.abs(spacing)<.001)throw new Error('阵列数量和间距必须有效；间距不能为 0，否则副本完全重叠');
+    const axis = ['X','Y','Z'].includes(options.axis) ? options.axis : 'X';
+    const poses = [];
+    for (let index=1; index<count; index++) {
+      poses.push(targets.map(mesh=>{const position=mesh.position.clone();position[axis.toLowerCase()]+=spacing*index;return {position,quaternion:mesh.quaternion.clone()};}));
+    }
+    return this.commitBatchCopies(targets,poses);
   }
 
   mirrorSelected(options = {}) {
-    const targets = this.selectedMeshes.length ? [...this.selectedMeshes] : (this.selected ? [this.selected] : []);
-    if (!targets.length) throw new Error('请先选择构件');
+    const targets = this.batchCopyTargets();
     const axis = ['X','Y','Z'].includes(options.axis) ? options.axis : 'X';
     const makeCopy = options.copy !== false;
-    for (const mesh of targets) this.syncPartFromMesh(mesh);
+    this.validateMirrorTargets(targets,makeCopy);
     const box = new THREE.Box3();
     for (const mesh of targets) box.expandByObject(mesh);
     const selectionCenter = new THREE.Vector3();
     box.getCenter(selectionCenter);
     const center = options.planeMode === 'SELECTION_CENTER' ? selectionCenter : new THREE.Vector3(0,0,0);
-    const created = [];
-    for (const mesh of targets) {
-      const source = mesh.userData.part;
-      const part = makeCopy ? this.clonePart(source,{x:0,y:0,z:0}) : source;
-      part.position = normalizeVector(part.position);
-      const key = axis.toLowerCase();
-      part.position[key] = Number((2 * center[key] - part.position[key]).toFixed(6));
-      part.rotation = normalizeVector(part.rotation);
-      if (axis === 'X') { part.rotation.y *= -1; part.rotation.z *= -1; }
-      if (axis === 'Y') { part.rotation.x *= -1; part.rotation.z *= -1; }
-      if (axis === 'Z') { part.rotation.x *= -1; part.rotation.y *= -1; }
-      if (makeCopy) created.push(this.insertPart(part,{select:false,captureHistory:false}));
-      else {
-        mesh.position.set(part.position.x,part.position.y,part.position.z);
-        mesh.rotation.set(part.rotation.x,part.rotation.y,part.rotation.z);
-        mesh.updateMatrixWorld(true);
-        if (part.type === 'PROFILE') this.connectionManager.updateConnectionsForProfile(part.id);
-        created.push(mesh);
-      }
+    const poses=targets.map(mesh=>this.reflectedPose(mesh,axis,center));
+    if(makeCopy){
+      const existing=new Set(this.meshes.filter(mesh=>mesh.visible!==false).map(mesh=>this.placementFingerprint(mesh,{position:mesh.position,quaternion:mesh.quaternion})));
+      if(targets.some((mesh,index)=>existing.has(this.placementFingerprint(mesh,poses[index]))))throw new Error('镜像副本与已有构件完全重叠，未新增任何构件；请在批量操作中更换对称位置');
+      return this.commitBatchCopies(targets,[poses],true);
     }
-    this.selectMany(created);
-    this.updateDimensions();
-    this.historyManager.capture();
-    this.emitProjectChanged();
-    return created;
+    const before=this.exportProject();
+    try{
+      targets.forEach((mesh,index)=>this.applyBatchPose(mesh,poses[index]));this.refreshBatchGraph(targets,true);
+      this.selectMany(targets);this.updateDimensions();this.historyManager.capture();this.emitProjectChanged();return targets;
+    }catch(error){this.restoreProject(before);this.selectMany(targets.map(mesh=>this.getMeshByPartId(mesh.userData.part.id)).filter(Boolean));throw error;}
   }
 
   circularArray(options = {}) {
-    const targets = this.selectedMeshes.length ? [...this.selectedMeshes] : (this.selected ? [this.selected] : []);
-    if (!targets.length) throw new Error('请先选择构件');
+    const targets = this.batchCopyTargets();
     const count = Math.max(2,Math.min(100,Math.round(Number(options.count || 4))));
     const angleDeg = Number(options.angleDeg ?? 360);
+    if(!Number.isFinite(count)||!Number.isFinite(angleDeg)||Math.abs(angleDeg)<.001||Math.abs(angleDeg)>360)throw new Error('圆周阵列总角度必须在 -360° 到 360° 之间且不为 0');
     const axis = ['X','Y','Z'].includes(options.axis) ? options.axis : 'Y';
     for (const mesh of targets) this.syncPartFromMesh(mesh);
     const box = new THREE.Box3();
@@ -1702,27 +1808,15 @@ export default class Editor {
       Number(options.centerY ?? baseCenter.y),
       Number(options.centerZ ?? baseCenter.z)
     );
-    const created = [];
+    if(!pivot.toArray().every(Number.isFinite))throw new Error('旋转中心必须是有效坐标');
+    const poses = [];
     const axisVector = axis === 'X' ? new THREE.Vector3(1,0,0) : axis === 'Z' ? new THREE.Vector3(0,0,1) : new THREE.Vector3(0,1,0);
     const step = THREE.MathUtils.degToRad(angleDeg / count);
     for (let index = 1; index < count; index++) {
       const q = new THREE.Quaternion().setFromAxisAngle(axisVector,step * index);
-      for (const mesh of targets) {
-        const part = this.clonePart(mesh.userData.part,{x:0,y:0,z:0});
-        const pos = new THREE.Vector3(part.position.x,part.position.y,part.position.z).sub(pivot).applyQuaternion(q).add(pivot);
-        const rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(part.rotation.x,part.rotation.y,part.rotation.z,'XYZ'));
-        rot.premultiply(q);
-        const euler = new THREE.Euler().setFromQuaternion(rot,'XYZ');
-        part.position = {x:Number(pos.x.toFixed(6)),y:Number(pos.y.toFixed(6)),z:Number(pos.z.toFixed(6))};
-        part.rotation = {x:Number(euler.x.toFixed(12)),y:Number(euler.y.toFixed(12)),z:Number(euler.z.toFixed(12))};
-        created.push(this.insertPart(part,{select:false,captureHistory:false}));
-      }
+      poses.push(targets.map(mesh=>({position:mesh.position.clone().sub(pivot).applyQuaternion(q).add(pivot),quaternion:mesh.quaternion.clone().premultiply(q)})));
     }
-    if (created.length) this.selectMany(created);
-    this.updateDimensions();
-    this.historyManager.capture();
-    this.emitProjectChanged();
-    return created;
+    return this.commitBatchCopies(targets,poses);
   }
 
   cycleSnapCandidate(direction = 1) {
@@ -1835,6 +1929,7 @@ export default class Editor {
       const ids = this.assemblyManager.partIds(assembly.id, true);
       assembly.hidden = ids.length > 0 && ids.every(id => !partIds.has(id));
     }
+    this.assemblyManager.refreshPartVisibility();
     this.historyManager.capture();
     this.emitProjectChanged();
     this.updateDimensions();

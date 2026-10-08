@@ -89,9 +89,9 @@ assert.ok(drawSource.includes("classList?.toggle('profile-drawing-active'")&&dra
 assert.ok(css.includes('canvas.profile-drawing-active{cursor:var(--profile-draw-cursor,crosshair)!important}'),'普通悬停清理不能吞掉画笔光标');
 const selection=app.slice(app.indexOf('function quickAddProfile('),app.indexOf('function openInspectorForNewProfile('));
 assert.ok(selection.includes("startProfileDraw('FREE',{fixedLengthMm:0,continueDrawing:false"));assert.ok(!selection.includes('profilePlacementManager.begin'));
-assert.ok(!html.includes('结束添加'));assert.ok(html.includes('v-if="drawState.active" class="transform-tool draw-tool active"'));
+assert.ok(!html.includes('结束添加'));assert.ok(/<button[^>]*v-if="drawState.active"[^>]*class="[^"]*\bdraw-tool\b[^"]*"[^>]*@click="stopProfileDraw"/.test(html));
 const drop=app.slice(app.indexOf('function dropAsset('),app.indexOf('function quickAddProfile('));
 assert.ok(drop.includes('quickAddProfile(definition.id)')&&!drop.includes('placeProfileWithSnap'),'拖放只拿起同一支画笔，不能额外插入长料');
 assert.ok(!html.includes('<label>默认长度</label>'),'普通目录不能再暗示默认整根长度');
 assert.ok(!html.includes('绘制型材</span></button>')||html.includes('quickAddProfile(newProfile.catalogId);contextMenu.visible=false'));
-console.log(JSON.stringify({ok:true,version:'0.75.17',oneDrawingWorkflow:true,aimingCursor:true,shortIdlePreview:true,dropArmsDrawing:true,firstClickNoPart:true,mouseLength:true,typedLength:true,singleHistory:true,cancelNoPart:true,ghostTransient:true,contactYellow:true,candidateGreen:true,collisionRed:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.20',oneDrawingWorkflow:true,aimingCursor:true,shortIdlePreview:true,dropArmsDrawing:true,firstClickNoPart:true,mouseLength:true,typedLength:true,singleHistory:true,cancelNoPart:true,ghostTransient:true,contactYellow:true,candidateGreen:true,collisionRed:true}));

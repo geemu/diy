@@ -211,19 +211,25 @@ export default class AssemblyManager {
     return part.assemblyId ? this.isAssemblyLocked(part.assemblyId) : false;
   }
 
-  isPartEffectivelyHidden(part) {
+  isPartEffectivelyHidden(part, visited = new Set()) {
     if (!part) return false;
     if (part.hidden === true) return true;
-    return part.assemblyId ? this.isAssemblyHidden(part.assemblyId) : false;
+    if(part.assemblyId && this.isAssemblyHidden(part.assemblyId))return true;
+    if(visited.has(part.id))return false;
+    visited.add(part.id);
+    // 安装件、连接派生五金继承宿主的展示状态，不把继承状态写回自身 hidden 字段。
+    const connection=part.generatedByConnectionId?this.editor.connectionManager.connections.find(item=>item.id===part.generatedByConnectionId):null;
+    const hosts=connection?[connection.sourceProfileId,connection.targetProfileId]:part.mountReference?.targetPartId?[part.mountReference.targetPartId]:[];
+    return hosts.some(id=>{const host=this.editor.parts.find(item=>item.id===id);return !host||this.isPartEffectivelyHidden(host,new Set(visited));});
   }
 
   refreshPartVisibility(partIds = null) {
-    const filter = partIds ? new Set(partIds) : null;
+    // 局部隐藏也要刷新依赖宿主的安装件，因此统一处理展示依赖，不只遍历传入的主体。
     for (const part of this.editor.parts || []) {
-      if (filter && !filter.has(part.id)) continue;
       const mesh = this.editor.getMeshByPartId?.(part.id);
       if (mesh) mesh.visible = !this.isPartEffectivelyHidden(part);
     }
+    this.editor.connectionManager?.refreshVisibility?.();
   }
 
   setHidden(id, hidden = true, deep = true) {

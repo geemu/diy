@@ -991,14 +991,15 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .profile-length-editor small{display:block;color:#a6adba;line-height:1.5;font-size:11px}
 .profile-length-editor input:disabled,.profile-length-editor select:disabled{color:#858c9a;background:#151823;opacity:.7}
 /* 快速对齐与参考编辑器共用深色操作层；不遮盖侧栏表单。 */
-.quick-alignment-panel { position:fixed; left:calc(50% - 150px); bottom:68px; width:300px; max-width:calc(100vw - 24px); padding:12px; border:1px solid #303442; border-radius:12px; background:#10131e; box-shadow:0 10px 32px #0005; color:#ddd; z-index:230; }
-.quick-alignment-panel button { background:#191d29; border:1px solid #313644; border-radius:7px; color:#d9dce4; padding:8px 10px; cursor:pointer; }
-.quick-alignment-panel button:hover { color:#ff9800; border-color:#ff9800; background:#261b14; }
-.quick-alignment-panel button:disabled { opacity:.35; cursor:not-allowed; }
-.quick-alignment-panel > button { display:block; width:100%; text-align:left; margin-bottom:7px; }
-.quick-alignment-heading,.alignment-axis-row { display:flex; align-items:center; gap:6px; margin-bottom:7px; }
-.quick-alignment-heading strong,.alignment-axis-row span { flex:1; }
-.quick-alignment-panel p { font-size:12px; color:#939aa9; margin:0 0 10px; }
+.builder-review-content{min-height:0;flex:1;overflow:auto;padding:16px 18px;color:#d9dce4;font-size:13px}
+.builder-review-heading{display:flex;align-items:center;gap:8px;margin-bottom:18px}.builder-review-heading h2{flex:1;margin:0;font-size:16px}.builder-review-heading button{padding:4px 10px}
+.builder-review-content .field-stack{margin-bottom:16px}.builder-review-content .field-stack label{font-size:13px}.builder-review-content select,.builder-review-content input[type=number]{min-width:0;width:100%;height:38px}
+.builder-axis-checks{display:flex;gap:18px}.builder-axis-checks label{display:flex;align-items:center;gap:6px}.builder-axis-checks input,.builder-joint-row input{accent-color:var(--accent)}
+.builder-review-note,.builder-review-result p,.builder-joint-row p{font-size:12px;line-height:1.6;margin:8px 0;color:#9ca3af;overflow-wrap:anywhere}.builder-review-result{border:1px solid #303442;border-radius:8px;background:#10131e;padding:10px;margin:14px 0}
+.builder-review-content .builder-review-warning{color:#ffc06b}.builder-plan-row{display:flex;flex-direction:column;gap:5px;padding:9px 0;border-top:1px solid #303442}.builder-plan-row span,.builder-plan-row small{font-size:11px;color:#b4beca}.builder-plan-row strong{font-size:12px}
+.builder-review-actions{display:flex;gap:8px;position:sticky;bottom:0;background:#020617;padding:10px 0}.builder-review-actions button{flex:1;white-space:normal;min-height:38px}
+.builder-review-summary{padding:10px;background:#191911;border:1px solid #77501f;border-radius:8px;color:#ffc16b!important;font-size:12px}.builder-joint-row{padding:11px;border:1px solid #42403a;border-radius:8px;margin:9px 0;background:#12151c}.builder-joint-row.skipped{border-color:#282c38;background:#0c1020}.builder-joint-row label{display:flex;align-items:flex-start;gap:8px}.builder-joint-row label>span{display:flex;flex-direction:column;gap:4px}.builder-joint-row label small{font-size:11px}.builder-joint-row p{margin-bottom:0}
+.unified-frame-generator .field-stack{margin:12px 0}.unified-frame-generator label{font-size:12px!important;font-weight:500}.unified-frame-generator .triple-fields label,.unified-frame-generator .field-pair label{display:block;min-height:20px}.unified-frame-generator input[type=number]{height:34px}.frame-structure-summary{padding:9px;border:1px solid #454031;border-radius:6px;background:#17150f;color:#e6b872;font-size:11px;line-height:1.7}.frame-structure-note{font-size:11px;line-height:1.7;color:#9ca3af;margin:10px 0 0}.frame-canvas-tools{margin:12px 8px;border:1px solid #303442;border-radius:8px;background:#0c1020}.frame-canvas-tools>summary{padding:12px;font-size:12px;color:#c7ccd7;cursor:pointer}.frame-canvas-tools .profile-draw-card,.frame-canvas-tools .contour-preset-card{margin:0 8px 10px}.builder-review-summary{line-height:1.8}.builder-nearby-joints{border-top:1px solid #303442;margin-top:14px;padding-top:10px}.builder-nearby-joints>summary{font-size:12px;color:#aeb7c6;cursor:pointer}
 
 /* 实际观察的光轴智能配件流程：448px 紧凑模态，类型/孔/站位不是普通目录入口。 */
 .shaft-smart-modal{width:min(448px,calc(100vw - 32px));border:1px solid #2b3040;border-radius:12px;max-height:calc(100vh - 32px)}
@@ -1027,5 +1028,22 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .workbench-footer .canvas-transform-bar .transform-tool:has(.workbench-icon)>span{display:none}
 .workbench-footer .canvas-transform-bar .draw-tool.active{width:auto;min-width:36px;padding:0 8px}
 .workbench-footer .canvas-transform-bar .draw-tool.active>span{display:inline!important}
+
+/* 常用动作保留短文字，其余在同风格菜单中按需展开；底栏仍实际占位且只有一行。 */
+.workbench-footer .canvas-transform-bar .transform-tool.primary-tool{width:auto;min-width:52px;padding:0 6px;gap:5px;font-size:12px}
+.workbench-footer .canvas-transform-bar .transform-tool.primary-tool>span{display:inline}
+.workbench-footer .footer-display-menu>summary{min-width:52px;padding:0 7px;font-size:12px;color:#485b70}
+.workbench-footer .footer-display-menu .cad-menu-popover{min-width:225px}
+.workbench-footer .canvas-bottom-bar .cad-menu-popover button{height:auto;min-height:34px;padding:7px 11px;font-size:13px;justify-content:space-between;background:transparent;color:#d1d5db;box-shadow:none}
+.workbench-footer .canvas-bottom-bar .cad-menu-popover button.active{background:transparent;color:#d1d5db;font-weight:400;box-shadow:none}
+.workbench-footer .canvas-bottom-bar .cad-menu-popover button:hover:not(:disabled),.workbench-footer .canvas-bottom-bar .cad-menu-popover button:focus-visible{background:rgba(255,255,255,.06);color:#fff}
+.workbench-footer .footer-display-menu[open]>summary,.workbench-footer .footer-display-menu>summary:hover{background:rgba(255,255,255,.8);color:#33465c}
+.profile-replace-card>summary{font-size:13px;color:#aeb9c9;cursor:pointer;list-style-position:inside}
+.profile-replace-card[open]>.profile-replace-head{margin-top:10px}
+.connection-card.connection-selected{border-color:#ff9800;box-shadow:0 0 0 1px #ff980038}
+.connection-selected-label{margin-bottom:10px;color:#ffb451;font-size:13px;font-weight:600}
+.scene-annotation-label.overall{background:#40576e;color:#fff;border-color:#dce5ee;box-shadow:0 1px 3px #24374c26}
+.library-panel .property-row>label{font-size:12px}.library-panel .inspector-section-title{font-size:13px}
+@media(max-width:1250px){.workbench-footer .canvas-transform-bar>.transform-tool.danger{display:none}}
 .cad-project-chip .project-dot.save-error{background:#ef4444;box-shadow:0 0 0 3px #ef44441f}
 .cad-project-chip .autosave-error{font-size:11px;color:#ff8b8b;white-space:nowrap}

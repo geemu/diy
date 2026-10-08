@@ -137,7 +137,7 @@ export default class ProfileDrawTool {
     const text=String(value||''),length=Number(text);
     const valid=text&&Number.isFinite(length)&&length>0&&length<=50000;
     this.typedLength=valid?text:'';
-    if(valid)this.refreshTypedPreview();
+    this.refreshTypedPreview();
   }
 
   /** 修饰键在鼠标静止时也重新计算方向，避免松开 Alt 后仍沿用旧斜向预览。 */
@@ -611,7 +611,7 @@ export default class ProfileDrawTool {
   updateSolidPreview(candidate){
     if(!this.start){this.updateIdlePreview(candidate);return;}
     const segment=this.linearSegment(candidate),length=segment.start.distanceTo(segment.end);
-    if(length<1){this.clearPreview();return;}
+    if(length<1){this.clearPreview(false);this.lengthOverlay?.update(segment.start,segment.end,0,this.typedLength);return;}
     this.renderSolidSegment(segment,candidate);
     this.lengthOverlay?.update(segment.start,segment.end,length,this.typedLength);
   }
@@ -650,8 +650,8 @@ export default class ProfileDrawTool {
     this.previewGroup.traverse(object=>{if(object.isMesh)object.material.color.setHex(color);});
   }
 
-  clearPreview(){
-    this.lengthOverlay?.hide();
+  clearPreview(hideInput=true){
+    if(hideInput)this.lengthOverlay?.hide();
     if(!this.previewGroup)return;
     this.editor.sceneManager.scene.remove(this.previewGroup);
     this.previewGroup.traverse(obj=>{obj.geometry?.dispose?.();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose?.());else obj.material.dispose?.();}});

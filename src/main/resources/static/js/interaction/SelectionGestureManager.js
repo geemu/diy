@@ -13,7 +13,7 @@ export default class SelectionGestureManager {
     this.canvas.addEventListener('pointercancel',this.cancel,true);
     window.addEventListener('blur',this.blur);
   }
-  available(){const e=this.editor;return !e.wholeStretchManager.isActive()&&!e.profileDrawTool.isActive()&&!e.profilePlacementManager.isActive()&&!e.connectionPlacementManager.isActive()&&!e.accessoryPlacementManager.isActive()&&!e.machiningPlacementManager.isActive()&&!e.measureMode&&!e.dimensionMode&&!e.featureSelectionManager.enabled&&!e.profileGripEditor.drag&&!e.sceneManager.lassoMode;}
+  available(){const e=this.editor;return !e.isBuilderReviewActive?.()&&!e.wholeStretchManager.isActive()&&!e.profileDrawTool.isActive()&&!e.profilePlacementManager.isActive()&&!e.connectionPlacementManager.isActive()&&!e.accessoryPlacementManager.isActive()&&!e.machiningPlacementManager.isActive()&&!e.measureMode&&!e.dimensionMode&&!e.featureSelectionManager.enabled&&!e.profileGripEditor.drag&&!e.sceneManager.lassoMode;}
   setSpace(enabled){
     if(enabled&&!this.available())return false;
     if(this.space===enabled)return true;

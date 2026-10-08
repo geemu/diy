@@ -19,16 +19,11 @@ export default class DiyGenerator {
     const beforePartCount = this.editor.parts.length;
     let assemblyId = null;
 
-    if (template.generator === 'FRAME') {
-      assemblyId = this.editor.addFrame({
-        ...parameters,
-        name:template.label,
-        captureHistory:false
-      });
-    } else if (template.generator === 'LAYERED_RACK') {
+    // 用途只是预设，不再用“基础/高级”切换不同生成器，避免修改层数却被基础模板忽略。
+    if (template.generator === 'LAYERED_RACK') {
       assemblyId = this.editor.addLayeredRack({
         ...parameters,
-        name:template.label,
+        name:String(input.name||template.label),
         captureHistory:false
       });
     } else {
@@ -75,8 +70,8 @@ function positiveNumber(value, fallback, label) {
 }
 
 function integerInRange(value, fallback, min, max, label) {
-  const number = Math.round(Number(value ?? fallback));
-  if (!Number.isFinite(number) || number < min || number > max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isInteger(number) || number < min || number > max) {
     throw new Error(`${label}必须在 ${min}~${max} 之间`);
   }
   return number;

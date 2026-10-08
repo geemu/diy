@@ -58,7 +58,8 @@ export default class InfiniteGround {
           float fine=gridLine(hit.xz,cell)*(1.0-fract(level));
           float coarse=gridLine(hit.xz,cell*10.0);
           // 线条比地面颜色晚一些淡出，保持中远景格子可辨，地平线仍连续融合。
-          float lines=max(fine*0.72,coarse*0.40)*pow(fade,0.75)*showGrid;
+          float densityFade=1.0-smoothstep(5.0,24.0,footprint);
+          float lines=max(fine*0.42*densityFade,coarse*0.52)*pow(fade,0.75)*showGrid;
           // 按世界 X/Z 正负区分四象限，仅染线条；转动或平移相机不能改变象限归属。
           vec3 quadrantInk=hit.z>=0.0
             ?(hit.x>=0.0?positiveXPositiveZ:negativeXPositiveZ)
