@@ -114,10 +114,7 @@ export default class MachiningManager {
     for(const item of this.ensure(part)) {
       normalizeMachiningFeature(item,part);
       if(isEndMachiningFeature(item)) {
-        const station=item.end==='END'?length:0; const frame=getLocalFrameAtStation(part,station); const center=new THREE.Vector3(...frame.point); const tangent=new THREE.Vector3(...frame.tangent).normalize().multiplyScalar(item.end==='END'?1:-1);
-        const size=Math.max(4,Number(item.type==='END_COUNTERSINK'?(item.majorDiameter||12):(item.diameter||8))/2);
-        const ring=new THREE.Mesh(new THREE.RingGeometry(Math.max(.8,size-1),size,24),new THREE.MeshBasicMaterial({color:item.type==='END_TAP'?0x8e44ad:0x2c3e50,side:THREE.DoubleSide}));
-        ring.position.copy(center).addScaledVector(tangent,.7); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),tangent); group.add(ring); continue;
+        addHoleAppearance(group,item,part.machiningItems,machiningLocalPose(part,item));continue;
       }
       const station=Number(item.stationS??item.distanceFromStart??0); item.stationS=station; item.distanceFromStart=station; item.processStage=normalizeProcessStage(item.processStage,part.profilePath?.type==='ARC');
       const frame=getLocalFrameAtStation(part,station); const frameQuaternion=frameRotationQuaternion(frame.rotation); const offset=Number(item.offset||0); const epsilon=.7; const local=faceLocalPoint(item.face,width,height,offset,epsilon).applyQuaternion(frameQuaternion); const center=new THREE.Vector3(...frame.point).add(local); const normal=faceLocalNormal(item.face).applyQuaternion(frameQuaternion).normalize();
@@ -126,10 +123,39 @@ export default class MachiningManager {
         const plane=new THREE.Mesh(new THREE.PlaneGeometry(item.orientation==='CROSS_PROFILE'?widthMm:lengthMm,item.orientation==='CROSS_PROFILE'?lengthMm:widthMm),new THREE.MeshBasicMaterial({color:item.type==='MILLING_REGION'?0x8e6c3a:0x16a085,wireframe:true,side:THREE.DoubleSide}));
         plane.position.copy(center); plane.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal); group.add(plane); continue;
       }
-      const radius=Math.max(Number(item.type==='COUNTERSINK'?(item.majorDiameter??item.diameter??8):(item.diameter||8))/2,2); const ring=new THREE.Mesh(new THREE.RingGeometry(Math.max(.8,radius-1),radius,24),new THREE.MeshBasicMaterial({color:item.processStage==='BEND_AFTER'?0x16a085:item.type==='COUNTERSINK'?0xe67e22:item.type==='COUNTERBORE'?0x2980b9:0xc0392b,side:THREE.DoubleSide})); ring.position.copy(center); ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal); group.add(ring);
+      const compound=part.machiningItems.some(other=>other.linkedHoleId===item.id&&['COUNTERSINK','COUNTERBORE'].includes(other.type));
+      if(!compound)addHoleAppearance(group,item,part.machiningItems,machiningLocalPose(part,item));
+      // 通孔的出口也要能辨认；孔组入口由沉头/沉孔展示，避免两层标记相互闪烁。
+      if(item.type==='THROUGH_HOLE')addHoleAppearance(group,item,part.machiningItems,machiningLocalPose(part,item,oppositeFace[item.face]));
     }
     this.editor.annotationManager?.requestRefresh();
   }
+}
+
+const oppositeFace={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
+
+/** 仅展示坐标：沿用 stationS/face/offset 与弯曲局部标架，端孔尊重 X/Y 偏移。 */
+export function machiningLocalPose(part,item,face=item.face) {
+  const length=Number(part.dimensions.length),[width,height]=part.dimensions.sectionSize;
+  const end=isEndMachiningFeature(item),station=end?(item.end==='END'?length:0):Number(item.stationS??item.distanceFromStart??0);
+  const frame=getLocalFrameAtStation(part,station),rotation=frameRotationQuaternion(frame.rotation);
+  const normal=end?new THREE.Vector3(...frame.tangent).normalize().multiplyScalar(item.end==='END'?1:-1):faceLocalNormal(face).applyQuaternion(rotation).normalize();
+  const offset=end?new THREE.Vector3(Number(item.offsetX||0),Number(item.offsetY||0),0):faceLocalPoint(face,width,height,Number(item.offset||0),0);
+  return {point:new THREE.Vector3(...frame.point).add(offset.applyQuaternion(rotation)).addScaledVector(normal,.03),normal};
+}
+
+/** 深色孔口及金属边缘是加工示意，不改原截面，也不冒充实体布尔贯穿。 */
+function addHoleAppearance(group,item,items,pose) {
+  const linked=items.find(other=>other.id===item.linkedHoleId),tapping=Number.parseFloat(String(item.tappingSize||'').replace(/^M/i,''));
+  const outer=Math.max(.1,Number(item.type.includes('COUNTERSINK')?(item.majorDiameter||item.diameter||14):(item.diameter||tapping||8))/2);
+  const inner=linked?Math.min(outer,Math.max(.1,Number(linked.diameter||8)/2)):outer*.9;
+  const marker=new THREE.Group();marker.name='__machining_hole__';marker.userData.machiningId=item.id;
+  marker.userData.appearanceOnly=true;marker.position.copy(pose.point);marker.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),pose.normal);
+  // 在透明的选中/吸附着色之后画孔口，但仍检查实体深度，不能透过其他构件。
+  const dark=new THREE.Mesh(new THREE.CircleGeometry(inner,40),new THREE.MeshBasicMaterial({color:0x10151b,side:THREE.FrontSide,toneMapped:false,transparent:true,opacity:1,depthTest:true,depthWrite:true}));
+  dark.name='__hole_aperture__';dark.renderOrder=1600;dark.raycast=()=>{};marker.add(dark);
+  const rim=new THREE.Mesh(new THREE.RingGeometry(inner,outer,40),new THREE.MeshStandardMaterial({color:item.type.includes('COUNTERBORE')?0x64707a:0x9ca6af,metalness:.6,roughness:.42,side:THREE.FrontSide,transparent:true,opacity:1,depthTest:true,depthWrite:true}));
+  rim.name='__hole_rim__';rim.renderOrder=1601;rim.position.z=.01;rim.raycast=()=>{};marker.add(rim);group.add(marker);
 }
 
 function normalizeProcessStage(value,isArc){if(!isArc)return'STRAIGHT';return value==='BEND_AFTER'?'BEND_AFTER':'BEND_BEFORE';}

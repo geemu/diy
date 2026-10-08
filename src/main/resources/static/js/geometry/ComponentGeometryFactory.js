@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {panelContours} from '../model/PanelShapeModel.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {buildDesignProfileSection} from '../model/DesignProfileSection.js';
+import {angleBracketLayout} from '../model/ConnectionComponentPorts.js';
 
 /** 通用参数化组件几何，预览与实际构件共用。通孔使用带孔轮廓挤出，不依赖远程图片和模型。 */
 export default class ComponentGeometryFactory {
@@ -180,9 +181,10 @@ export default class ComponentGeometryFactory {
     } else {
       const leg=kind==='SHELF_BRACKET'?d.length:s,w=kind==='L_BRACKET'?s*.45:Math.max(s,Number(d.height||s)),depth=kind==='HEAVY_CORNER'?d.length:leg;
       const height=kind==='HEAVY_CORNER'?depth:s;
-      const holes=kind==='HEAVY_CORNER'?[circle(0,depth*.35,r)]:d.holeCount>=3?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const ports=angleBracketLayout(d);
+      const holes=kind==='HEAVY_CORNER'?[circle(0,depth*.35,r)]:(ports?.baseOffsets||(d.holeCount>=3?[-w*.22,w*.22]:[0])).map(offset=>circle(offset,0,r));
       plate(w,depth,t,holes,[0,t/2,depth/2],[Math.PI/2,0,0]);
-      const uprightHoles=kind==='HEAVY_CORNER'?[circle(0,height*.35,r)]:d.holeCount===4?[circle(-w*.22,0,r),circle(w*.22,0,r)]:[circle(0,0,r)];
+      const uprightHoles=kind==='HEAVY_CORNER'?[circle(0,height*.35,r)]:(ports?.targetOffsets||(d.holeCount===4?[-w*.22,w*.22]:[0])).map(offset=>circle(offset,0,r));
       const angle=(d.angle||90)*Math.PI/180;plate(w,height,t,uprightHoles,[0,height*Math.sin(angle)/2,height*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
       if(kind==='HEAVY_CORNER'||kind==='CORNER_CUBE')for(const x of [-(w-t)/2,(w-t)/2])plate(s,s,t,[],[x,0,0],[0,Math.PI/2,0],[point(0,0),point(-depth+t,0),point(0,height-t)]);
     }

@@ -5,7 +5,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const {default:LocalProjectDraft,LOCAL_PROJECT_DRAFT_KEY}=await import(pathToFileURL(path.join(root,'src/main/resources/static/js/io/LocalProjectDraft.js')).href);
-const project={schemaVersion:62,metadata:{version:'0.75.20'},editorState:{engineeringDrawing:{projectName:'继续上次设计'}},parts:[],connections:[],constraints:[],assemblies:[],profileSections:[],dimensions:[]};
+const project={schemaVersion:62,metadata:{version:'0.75.23'},editorState:{engineeringDrawing:{projectName:'继续上次设计'}},parts:[],connections:[],constraints:[],assemblies:[],profileSections:[],dimensions:[]};
 const records=new Map();let quota=false,unavailable=false;
 const storage={getItem(key){if(unavailable)throw new Error('SecurityError');return records.get(key)||null;},setItem(key,value){if(quota)throw new Error('QuotaExceededError');records.set(key,value);},removeItem(key){records.delete(key);}};
 const draft=new LocalProjectDraft(()=>storage);
@@ -13,7 +13,7 @@ assert.equal(draft.read(),null);assert.equal(draft.flush(),null);assert.equal(re
 const saved=draft.capture(project);assert.ok(saved>0);assert.equal(draft.savedAt(),saved);assert.equal(draft.pending,null);
 const loaded=draft.read();assert.equal(loaded.editorState.engineeringDrawing.projectName,'继续上次设计');loaded.editorState.engineeringDrawing.projectName='临时改动';
 assert.equal(draft.read().editorState.engineeringDrawing.projectName,'继续上次设计','恢复的对象与持久化文本独立');
-const raw=draft.raw();quota=true;assert.throws(()=>draft.capture({...project,metadata:{version:'0.75.20',name:'新修改'}}),/Quota/);
+const raw=draft.raw();quota=true;assert.throws(()=>draft.capture({...project,metadata:{version:'0.75.23',name:'新修改'}}),/Quota/);
 assert.equal(draft.raw(),raw,'配额不足保留最后成功快照');assert.ok(draft.pending,'失败的已提交快照可在离开页面时重试');
 quota=false;assert.ok(draft.flush());assert.equal(draft.read().metadata.name,'新修改');
 const committed=draft.raw();project.editorState.engineeringDrawing.projectName='未确认拖动';assert.equal(draft.flush(),null);assert.equal(draft.raw(),committed,'页面离开不抓取未提交的活跃场景');
@@ -29,4 +29,4 @@ assert.ok(app.includes('editor.onProjectChanged = () => {')&&app.includes('saveA
 assert.ok(app.includes('autosaveReady=false;localDraftFailed(error,true)'),'无法恢复时阻止空白覆盖');
 assert.ok(html.includes('导出本地草稿原文件')&&html.includes('本地保存失败'));
 assert.ok(app.includes("confirm('清除当前浏览器的本地草稿"),'清除有确认');
-console.log(JSON.stringify({ok:true,version:'0.75.20',localStorage:true,autoResume:true,commitSnapshot:true,noStartupOverwrite:true,quotaRetention:true,invalidRetention:true,rawBackup:true,clearConfirmed:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.23',localStorage:true,autoResume:true,commitSnapshot:true,noStartupOverwrite:true,quotaRetention:true,invalidRetention:true,rawBackup:true,clearConfirmed:true}));

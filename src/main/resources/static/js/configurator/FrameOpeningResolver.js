@@ -22,7 +22,7 @@ export default class FrameOpeningResolver {
       throw new Error('框口配置仅支持 4 根直线型材');
     }
 
-    const tolerance = Math.max(0.5, Number(options.axisToleranceMm ?? 3));
+    const tolerance = Math.max(0.01, Number(options.axisToleranceMm ?? 0.1));
     const members = meshes.map(mesh => this.describeMember(mesh));
     const grouped = new Map();
     for (const member of members) {
@@ -50,6 +50,15 @@ export default class FrameOpeningResolver {
     const width = widthBounds.max - widthBounds.min;
     const height = heightBounds.max - heightBounds.min;
     if (!(width > 1) || !(height > 1)) throw new Error('框口净尺寸无效，请检查型材位置和截面尺寸');
+
+    // 四条中心线的间距不能证明闭合：每条实体边必须覆盖净开口，四角也必须接触。
+    for (const member of grouped.get(preferred.widthAxis)) this.assertCovers(member,preferred.widthAxis,widthBounds,tolerance);
+    for (const member of grouped.get(preferred.heightAxis)) this.assertCovers(member,preferred.heightAxis,heightBounds,tolerance);
+    for (const horizontal of grouped.get(preferred.widthAxis)) for (const vertical of grouped.get(preferred.heightAxis)) {
+      if (AXIS_NAMES.some(axis => horizontal.box.max[axis.toLowerCase()] < vertical.box.min[axis.toLowerCase()] - tolerance || vertical.box.max[axis.toLowerCase()] < horizontal.box.min[axis.toLowerCase()] - tolerance)) {
+        throw new Error('所选型材没有形成闭合框口：角部仍有间隙，请先吸附四个角');
+      }
+    }
 
     const center = {x:0,y:0,z:0};
     center[preferred.widthAxis.toLowerCase()] = (widthBounds.min + widthBounds.max) / 2;
@@ -93,9 +102,15 @@ export default class FrameOpeningResolver {
     const quaternion = mesh.getWorldQuaternion(new THREE.Quaternion());
     const direction = new THREE.Vector3(0,0,1).applyQuaternion(quaternion).normalize();
     const axis = dominantAxis(direction);
+    if (Math.abs(direction[axis.toLowerCase()]) < 1 - 1e-7) throw new Error('框口填板目前支持沿画布方向的矩形框；斜框请使用自由添加');
     const box = new THREE.Box3().setFromObject(mesh);
     const size = box.getSize(new THREE.Vector3());
-    return {mesh,part,axis,center,size};
+    return {mesh,part,axis,center,size,box};
+  }
+
+  assertCovers(member,axis,bounds,tolerance) {
+    const key=axis.toLowerCase();
+    if(member.box.min[key]>bounds.min+tolerance || member.box.max[key]<bounds.max-tolerance)throw new Error('所选型材没有围成框口：有边过短或偏离角部，请先检查四条边');
   }
 
   innerBounds(pair, coordinateAxis) {

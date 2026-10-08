@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {editor,dispose,signature,THREE,load} from './verify-connection-batch-v07520.mjs';
+const {default:Numbers,buildSurfaceNumberGeometry}=await load('annotation/ProfileSurfaceNumber.js');
+const {default:Factory}=await load('geometry/ProfileGeometryFactory.js');
+const {default:Schema}=await load('io/ProjectSchema.js');
+const results={};
+const e=editor();
+for(const profile of ['DESIGN-2020','DESIGN-3030','DESIGN-4040','DESIGN-3060'])e.addProfile(profile,300,{position:{x:e.parts.length*100,y:30,z:0},select:false,captureHistory:false});
+const before=signature(e),history=e.historyManager.index;
+for(const mesh of e.meshes) {
+  const geometry=buildSurfaceNumberGeometry(mesh),box=new THREE.Box3().setFromObject(mesh);
+  assert.ok(geometry?.attributes.position.count>0);
+  assert.equal(geometry.userData.numberPatches.length,4);
+  const points=geometry.attributes.position,uv=geometry.attributes.uv;
+  for(let i=0;i<points.count;i++) {
+    const point=new THREE.Vector3().fromBufferAttribute(points,i);
+    assert.ok(box.containsPoint(mesh.localToWorld(point)));
+    assert.ok(uv.getX(i)>=-.00001&&uv.getX(i)<=1.00001&&uv.getY(i)>=-.00001&&uv.getY(i)<=1.00001);
+  }
+  for(const patch of geometry.userData.numberPatches)assert.ok(patch.rect.uMin>patch.strip[0]&&patch.rect.uMax<patch.strip[1],'印字只在实心外壁留边，不跨槽');
+  geometry.dispose();
+}
+assert.equal(signature(e),before);assert.equal(e.historyManager.index,history);results.realSurfaceClippingAndReadOnly=true;
+const arcPart=structuredClone(e.parts[0]);arcPart.profilePath={type:'ARC',radius:200,angleDeg:90,plane:'XZ'};
+const arc=Factory.create(arcPart),arcNumber=buildSurfaceNumberGeometry(arc);assert.ok(arcNumber?.attributes.position.count>0);arcNumber.dispose();Factory.disposeObject(arc);
+// 一张真实带孔外表面：编号三角面不能把缺失的材料补成印字平板。
+const shape=new THREE.Shape();shape.moveTo(-20,-150);shape.lineTo(20,-150);shape.lineTo(20,150);shape.lineTo(-20,150);shape.closePath();
+const aperture=new THREE.Path();aperture.absarc(12,0,5,0,Math.PI*2,true);shape.holes.push(aperture);
+const faceGeometry=new THREE.ShapeGeometry(shape,32);faceGeometry.rotateX(-Math.PI/2);
+const perforated=new THREE.Group();perforated.userData.part={type:'PROFILE'};perforated.add(new THREE.Mesh(faceGeometry,new THREE.MeshBasicMaterial()));
+const cutPrint=buildSurfaceNumberGeometry(perforated);assert.ok(cutPrint);
+const positions=cutPrint.attributes.position;
+for(let i=0;i<positions.count;i++)assert.ok(Math.hypot(positions.getX(i)-12,positions.getZ(i))>=5-.0001);
+cutPrint.dispose();Factory.disposeObject(perforated);results.arcSegmentAndRealApertureRemainOpen=true;
+const originalDocument=globalThis.document;
+const printed=[];
+globalThis.document={createElement:()=>({getContext:()=>({measureText:text=>({width:text.length*42}),fillText(text){printed.push({text,ink:this.fillStyle});}})})};
+const numbers=new Numbers(e.sceneManager.scene);numbers.refresh(e.meshes);
+assert.equal(numbers.records.size,4);
+const mesh=e.meshes[0],record=numbers.records.get(mesh),stamp=record.stamp;
+assert.equal(stamp.material.side,THREE.FrontSide);assert.equal(stamp.material.depthTest,true);assert.equal(stamp.material.depthWrite,false);assert.equal(stamp.material.transparent,true);assert.equal(stamp.renderOrder,1550);assert.equal(stamp.raycast(),undefined);
+assert.ok(!mesh.children.includes(stamp),'印字不是工程子零件，不改变构件包围盒');
+assert.equal(signature(e),before);numbers.refresh(e.meshes);assert.equal(numbers.records.get(mesh),record,'悬停刷新复用贴字资源');
+mesh.position.y+=150;mesh.rotation.set(.4,.7,.3);numbers.update();assert.deepEqual(stamp.matrix.elements,mesh.matrixWorld.elements,'印字跟随实际模型矩阵');
+const oldTexture=record.texture;let textureDisposed=0;oldTexture.addEventListener('dispose',()=>textureDisposed++);
+mesh.userData.part.displayId='P-002';numbers.refresh(e.meshes);assert.equal(textureDisposed,1);assert.notEqual(numbers.records.get(mesh),record);
+mesh.userData.part.color=0x111827;numbers.refresh(e.meshes);assert.deepEqual(printed.at(-1),{text:'P-002',ink:'#edf2f7'});
+const length=mesh.userData.part.dimensions.length;mesh.userData.part.dimensions.length=450;mesh.userData.part.profilePath.length=450;Factory.rebuildLinearGroup(mesh,mesh.userData.part);numbers.refresh(e.meshes);assert.ok(numbers.records.get(mesh).stamp.geometry.attributes.position.count>0);mesh.userData.part.dimensions.length=length;mesh.userData.part.profilePath.length=length;
+mesh.visible=false;numbers.update();assert.equal(numbers.records.get(mesh).stamp.visible,false);numbers.refresh(e.meshes);assert.equal(numbers.records.size,3);
+numbers.refresh(e.meshes,false);assert.equal(numbers.records.size,0);assert.equal(numbers.group.children.length,0);numbers.dispose();assert.equal(numbers.group.parent,null);
+globalThis.document=originalDocument;results.transformCacheRebuildVisibilityAndResourceCleanup=true;
+const project={...e.exportProject(),schemaVersion:62,editorState:{},profileSections:[],dimensions:[]};assert.equal(Schema.load(project).project.editorState.annotations.showPartNumbers,true);
+project.editorState.annotations={showPartNumbers:false};assert.equal(Schema.load(project).project.editorState.annotations.showPartNumbers,false);results.numberPreferenceSavedWithoutSchemaChange=true;
+const html=fs.readFileSync('src/main/resources/static/index.html','utf8'),app=fs.readFileSync('src/main/resources/static/js/app.js','utf8'),css=fs.readFileSync('src/main/resources/static/css/app.css','utf8'),confirm=fs.readFileSync('src/main/resources/static/js/ui/WorkbenchConfirm.js','utf8');
+assert.ok(html.includes('<workbench-confirm'));assert.ok(confirm.includes('role="alertdialog"'));assert.ok(confirm.includes('aria-modal="true"'));assert.ok(confirm.includes("event.key==='Escape'"));assert.ok(confirm.includes("event.key!=='Tab'"));assert.ok(confirm.includes("event.stopPropagation()"));assert.ok(confirm.includes('this.$refs.cancel?.focus'));assert.ok(confirm.includes("removeEventListener('focusin'"));
+const deleteSource=app.slice(app.indexOf('async function deleteSelected('),app.indexOf('const duplicateSelected'));
+assert.ok(deleteSource.includes('await confirmWorkbench'));assert.ok(!deleteSource.includes('window.confirm')&&!deleteSource.includes('!confirm('));assert.ok(deleteSource.includes("!==ids"));assert.ok(app.includes('deleteSelected(false)'),'参考快捷键仍即时删除，可撤销');
+assert.ok(html.includes('aria-label="型材总长度（mm）"'));assert.ok(html.includes(':disabled="!contextLengthEditable(\'END\')"'));
+assert.ok(css.includes('.context-menu button.active{background:#ff8a001a'));assert.ok(css.includes('.context-menu kbd{background:#1e2230'));assert.ok(css.includes('background:#191c29!important'));assert.ok(css.includes('.workbench-confirm-backdrop{z-index:30000'));
+results.inPageConfirmationContextStatesAndKeyboardContract=true;
+dispose(e);console.log(JSON.stringify({ok:true,version:'0.75.23',...results}));

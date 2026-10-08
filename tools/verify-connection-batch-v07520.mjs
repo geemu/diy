@@ -57,7 +57,7 @@ outcomes.nineMappedTypes=true;
   e.setPartVisibility(e.parts[0].id,false);assert.ok([...e.connectionManager.helperMeshes.values()].every(mesh=>!mesh.visible));e.showAll();assert.ok([...e.connectionManager.helperMeshes.values()].every(mesh=>mesh.visible));
   const beam=e.meshes[0];beam.position.y=15;e.syncPartFromMesh(beam);beam.updateMatrixWorld(true);e.connectionManager.updateConnectionsForProfile(beam.userData.part.id);
   assert.equal(e.connectionManager.connections[0].status,'INVALID','接头移动到端边时不能继续展示悬空的已安装另一侧');
-  assert.ok(e.connectionManager.connections[0].validation.errors.some(error=>error.code==='DESIGN_COMPONENT_FOOTPRINT_OUT_OF_RANGE'));
+  assert.ok(e.connectionManager.connections[0].validation.errors.some(error=>['DESIGN_COMPONENT_FOOTPRINT_OUT_OF_RANGE','COMPONENT_PORT_NOT_ALIGNED'].includes(error.code)));
   beam.position.y=250;e.syncPartFromMesh(beam);beam.updateMatrixWorld(true);e.connectionManager.updateConnectionsForProfile(beam.userData.part.id);assert.equal(countMeshes(e),2);
   outcomes.bothSidesOneJointHistoryReload=true;outcomes.previewMatchesCommit=true;outcomes.existingAndVisibilitySafe=true;dispose(e);
 }
@@ -136,7 +136,8 @@ outcomes.nineMappedTypes=true;
     const p=profileFeatureWorldPoint(center,{type:'PROFILE_END',end});
     assert.ok(e.meshes.filter(m=>m.userData.part.name.includes('横梁')).some(m=>{const l=m.worldToLocal(p.clone());return Math.abs(Math.abs(l.x)-15)<1e-5&&Math.abs(l.y)<1e-5&&Math.abs(l.z)<=m.userData.part.dimensions.length/2;}));
   }
-  const state=e.connectionBatchManager.begin();assert.equal(state.contactCount,40);assert.equal(state.nearbyCount,0);assert.ok(state.blockedCount>0,'未映射双槽中心规则要明确跳过，不扩大槽位容差');
+  const state=e.connectionBatchManager.begin();assert.equal(state.contactCount,40);assert.equal(state.nearbyCount,0);assert.ok(state.readyCount>24,'逐孔匹配增加可用多槽安装侧，不扩大端中心的槽容差');
+  for(const row of e.connectionBatchManager.rows)for(const p of row.placements)if(p.checked.item.type==='ANGLE_BRACKET')assert.ok(p.checked.item.geometry.componentPorts.ok);
   outcomes.rectangularCenterBeamContactsAndSlotBoundary=true;dispose(e);
 }
 {
@@ -148,4 +149,5 @@ outcomes.nineMappedTypes=true;
   assert.ok(!app.includes("const preferred = new Set(['2020','3030','4040','4545','6060','8080'])"),'框架不能继续使用只允许六个方截面的旧白名单');
   outcomes.invalidFrameAtomicAndUnifiedForm=true;dispose(e);
 }
-console.log(JSON.stringify({ok:true,version:'0.75.20',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.23',...outcomes}));
+export {editor,joint,dispose,signature,countMeshes,THREE,load};

@@ -39,6 +39,7 @@ import {BatchConnectionComponentOptions} from './connection/ConnectionBatchManag
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
 import {workbenchIcon} from './ui/WorkbenchIcons.js';
 import ProfileSelector from './ui/ProfileSelector.js';
+import WorkbenchConfirm from './ui/WorkbenchConfirm.js';
 import ViewCube,{VIEW_DIRECTIONS} from './ui/ViewCube.js';
 import {buildContourPreset} from './drawing/ContourPresetFactory.js';
 import {buildConnectionInstallationDiagram} from './manufacturing/ConnectionInstallationDiagram.js';
@@ -54,13 +55,25 @@ import {
 const {createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick} = Vue;
 
 createApp({
-  components:{ProfileSelector},
+  components:{ProfileSelector,WorkbenchConfirm},
   setup() {
     const viewport = ref(null);
     const fileInput = ref(null);
     const sectionDxfInput = ref(null);
     const selected = ref(null);
     const selectedMeshes = ref([]);
+    const workbenchConfirm=reactive({visible:false,title:'',description:'',hint:'',labels:[],confirmLabel:''});
+    let confirmationResolver=null;
+    function confirmWorkbench(options) {
+      if(workbenchConfirm.visible)return Promise.resolve(false);
+      closeCadMenus();contextMenu.visible=false;jointQuickMenu.visible=false;relationQuickMenu.visible=false;hideFooterTip();
+      Object.assign(workbenchConfirm,{labels:[],hint:'可使用 Ctrl+Z 撤销恢复。',...options,visible:true});
+      return new Promise(resolve=>{confirmationResolver=resolve;});
+    }
+    function finishWorkbenchConfirm(confirmed=false) {
+      const resolve=confirmationResolver;confirmationResolver=null;workbenchConfirm.visible=false;resolve?.(confirmed);
+    }
+    onBeforeUnmount(()=>finishWorkbenchConfirm(false));
     const footerTipElement=ref(null);
     const footerTip=reactive({visible:false,text:'',x:0,y:0});
     let footerTipAnchor=null,footerTipSequence=0;
@@ -97,8 +110,23 @@ createApp({
     const quickAlignmentForm=reactive({kind:'END',referenceId:null,axis:'X',axes:['Y'],end:'START',targetFace:'FRONT',stationPercent:50});
     const quickAlignmentPreview=reactive({ready:false,changedCount:0,rows:[],collisions:[],message:'',error:''});
     const alignmentReferences=computed(()=>selectedMeshes.value.map(mesh=>({id:mesh.userData.part.id,label:mesh.userData.part.displayId||mesh.userData.part.name||mesh.userData.part.id})));
-    const connectionBatchState=reactive({active:false,profileCount:0,contactCount:0,readyCount:0,existingCount:0,blockedCount:0,uncheckedCount:0,nearbyCount:0,skippedCount:0,freeEndCount:0,rows:[]});
-    const connectionBatchForm=reactive({type:'AUTO',spec:'AUTO',sides:'BOTH',scope:'ALL'});
+    const connectionBatchState=reactive({active:false,profileCount:0,contactCount:0,readyCount:0,existingCount:0,blockedCount:0,invalidCount:0,uncheckedCount:0,nearbyCount:0,skippedCount:0,freeEndCount:0,rows:[]});
+    const connectionBatchForm=reactive({type:'AUTO',spec:'AUTO',sides:'BOTH',scope:'ALL',supplement:true});
+    const frameEdit=reactive({active:false,assemblyId:null,ready:false,memberCount:0,addedCount:0,removedCount:0,panelCount:0,collisionCount:0,error:''});
+    const selectedParameterFrame=computed(()=>{projectRevision.value;const id=selectedPart.value?.assemblyId;return id&&selectedMeshes.value.every(mesh=>mesh.userData.part.assemblyId===id)?editor?.assemblyManager.get(id)?.configurator==='LAYERED_RACK'?editor.assemblyManager.get(id):null:null;});
+    function beginFrameEdit(){
+      const id=selectedParameterFrame.value?.id;if(!id)return;
+      cancelPlacementTools();
+      try{const parameters=editor.frameParameterManager.begin(id);Object.assign(diyForm,parameters);diyTemplateId.value='CUSTOM';Object.assign(frameEdit,{active:true,assemblyId:id,ready:false,error:''});quickPanel.value='build';rightPanelMode.value='create';}
+      catch(error){notify(error.message,'warning');}
+    }
+    function previewFrameEdit(){
+      Object.assign(frameEdit,{ready:false,error:''});
+      try{Object.assign(frameEdit,editor.frameParameterManager.preview({...diyForm}));}
+      catch(error){editor.frameParameterManager.clearPreview();frameEdit.error=error.message;}
+    }
+    function cancelFrameEdit(){editor?.frameParameterManager.cancel();Object.assign(frameEdit,{active:false,assemblyId:null,ready:false,error:''});}
+    function confirmFrameEdit(){try{const result=editor.frameParameterManager.confirm();cancelFrameEdit();notify('已修改整架尺寸 · '+result.memberCount+' 根型材'+(result.panelCount?' · '+result.panelCount+' 块板材已重新适配':'')+'，可撤销；请重新检查连接件');}catch(error){frameEdit.ready=false;frameEdit.error=error.message;}}
     const connectionBatchTypes=BatchConnectionComponentOptions;
     const connectionBatchSpecs=computed(()=>connectionSpecs(connectionBatchForm.type).filter(option=>!option.disabled&&connectionDesignType(connectionComponent({type:connectionBatchForm.type,spec:option.value}))));
     const selectedProfileIds=computed(()=>selectedMeshes.value.filter(mesh=>mesh.userData.part.type==='PROFILE').map(mesh=>mesh.userData.part.id));
@@ -152,6 +180,7 @@ createApp({
     }
     function connectionBatchTypeChanged(){connectionBatchForm.spec='AUTO';scanConnectionComponents();}
     function toggleConnectionBatchRow(row,enabled){editor?.connectionBatchManager.toggle(row.id,enabled);}
+    function focusConnectionBatchRow(row){editor?.focusPartIds([row.sourceId,row.targetId],{select:false});}
     function cancelConnectionBatch(){editor?.connectionBatchManager.cancel();}
     function confirmConnectionBatch(){
       try{const result=editor.connectionBatchManager.confirm();notify('已在 '+result.connectionCount+' 处接头生成 '+result.createdCount+' 个设计连接件，可撤销；制造方案仍需配置');}
@@ -223,7 +252,7 @@ createApp({
     const dimensionState = ref(null);
     const userDimensions = ref([]);
     const dimensionChainAxis = ref('AUTO');
-    const annotationOptions = reactive({showOverall:true,showPartDimensions:false,showMachiningLabels:true,showMachiningDimensions:true,showUserDimensions:true});
+    const annotationOptions = reactive({showOverall:true,showPartDimensions:false,showPartNumbers:true,showMachiningLabels:true,showMachiningDimensions:false,showUserDimensions:true});
     const boxSelectMode = ref(false);
     const lassoSelectMode = ref(false);
     const transformSpace = ref('world');
@@ -339,6 +368,7 @@ createApp({
     const diyTemplates = DiyTemplateList;
     const diyTemplateId = ref('STORAGE_RACK');
     const diyForm = reactive({catalogId:getDefaultDesignProfileId('3030'),width:1000,depth:500,height:1800,levels:4,centerBeamCount:1,autoConnect:true});
+    watch(()=>[diyForm.catalogId,diyForm.width,diyForm.depth,diyForm.height,diyForm.levels,diyForm.centerBeamCount,diyForm.autoConnect],()=>{if(frameEdit.active){editor?.frameParameterManager.clearPreview();frameEdit.ready=false;frameEdit.error='参数已改变，请重新预览';}});
     const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const diyPartCount=computed(()=>Number.isInteger(diyForm.levels)&&Number.isInteger(diyForm.centerBeamCount)?4+diyForm.levels*(4+diyForm.centerBeamCount):null);
     const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
@@ -401,6 +431,9 @@ createApp({
       const movingEnd=profileLengthForm.fixedEnd==='START'?'END':'START';
       return selectionCount.value===1&&selectedIsProfile.value&&!selectedIsCurved.value&&!!editor?.isMeshTransformable(selected.value)&&!profileLengthEndBlocked.value[movingEnd];
     });
+    function contextLengthEditable(end) {
+      return selectionCount.value===1&&selectedIsProfile.value&&!selectedIsCurved.value&&!!editor?.isMeshTransformable(selected.value)&&!profileLengthEndBlocked.value[end];
+    }
     const selectedTypeName = computed(() => ({PROFILE:'型材',SHAFT:'光轴',PANEL:'板材',ACCESSORY:'配件'})[selectedPart.value?.type] || selectedPart.value?.type || '构件');
     const selectedContourAssembly = computed(() => { projectRevision.value; const id=selectedAssemblyId.value || selectedPart.value?.assemblyId || null; const assembly=id&&editor?editor.assemblyManager.get(id):null; return assembly?.configurator==='CONTOUR_FRAME'?assembly:null; });
     const selectedContourEdges = computed(() => { projectRevision.value; const points=selectedContourAssembly.value?.parameters?.points||[]; return points.map((point,index)=>{const next=points[(index+1)%points.length];const dx=Number(next?.x||0)-Number(point?.x||0),dy=Number(next?.y||0)-Number(point?.y||0),dz=Number(next?.z||0)-Number(point?.z||0);return{index,lengthMm:Number(Math.hypot(dx,dy,dz).toFixed(2))};}); });
@@ -962,6 +995,7 @@ createApp({
       };
       editor.profilePlacementManager.onChanged=state=>Object.assign(profilePlacementState,state);
       editor.connectionBatchManager.onChanged=state=>Object.assign(connectionBatchState,state);
+      editor.frameParameterManager.onChanged=state=>Object.assign(frameEdit,state);
       editor.wholeStretchManager.onChanged=state=>Object.assign(wholeStretchState,state);
       editor.onInteractionError=message=>notify(message,'warning');
       editor.onStatsChanged = value => Object.assign(stats,value);
@@ -1189,6 +1223,7 @@ createApp({
       editor?.selectionGestureManager.dispose();
       editor?.wholeStretchManager.dispose();
       editor?.quickAlignmentManager.cancel();editor?.connectionBatchManager.cancel();
+      editor?.frameParameterManager.cancel();
     });
 
     function handleKeyboard(event) {
@@ -1210,6 +1245,7 @@ createApp({
       if(event.key==='Escape'&&profilePlacementState.active){event.preventDefault();cancelPlacementTools();return;}
       if(event.key==='Escape'&&quickAlignmentVisible.value){event.preventDefault();closeQuickAlignment();return;}
       if(event.key==='Escape'&&connectionBatchState.active){event.preventDefault();cancelConnectionBatch();return;}
+      if(event.key==='Escape'&&frameEdit.active){event.preventDefault();cancelFrameEdit();return;}
       // Esc 退出放置也必须在规格框聚焦时生效，不能要求玩家先点一次画布。
       if(event.key==='Escape'&&(connectionPlacementState.active||accessoryPlacementState.active||machiningPlacementState.active)){
         event.preventDefault();cancelPlacementTools();return;
@@ -1220,10 +1256,10 @@ createApp({
       }
       const target = event.target;
       if (target && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName)||target.isContentEditable)) return;
-      if(quickAlignmentVisible.value||connectionBatchState.active){
+      if(quickAlignmentVisible.value||connectionBatchState.active||frameEdit.active){
         // 审阅保留正常 Tab 导航及按钮的 Enter/Space，不能把“取消”键盘点击改成确认。
         if(event.key==='Tab'||(target?.closest('button,a,summary')&&['Enter',' '].includes(event.key)))return;
-        if(event.key==='Enter'){event.preventDefault();quickAlignmentVisible.value?confirmQuickAlignment():confirmConnectionBatch();return;}
+        if(event.key==='Enter'){event.preventDefault();frameEdit.active?confirmFrameEdit():quickAlignmentVisible.value?confirmQuickAlignment():confirmConnectionBatch();return;}
         // 预览期间允许视角操作，但不让后台快捷键修改待确认的工程。
         if(!['1','2','3','4','5','6','v','f','q'].includes(event.key.toLowerCase())){event.preventDefault();return;}
       }
@@ -1575,9 +1611,11 @@ createApp({
 
     function diyPresetEdited(){diyTemplateId.value='CUSTOM';}
     function generateDiyTemplate() {
+      if(frameEdit.active){previewFrameEdit();return;}
       if (!diyGenerator) return;
       try {
         const result = diyGenerator.generate(diyTemplateId.value==='CUSTOM'?'STORAGE_RACK':diyTemplateId.value,{...diyForm,name:diyTemplateId.value==='CUSTOM'?'自定义框架':selectedDiyTemplate.value.label});
+        editor.selectMany(result.createdProfileIds.map(id=>editor.getMeshByPartId(id)));
         const connectionCount = Number(result.autoConnection?.createdCount || 0);
         notify(`已生成框架 · ${result.createdPartCount} 根型材${connectionCount ? ` · 自动建立 ${connectionCount} 处接头关系` : ''}`);
       } catch (error) {
@@ -2600,6 +2638,7 @@ createApp({
     }
 
     function cancelPlacementTools() {
+      cancelFrameEdit();
       closeQuickAlignment();cancelConnectionBatch();
       editor?.wholeStretchManager.cancel();
       editor?.profilePlacementManager.cancel();
@@ -2659,6 +2698,7 @@ createApp({
 
     function applyContextProfileLength(end = 'END') {
       if (!selectedIsProfile.value || selectedPart.value?.profilePath?.type !== 'LINE') return notify('请选择直线型材','warning');
+      if(!contextLengthEditable(end))return notify('该端点已被连接或约束固定，或构件当前不可编辑','warning');
       const length=Number(contextMenu.lengthMm);
       if(!Number.isFinite(length)||length<10)return notify('长度必须是大于等于 10 mm 的数字','warning');
       try {
@@ -2717,9 +2757,9 @@ createApp({
       }
     }
 
-    function clearAllConnections() {
+    async function clearAllConnections() {
       if(!editor||!connectionOverview.value.total)return;
-      if(!window.confirm('清除全部设计连接件及其派生五金、派生加工？手工加工和主体构件会保留；操作可撤销。'))return;
+      if(!await confirmWorkbench({title:'清除全部设计连接？',description:'将移除设计连接及其派生五金、派生加工；手工加工和主体构件会保留。',confirmLabel:'清除连接'}))return;
       try {
         const result=editor.clearAllDesignConnections();
         notify(`已清除 ${result.removedCount} 个设计连接及其派生项；可用 Ctrl+Z 恢复`);
@@ -2736,9 +2776,17 @@ createApp({
       editor?.setProjection(projection.value);
     }
 
-    function deleteSelected(confirmDelete = false) {
+    async function deleteSelected(confirmDelete = true) {
       if (!selected.value) return;
-      if (confirmDelete && !confirm(`确定删除 ${selectionCount.value || 1} 个构件？`)) return;
+      const targets=editor.selectedMeshes.length?[...editor.selectedMeshes]:[editor.selected];
+      const ids=targets.map(mesh=>mesh.userData.part.id).sort().join('|');
+      if(confirmDelete) {
+        const labels=targets.map(mesh=>mesh.userData.part.displayId||mesh.userData.part.name).slice(0,6);
+        if(targets.length>6)labels.push(`另 ${targets.length-6} 个`);
+        if(!await confirmWorkbench({title:`删除 ${targets.length} 个构件？`,description:'相关设计连接与约束会同步清理。',labels,confirmLabel:'删除构件'}))return;
+        const current=editor.selectedMeshes.length?editor.selectedMeshes:editor.selected?[editor.selected]:[];
+        if(current.map(mesh=>mesh.userData.part.id).sort().join('|')!==ids)return notify('选择已变化，请重新确认要删除的构件','warning');
+      }
       editor.deleteSelected();
     }
 
@@ -3534,8 +3582,9 @@ createApp({
     }
 
     return {
+      workbenchConfirm,finishWorkbenchConfirm,contextLengthEditable,
       wholeStretchState,startWholeStretch,confirmWholeStretch,cancelWholeStretch,stretchRangeMode,
-      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,toggleConnectionBatchRow,cancelConnectionBatch,confirmConnectionBatch,openShaftSmart,cancelPlacementTools,
+      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,toggleConnectionBatchRow,focusConnectionBatchRow,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
       shaftSmart,shaftSmartTypes,shaftSmartDefinition,shaftSmartPorts,shaftSmartBaseLabel,shaftSmartAvailable,createShaftSmartFixture,
       hasHiddenParts,toggleSelectionVisibility,mirrorAlong,clearAllConnections,
       quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {getLocalFrameAtStation, normalizeProfilePath, isLinearProfile} from '../model/ProfilePath.js';
+import {machiningLocalPose} from '../machining/MachiningManager.js';
+import ProfileSurfaceNumber from './ProfileSurfaceNumber.js';
 
 /**
  * CAD scene annotations.
@@ -13,19 +15,32 @@ export default class SceneAnnotationManager {
     this.options = {
       showOverall:true,
       showPartDimensions:false,
+      showPartNumbers:true,
       showMachiningLabels:true,
-      showMachiningDimensions:true,
+      showMachiningDimensions:false,
       showUserDimensions:true
     };
     this.group = new THREE.Group();
     this.group.name = '__scene_annotations__';
     this.sceneManager.scene.add(this.group);
+    this.surfaceNumbers=new ProfileSurfaceNumber(this.sceneManager.scene);
     this.layer = document.createElement('div');
     this.layer.className = 'scene-annotation-layer';
     this.sceneManager.container.appendChild(this.layer);
     this.labels = [];
     this.refreshQueued = false;
     this.dragState = null;
+    this.pointer = null;
+    this.hoverRay = new THREE.Raycaster();
+    this.pointerSurface = this.sceneManager.renderer?.domElement || this.sceneManager.container;
+    this.trackPointer = event => {
+      if(event.buttons || event.pointerType==='touch'){this.pointer=null;return;}
+      const rect=this.sceneManager.container.getBoundingClientRect();
+      this.pointer={x:event.clientX-rect.left,y:event.clientY-rect.top};
+    };
+    this.clearPointer = () => {this.pointer=null;};
+    this.pointerSurface.addEventListener('pointermove',this.trackPointer,{passive:true});
+    for(const type of ['pointerleave','pointerdown','contextmenu'])this.pointerSurface.addEventListener(type,this.clearPointer,{passive:true});
     this.sceneManager.addFrameHandler(() => this.render());
   }
 
@@ -46,6 +61,7 @@ export default class SceneAnnotationManager {
 
   refresh() {
     this.clearGraphics();
+    this.surfaceNumbers.refresh(this.editor.meshes,this.options.showPartNumbers);
     if (this.options.showOverall) this.addOverallDimensions();
     this.addProfileDimensions();
     if (this.options.showMachiningDimensions) this.addMachiningDimensions();
@@ -150,11 +166,16 @@ export default class SceneAnnotationManager {
       const part = mesh.userData.part;
       normalizeProfilePath(part);
       for (const item of part.machiningItems || []) {
-        const point = machiningWorldPoint(mesh,part,item);
-        if (!point) continue;
-        const text = machiningLabel(item);
-        const offset = item.type === 'END_TAP' ? {x:0,y:-26} : {x:0,y:-18};
-        this.addLabel(`machining:${part.id}:${item.id}`,text,point,'machining',offset);
+        const compound=(part.machiningItems||[]).some(other=>other.linkedHoleId===item.id&&['COUNTERSINK','COUNTERBORE'].includes(other.type));
+        const linked=(part.machiningItems||[]).find(other=>other.id===item.linkedHoleId);
+        const text=(linked?machiningLabel(linked)+' · ':'')+machiningLabel(item);
+        const faces=compound?[]:[item.face];
+        if(item.type==='THROUGH_HOLE')faces.push({FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'}[item.face]);
+        for(const face of faces) {
+          const pose=machiningLocalPose(part,item,face);
+          const label=this.addLabel(`machining:${part.id}:${item.id}:${face||item.end}`,text,mesh.localToWorld(pose.point.clone()),'machining');
+          label.mesh=mesh;label.localNormal=pose.normal;
+        }
       }
     }
   }
@@ -358,6 +379,7 @@ export default class SceneAnnotationManager {
     element.className = `scene-annotation-label ${kind}`;
     element.textContent = text;
     element.dataset.annotationId = id;
+    if(kind==='machining')element.style.display='none';
     if (dimension) {
       element.classList.add('draggable');
       if (dimension.binding) element.classList.add('driven');
@@ -374,7 +396,8 @@ export default class SceneAnnotationManager {
       });
     }
     this.layer.appendChild(element);
-    this.labels.push({element,text,worldPoint:worldPoint.clone(),offsetPx,dimension,kind});
+    const label={element,text,worldPoint:worldPoint.clone(),offsetPx,dimension,kind};
+    this.labels.push(label);return label;
   }
 
   beginLabelDrag(event,dimension,worldPoint) {
@@ -436,13 +459,27 @@ export default class SceneAnnotationManager {
   }
 
   render() {
-    if (!this.labels.length) return;
+    this.surfaceNumbers.update();
     const width = Math.max(1,this.sceneManager.container.clientWidth);
     const height = Math.max(1,this.sceneManager.container.clientHeight);
     const camera = this.sceneManager.camera;
+    const machiningHover=this.labels.length?this.nearestMachiningLabel(width,height,camera):null;
+    const hoverState=machiningHover?'true':'false';
+    if(this.sceneManager.container.dataset.machiningHover!==hoverState)this.sceneManager.container.dataset.machiningHover=hoverState;
+    if (!this.labels.length) return;
     const occupied = [];
     const labels = [...this.labels].sort((a,b) => labelPriority(a) - labelPriority(b));
     for (const label of labels) {
+      if(label.kind==='machining') {
+        label.element.style.display=label===machiningHover?'':'none';
+        if(label===machiningHover) {
+          label.element.style.maxWidth=`${Math.max(32,width-16)}px`;
+          const x=Math.max(8,Math.min(width-label.element.offsetWidth-8,this.pointer.x+14));
+          const y=Math.max(8,Math.min(height-label.element.offsetHeight-8,this.pointer.y+16));
+          label.element.style.transform=`translate(${Math.round(x)}px,${Math.round(y)}px)`;
+        }
+        continue;
+      }
       const projected = label.worldPoint.clone().project(camera);
       if (projected.z < -1.1 || projected.z > 1.1) {
         label.element.style.display = 'none';
@@ -480,25 +517,37 @@ export default class SceneAnnotationManager {
     }
   }
 
+  /** 一次只显示最近的可见孔位；反面、被遮挡或拖动中的孔不能隔着模型弹提示。 */
+  nearestMachiningLabel(width,height,camera) {
+    if(!this.pointer || this.sceneManager.transformControls?.dragging || this.editor.isBuilderReviewActive?.() || this.editor.machiningPlacementManager?.isActive() || this.editor.profileDrawTool?.isActive())return null;
+    const viewDirection=new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
+    let nearest=null,distance=18*18;
+    for(const label of this.labels) {
+      if(label.kind!=='machining'||label.mesh.visible===false)continue;
+      const normal=label.localNormal.clone().transformDirection(label.mesh.matrixWorld);
+      const facing=camera.isPerspectiveCamera?camera.position.clone().sub(label.worldPoint):viewDirection;
+      if(normal.dot(facing)<=0)continue;
+      const p=label.worldPoint.clone().project(camera);if(p.z< -1||p.z>1||Math.abs(p.x)>1||Math.abs(p.y)>1)continue;
+      const d=((p.x+1)*width/2-this.pointer.x)**2+((1-p.y)*height/2-this.pointer.y)**2;
+      if(d<distance){nearest=label;distance=d;}
+    }
+    if(!nearest)return null;
+    const p=nearest.worldPoint.clone().project(camera);
+    this.hoverRay.setFromCamera(new THREE.Vector2(p.x,p.y),camera);
+    const hits=this.hoverRay.intersectObjects(this.editor.meshes.filter(mesh=>mesh.visible!==false),true);
+    if(hits[0]&&hits[0].distance<this.hoverRay.ray.origin.distanceTo(nearest.worldPoint)-2)return null;
+    return nearest;
+  }
+
   dispose() {
+    this.surfaceNumbers.dispose();
+    this.pointerSurface.removeEventListener('pointermove',this.trackPointer);
+    for(const type of ['pointerleave','pointerdown','contextmenu'])this.pointerSurface.removeEventListener(type,this.clearPointer);
     this.clearGraphics();
+    delete this.sceneManager.container.dataset.machiningHover;
     this.group.removeFromParent();
     this.layer.remove();
   }
-}
-
-function machiningWorldPoint(mesh,part,item) {
-  const length = Number(part.dimensions?.length || 0);
-  const [width,height] = part.dimensions?.sectionSize || [30,30];
-  if (item.type === 'END_TAP') {
-    const station = item.end === 'END' ? length : 0;
-    return mesh.localToWorld(new THREE.Vector3(...getLocalFrameAtStation(part,station).point));
-  }
-  const station = Number(item.stationS ?? item.distanceFromStart ?? 0);
-  const frame = getLocalFrameAtStation(part,station);
-  const quaternion = frameRotationQuaternion(frame.rotation);
-  const local = faceLocalPoint(item.face,width,height,Number(item.offset || 0),1.2).applyQuaternion(quaternion);
-  return mesh.localToWorld(new THREE.Vector3(...frame.point).add(local));
 }
 
 function localFrameWorldPoint(mesh,part,station) {
@@ -512,26 +561,16 @@ function localVectorToWorld(mesh,vector) {
   return point.sub(origin);
 }
 
-function frameRotationQuaternion(rotation) {
-  const quaternion = new THREE.Quaternion();
-  if (rotation?.axis === 'X') quaternion.setFromAxisAngle(new THREE.Vector3(1,0,0),Number(rotation.angleRad || 0));
-  else if (rotation?.axis === 'Y') quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),Number(rotation.angleRad || 0));
-  return quaternion;
-}
-
-function faceLocalPoint(face,width,height,offset,epsilon) {
-  if (face === 'FRONT') return new THREE.Vector3(offset,height/2 + epsilon,0);
-  if (face === 'BACK') return new THREE.Vector3(offset,-height/2 - epsilon,0);
-  if (face === 'RIGHT') return new THREE.Vector3(width/2 + epsilon,offset,0);
-  return new THREE.Vector3(-width/2 - epsilon,offset,0);
-}
-
 function machiningLabel(item) {
   if (item.type === 'END_TAP') return `${item.tappingSize || 'M8'} ${item.end === 'END' ? 'B' : 'A'}孔`;
   if (item.type === 'TAPPED_HOLE') return `${item.tappingSize || 'M8'} 螺纹孔`;
   if (item.type === 'COUNTERSINK') return `CSK Ø${formatNumber(item.majorDiameter || item.diameter || 0)} ${formatNumber(item.angleDeg || 90)}°`;
   if (item.type === 'COUNTERBORE') return `CBORE Ø${formatNumber(item.diameter || 0)}×${formatNumber(item.depth || 0)}`;
   if (item.type === 'BLIND_HOLE') return `盲孔 Ø${formatNumber(item.diameter || 0)} 深${formatNumber(item.depth || 0)}`;
+  if (item.type === 'END_HOLE') return `${item.end==='END'?'B':'A'}端孔 Ø${formatNumber(item.diameter||0)}`;
+  if (item.type === 'END_COUNTERBORE') return `${item.end==='END'?'B':'A'}端沉孔 Ø${formatNumber(item.diameter||0)}`;
+  if (item.type === 'END_COUNTERSINK') return `${item.end==='END'?'B':'A'}端沉头 Ø${formatNumber(item.majorDiameter||0)}`;
+  if (['SLOT','OBROUND_SLOT','MILLING_REGION'].includes(item.type)) return `${item.type==='MILLING_REGION'?'铣削':item.type==='OBROUND_SLOT'?'腰孔':'槽'} ${formatNumber(item.length||0)}×${formatNumber(item.width||0)}`;
   return `Ø${formatNumber(item.diameter || 0)} 通孔`;
 }
 

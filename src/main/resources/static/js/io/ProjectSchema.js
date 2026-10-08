@@ -3,7 +3,7 @@ import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/D
 import {panelDimensions} from '../model/PanelShapeModel.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.20';
+export const CURRENT_APP_VERSION = '0.75.23';
 
 /**
  * Current-only project schema gate.
@@ -133,12 +133,12 @@ export default class ProjectSchema {
       profileGripDefaults:{enabled:true,minLengthMm:10,gridSnap:true,gridStepMm:10,featureSnap:true,featureSnapDistanceMm:28,axisSnapToleranceMm:3},
       engineeringDrawing:{projectName:'未命名工程',revision:'A',paper:'A3',sideView:'RIGHT'},
       drawingDefaults:{catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000},
-      annotations:{showOverall:true,showPartDimensions:true,showMachiningLabels:true,showMachiningDimensions:true,showUserDimensions:true},
+      annotations:{showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningDimensions:false,showUserDimensions:true},
       ...(project.editorState || {})
     };
     project.editorState.drawingDefaults = {catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,...(project.editorState.drawingDefaults || {})};
     project.editorState.drawingDefaults.continueDrawing = project.editorState.drawingDefaults.continueDrawing === true;
-    project.editorState.annotations = {showOverall:true,showPartDimensions:true,showMachiningLabels:true,showMachiningDimensions:true,showUserDimensions:true,...(project.editorState.annotations || {})};
+    project.editorState.annotations = {showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningDimensions:false,showUserDimensions:true,...(project.editorState.annotations || {})};
     project.editorState.dimensionSystemVersion = DIMENSION_SYSTEM_VERSION;
     project.editorState.engineeringDrawingSystemVersion = 2;
     project.editorState.engineeringDrawingDxfVersion = 1;

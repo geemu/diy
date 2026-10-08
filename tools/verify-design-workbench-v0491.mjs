@@ -43,7 +43,7 @@ assert.ok(connectionPlacement.includes('移动鼠标只负责预览'),'连接 ho
 assert.ok(connectionPlacement.includes("feature.type!=='PROFILE_END'"),'连接源必须能锁定端部 Anchor');
 assert.ok(connectionPlacement.includes("!['PROFILE_SLOT','PROFILE_FACE'].includes(feature.type)"),'连接目标必须能锁定侧面/槽位 Anchor');
 
-for(const token of ['handlePointerMove','handleClick','renderPreview','TorusGeometry','RingGeometry','已添加：']){
+for(const token of ['handlePointerMove','handleClick','renderPreview','RingGeometry','已添加：']){
   assert.ok(machiningPlacement.includes(token),`MachiningPlacementManager 缺少 ${token}`);
 }
 assert.ok(machiningPlacement.includes('点击后才写入 MachiningFeature'),'加工 hover 不得直接落业务数据');
@@ -64,7 +64,7 @@ for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.75.20',
+  version:'0.75.23',
   schema:62,
   currentOnly:true,
   designManufacturingSeparated:true,

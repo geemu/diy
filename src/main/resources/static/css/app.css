@@ -194,7 +194,8 @@ button{color:inherit}
 .scene-annotation-label{position:absolute;left:0;top:0;white-space:nowrap;font-size:11px;line-height:1;border-radius:5px;padding:3px 6px;transform-origin:center;box-shadow:0 2px 8px rgba(0,0,0,.12);user-select:none}
 .scene-annotation-label.overall{background:#185f36;color:#fff;font-weight:800;border:1px solid rgba(255,255,255,.55);font-size:12px;padding:4px 7px;box-shadow:0 2px 8px rgba(10,80,42,.2)}
 .scene-annotation-label.part{background:#151515;color:#f4bc18;border:1px solid #d7a10f;font-weight:800;padding:2px 5px;box-shadow:none}
-.scene-annotation-label.machining{background:#23c968;color:#fff;font-weight:800;font-size:14px;padding:7px 10px;border-radius:6px;box-shadow:0 4px 12px rgba(27,120,69,.24)}
+.scene-annotation-label.machining{background:#17202e;color:#e8edf3;font-weight:500;font-size:11px;line-height:1.35;padding:4px 7px;border:1px solid #43516a;border-radius:4px;box-shadow:0 2px 5px #10172220;overflow:hidden;text-overflow:ellipsis}
+.canvas-stage:has([data-machining-hover="true"]) :is(.scene-hover-label,.feature-hover-hud){display:none!important}
 .scene-annotation-label.machining-dim{background:#151515;color:#f4bc18;border:1px solid #d7a10f;font-weight:800;padding:2px 5px;box-shadow:none;font-size:10px}
 .scene-annotation-label.user{background:#171717;color:#ffc629;border:1px solid #e1a80f;font-weight:800}.scene-annotation-label.user.driven{outline:2px solid rgba(46,113,255,.35);outline-offset:1px}
 .scene-annotation-label.draggable{pointer-events:auto;cursor:move}
@@ -220,7 +221,6 @@ button{color:inherit}
 /* reference-editor dimension visual tuning */
 .scene-annotation-label.overall{background:#174d2f;border:1px solid rgba(255,255,255,.7);border-radius:3px;font-size:12px;padding:3px 6px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
 .scene-annotation-label.part,.scene-annotation-label.machining-dim,.scene-annotation-label.user{background:#111;color:#ffc629;border:1px solid #d6a000;border-radius:10px;padding:2px 5px;box-shadow:0 1px 2px rgba(0,0,0,.18)}
-.scene-annotation-label.machining{background:#25c86b;border-radius:6px;font-size:15px;padding:8px 11px;box-shadow:0 3px 10px rgba(0,0,0,.18)}
 
 /* v0.13 constraint diagnostics + baseline dimensions */
 .constraint-state{font-size:8px;font-weight:800;padding:2px 6px;border-radius:9px;background:#eef2f6;color:#78838e}.constraint-state.ok{background:#eaf8ef;color:#248451}.constraint-state.bad{background:#fff0f0;color:#b83c43}
@@ -999,6 +999,7 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .builder-review-content .builder-review-warning{color:#ffc06b}.builder-plan-row{display:flex;flex-direction:column;gap:5px;padding:9px 0;border-top:1px solid #303442}.builder-plan-row span,.builder-plan-row small{font-size:11px;color:#b4beca}.builder-plan-row strong{font-size:12px}
 .builder-review-actions{display:flex;gap:8px;position:sticky;bottom:0;background:#020617;padding:10px 0}.builder-review-actions button{flex:1;white-space:normal;min-height:38px}
 .builder-review-summary{padding:10px;background:#191911;border:1px solid #77501f;border-radius:8px;color:#ffc16b!important;font-size:12px}.builder-joint-row{padding:11px;border:1px solid #42403a;border-radius:8px;margin:9px 0;background:#12151c}.builder-joint-row.skipped{border-color:#282c38;background:#0c1020}.builder-joint-row label{display:flex;align-items:flex-start;gap:8px}.builder-joint-row label>span{display:flex;flex-direction:column;gap:4px}.builder-joint-row label small{font-size:11px}.builder-joint-row p{margin-bottom:0}
+.builder-joint-row.invalid{border-color:#a83e43;background:#251016}.builder-joint-row.invalid strong,.builder-joint-row.invalid p{color:#ffb4ba}.builder-joint-row>.soft-button{margin-top:9px;font-size:12px}
 .unified-frame-generator .field-stack{margin:12px 0}.unified-frame-generator label{font-size:12px!important;font-weight:500}.unified-frame-generator .triple-fields label,.unified-frame-generator .field-pair label{display:block;min-height:20px}.unified-frame-generator input[type=number]{height:34px}.frame-structure-summary{padding:9px;border:1px solid #454031;border-radius:6px;background:#17150f;color:#e6b872;font-size:11px;line-height:1.7}.frame-structure-note{font-size:11px;line-height:1.7;color:#9ca3af;margin:10px 0 0}.frame-canvas-tools{margin:12px 8px;border:1px solid #303442;border-radius:8px;background:#0c1020}.frame-canvas-tools>summary{padding:12px;font-size:12px;color:#c7ccd7;cursor:pointer}.frame-canvas-tools .profile-draw-card,.frame-canvas-tools .contour-preset-card{margin:0 8px 10px}.builder-review-summary{line-height:1.8}.builder-nearby-joints{border-top:1px solid #303442;margin-top:14px;padding-top:10px}.builder-nearby-joints>summary{font-size:12px;color:#aeb7c6;cursor:pointer}
 
 /* 实际观察的光轴智能配件流程：448px 紧凑模态，类型/孔/站位不是普通目录入口。 */
@@ -1047,3 +1048,52 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 @media(max-width:1250px){.workbench-footer .canvas-transform-bar>.transform-tool.danger{display:none}}
 .cad-project-chip .project-dot.save-error{background:#ef4444;box-shadow:0 0 0 3px #ef44441f}
 .cad-project-chip .autosave-error{font-size:11px;color:#ff8b8b;white-space:nowrap}
+
+/* 右键、接头和轮廓关系菜单共用深色状态；覆盖旧浅色快捷表单，禁止混入白底。 */
+.context-menu{background:#11131d;border:1px solid #303442;color:#d1d5db;border-radius:10px;box-shadow:0 12px 32px #0005;padding:6px;max-height:calc(100vh - 24px);overflow:auto;color-scheme:dark}
+.context-menu :is(.context-menu-head,.context-divider){border-color:#303442}
+.context-menu .context-divider{background:#303442;margin:7px 4px}
+.context-menu .context-menu-head{color:#e5e7eb;padding:8px 8px 10px}
+.context-menu .context-menu-head b{color:#9ca3af;background:transparent}
+.context-menu .context-section-label,.context-menu .quick-menu-tip,.context-menu label>span{color:#9ca3af}
+.context-menu button{color:#d1d5db;background:transparent;border-radius:6px;font-size:12px}
+.context-menu button:hover:not(:disabled),.context-menu button:focus-visible{background:#ffffff0d;color:#f3f4f6}
+.context-menu button.active{background:#ff8a001a;color:#ffb04d;font-weight:600}
+.context-menu button.active:hover:not(:disabled){background:#ff8a0026;color:#ffc477}
+.context-menu button.danger{color:#ff8993}
+.context-menu button.danger:hover:not(:disabled){background:#ef44441a;color:#ffb0b6}
+.context-menu button:disabled{background:transparent;color:#788193;opacity:1;cursor:not-allowed}
+.context-menu kbd{background:#1e2230;color:#a9b2c1;border:1px solid #353b49;border-radius:4px;box-shadow:none;font-size:10px;padding:2px 5px}
+.context-menu :is(input,select){background:#1a1a1a;color:#e5e7eb;border:1px solid #343741;border-radius:7px;box-sizing:border-box;color-scheme:dark}
+.context-menu :is(input,select):hover:not(:disabled){background:#202020;border-color:#555b68;color:#f3f4f6}
+.context-menu :is(input,select):focus{background:#1a1a1a;color:#f3f4f6;border-color:var(--accent);outline:none;box-shadow:0 0 0 2px #ff8a0026}
+.context-menu :is(input,select):disabled{background:#161923;color:#7e8797;border-color:#2c303c;opacity:1;cursor:not-allowed}
+.context-menu :is(input,select) option{background:#1a1a1a;color:#e5e7eb}
+.context-menu .context-inline-length input{height:32px;font-size:12px;font-variant-numeric:tabular-nums}
+.context-menu .context-inline-length span,.context-menu .context-inline-actions button span{color:#9ca3af}
+.context-menu .context-inline-actions button{height:34px!important;border:1px solid #343741!important;background:#191c29!important;color:#d1d5db}
+.context-menu .context-inline-actions button:hover:not(:disabled){background:#252a38!important;border-color:#606979!important;color:#fff}
+.context-menu .context-inline-actions button:disabled{background:#151822!important;border-color:#292e3a!important;color:#747d8c}
+.context-menu .context-inline-actions button:disabled span{color:#747d8c}
+.context-menu .primary-menu-action{background:#ff8a001a!important;color:#ffb04d!important;border:1px solid #ff8a0059}
+.context-menu .primary-menu-action:hover:not(:disabled){background:#ff8a002b!important}
+.joint-quick-menu .context-menu-head b{background:#1b3529;color:#8cd9ac;border:1px solid #325944}
+.relation-quick-menu .menu-close{background:transparent;color:#9ca3af}
+
+/* 删除/清除使用同一页面内确认层；默认聚焦取消，遮住背景交互而不使用浏览器白框。 */
+.workbench-confirm-backdrop{z-index:30000;background:#0009;backdrop-filter:blur(3px);padding:16px}
+.workbench-confirm{width:min(400px,calc(100vw - 32px));border:1px solid #343947;border-radius:12px;background:#11131d;color:#e5e7eb;box-shadow:0 24px 80px #0008}
+.workbench-confirm-heading{display:flex;align-items:center;gap:10px;padding:18px 20px 4px}
+.workbench-confirm-heading h3{flex:1;margin:0;font-size:16px;line-height:24px;color:#f3f4f6}
+.workbench-confirm-symbol{display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#ef44441a;color:#ff8d96;font-weight:700}
+.workbench-confirm p{margin:10px 20px 0;font-size:13px;line-height:1.7;color:#bac2d0;overflow-wrap:anywhere}
+.workbench-confirm .workbench-confirm-hint{color:#8f9aaa;font-size:12px;margin-bottom:18px}
+.workbench-confirm-parts{display:flex;gap:6px;flex-wrap:wrap;margin:12px 20px 0}
+.workbench-confirm-parts span{padding:4px 7px;border:1px solid #343947;border-radius:5px;background:#1a1e2c;color:#dce3ec;font-size:12px}
+.workbench-confirm .modal-actions{padding:12px 20px;border-color:#303442;background:#11131d;gap:8px}
+.workbench-confirm .modal-actions button{height:34px;border-radius:7px;font-size:12px;min-width:92px;cursor:pointer}
+.workbench-confirm .soft-button{background:#1c2130;color:#d1d5db;border:1px solid #3b4353}
+.workbench-confirm .soft-button:hover{background:#282f40;color:#fff}
+.workbench-confirm kbd{margin-left:5px;font-size:10px;color:#929dad;background:transparent;border:0}
+.workbench-confirm-danger{background:#b93e4b;color:#fff;border:1px solid #d85966}
+.workbench-confirm-danger:hover{background:#cc4b58;border-color:#ed7781}

@@ -8,6 +8,8 @@ import MachiningManager from '../machining/MachiningManager.js';
 import ConnectionManager from '../connection/ConnectionManager.js';
 import AutoConnectionResolver from '../connection/AutoConnectionResolver.js';
 import ConnectionBatchManager from '../connection/ConnectionBatchManager.js';
+import FrameParameterManager from '../diy/FrameParameterManager.js';
+import {layeredRackLayout} from '../diy/LayeredRackModel.js';
 import SnapManager from '../snap/SnapManager.js';
 import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
 import {groundClearance} from '../interaction/GroundClearance.js';
@@ -136,6 +138,7 @@ export default class Editor {
     this.profileReplacementManager = new ProfileReplacementManager(this);
     this.connectionPlacementManager = new ConnectionPlacementManager(this);
     this.connectionBatchManager = new ConnectionBatchManager(this);
+    this.frameParameterManager = new FrameParameterManager(this);
     this.machiningPlacementManager = new MachiningPlacementManager(this);
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
@@ -157,6 +160,7 @@ export default class Editor {
 
   bind() {
     this.sceneManager.secondaryClickHandler = () => {
+      if(this.frameParameterManager.isActive()){this.frameParameterManager.cancel();return true;}
       // 短右键统一退出放置；右键拖动仍由 SceneManager / OrbitControls 处理平移。
       if(this.wholeStretchManager.isActive()){this.wholeStretchManager.cancel();return true;}
       if(this.profilePlacementManager.isActive()){this.profilePlacementManager.cancel();return true;}
@@ -628,7 +632,7 @@ export default class Editor {
       : {type:'LINE', length:Number(length)};
 
     const part = {
-      id:crypto.randomUUID(),
+      id:options.id || crypto.randomUUID(),
       displayId:this.nextDisplayId(),
       name:options.name || definition.name,
       type:'PROFILE',
@@ -1011,91 +1015,17 @@ export default class Editor {
    * 决定，并最终统一委托 ConnectionManager 派生连接件、加工和 BOM，避免出现第二套事实来源。</p>
    */
   addLayeredRack(options = {}) {
-    const catalogId = options.catalogId || 'DESIGN-3030';
-    const definition = getDesignProfileDefinition(catalogId);
-    if (!definition) throw new Error('多层架型材型号不存在');
-
-    const width = Number(options.width ?? 1000);
-    const depth = Number(options.depth ?? 600);
-    const height = Number(options.height ?? 1800);
-    const levels = Number(options.levels ?? 4);
-    const centerBeamCount = Number(options.centerBeamCount ?? 0);
-    const sx = Number(definition.sectionSize[0]);
-    const sy = Number(definition.sectionSize[1]);
-    const origin = normalizeVector(options.position);
-    const assemblyId = crypto.randomUUID();
-    const common = {select:false, captureHistory:false, assemblyId};
-
-    if (![width,depth,height].every(value=>Number.isFinite(value)&&value>0))throw new Error('框架宽、深、高必须是大于零的有效数值');
-    if (!Number.isInteger(levels)||levels<2||levels>12||!Number.isInteger(centerBeamCount)||centerBeamCount<0||centerBeamCount>4)throw new Error('层数为2~12，每层中间承托梁为0~4根');
-    if (width <= sx * 2 || depth <= sy * 2) {
-      throw new Error('外形尺寸过小，无法容纳当前型材截面');
+    const {parameters,members}=layeredRackLayout(options),origin=normalizeVector(options.position),assemblyId=crypto.randomUUID(),memberIds={};
+    for(const member of members){
+      const mesh=this.addProfile(member.catalogId,member.length,{select:false,captureHistory:false,assemblyId,name:member.name,position:{x:origin.x+member.position.x,y:origin.y+member.position.y,z:origin.z+member.position.z},rotation:member.rotation});
+      memberIds[member.key]=mesh.userData.part.id;
     }
-    if(height<sy*levels)throw new Error('高度不足以容纳这些层，横梁会重叠；请增加高度或减少层数');
-    if(centerBeamCount&&(width-sx)/(centerBeamCount+1)<sx)throw new Error('宽度不足以容纳中间承托梁，请增加宽度或减少承托梁');
-
-    const postX = (width - sx) / 2;
-    const postZ = (depth - sy) / 2;
-    for (const x of [-postX, postX]) {
-      for (const z of [-postZ, postZ]) {
-        this.addProfile(catalogId, height, {
-          ...common,
-          position:{x:origin.x + x, y:origin.y + height / 2, z:origin.z + z},
-          rotation:{x:-Math.PI / 2, y:0, z:0},
-          name:`多层架立柱 ${definition.name}`
-        });
-      }
-    }
-
-    const beamWidthLength = Math.max(10, width - sx * 2);
-    const beamDepthLength = Math.max(10, depth - sy * 2);
-    // 中间梁接到横梁侧面，扣除的是“立柱深度 + 横梁厚度”，不是两次立柱深度。
-    // 3060 等非方截面沿用外圈纵梁长度会在两端各留15mm缝，导致一键连接漏掉中间梁。
-    const centerBeamLength = depth - sy - sx;
-    const bottomY = sy / 2;
-    const topY = height - sy / 2;
-    const levelSpan = levels <= 1 ? 0 : (topY - bottomY) / (levels - 1);
-
-    for (let levelIndex = 0; levelIndex < levels; levelIndex++) {
-      const y = bottomY + levelIndex * levelSpan;
-      for (const z of [-postZ, postZ]) {
-        this.addProfile(catalogId, beamWidthLength, {
-          ...common,
-          position:{x:origin.x, y:origin.y + y, z:origin.z + z},
-          rotation:{x:0, y:Math.PI / 2, z:0},
-          name:`第${levelIndex + 1}层横梁 ${definition.name}`
-        });
-      }
-      for (const x of [-postX, postX]) {
-        this.addProfile(catalogId, beamDepthLength, {
-          ...common,
-          position:{x:origin.x + x, y:origin.y + y, z:origin.z},
-          rotation:{x:0, y:0, z:0},
-          name:`第${levelIndex + 1}层纵梁 ${definition.name}`
-        });
-      }
-
-      // 中间承托梁沿深度方向布置。它们属于几何支撑，不在这里宣称具体承重能力。
-      for (let beamIndex = 1; beamIndex <= centerBeamCount; beamIndex++) {
-        const ratio = beamIndex / (centerBeamCount + 1);
-        const x = -postX + ratio * postX * 2;
-        this.addProfile(catalogId, centerBeamLength, {
-          ...common,
-          position:{x:origin.x + x, y:origin.y + y, z:origin.z},
-          rotation:{x:0, y:0, z:0},
-          name:`第${levelIndex + 1}层中间承托梁${beamIndex} ${definition.name}`
-        });
-      }
-    }
-
     this.assemblyManager.reconcile();
-    const assembly = this.assemblyManager.get(assemblyId);
-    if (assembly) assembly.name = String(options.name || 'DIY 多层型材架');
-    this.updateDimensions();
-    this.emitStats();
-    if (options.captureHistory !== false) this.historyManager.capture();
-    this.fitView();
-    return assemblyId;
+    const assembly=this.assemblyManager.get(assemblyId);
+    assembly.name=String(options.name||"DIY 多层型材架");assembly.kind="LAYERED_RACK";assembly.configurator="LAYERED_RACK";assembly.parameters={...parameters,position:origin,memberIds};
+    this.updateDimensions();this.emitStats();
+    if(options.captureHistory!==false)this.historyManager.capture();
+    this.fitView();return assemblyId;
   }
 
   addDrawerGroup(options = {}) {
@@ -1282,6 +1212,7 @@ export default class Editor {
   }
 
   clear(clearHistory = true) {
+    this.frameParameterManager?.cancel();
     this.quickAlignmentManager?.cancel();
     this.connectionBatchManager?.cancel();
     this.wholeStretchManager?.cancel();
@@ -1378,7 +1309,7 @@ export default class Editor {
     this.onConnectionSelected?.(connection);return true;
   }
 
-  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive();}
+  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive();}
 
   isMeshTransformable(mesh) {
     const part = mesh?.userData?.part;
@@ -3192,7 +3123,7 @@ export default class Editor {
     const ids=new Set(partIds||[]);
     const meshes=this.meshes.filter(mesh=>ids.has(mesh.userData.part?.id)&&mesh.visible!==false);
     if(!meshes.length)return false;
-    this.selectMany(meshes);
+    if(options.select!==false)this.selectMany(meshes);
     const box=new THREE.Box3();for(const mesh of meshes)box.expandByObject(mesh);
     const center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
     this.sceneManager.setView(options.direction||'iso',center,Math.max(size.x,size.y,size.z,200)*Number(options.distanceScale||1.85),{durationMs:Number(options.durationMs||300),immediate:options.immediate===true});

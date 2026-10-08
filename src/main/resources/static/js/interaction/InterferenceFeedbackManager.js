@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
 import {createSurfaceFeedback,disposeFeedback} from './SurfaceFeedback.js';
 import {addCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
+import {connectorEnvelope} from '../connection/ConnectionPlacementManager.js';
 
 /**
  * 设计阶段实时接触 / 干涉反馈。
@@ -48,8 +49,22 @@ export default class InterferenceFeedbackManager {
       box:new THREE.Box3().setFromObject(mesh),
       obb:mesh.userData.part?.type === 'PROFILE' ? profileObb(mesh.userData.part) : null
     }));
+    // 连接参考件仍由 ConnectionManager 派生；只加入检查快照，不伪造 Part/BOM/工程字段。
+    for(const connection of this.editor.connectionManager.connections || []) {
+      const helper=this.editor.connectionManager.helperMeshes?.get(connection.id);
+      if(!helper || helper.visible===false || !connection.designComponent || connection.manufacturingRuleId)continue;
+      helper.updateWorldMatrix(true,true);
+      for(const [index,mesh] of helper.children.entries()) {
+        if(mesh.visible===false)continue;
+        const id=`@connection:${connection.id}:${index}`;
+        items.push({mesh,connectionId:connection.id,ownerIds:[connection.sourceProfileId,connection.targetProfileId],
+          part:{id,type:'ACCESSORY',name:`${connection.manufacturingCode||'接头'} 连接件`,generatedByConnectionId:connection.id},
+          box:new THREE.Box3().setFromObject(mesh),obb:connectorEnvelope(mesh)});
+      }
+    }
     const issues = [];
     const contacts = [];
+    const nearContacts = [];
     const issuePartIds = new Set();
     const contactPartIds = new Set();
 
@@ -59,16 +74,17 @@ export default class InterferenceFeedbackManager {
         const b = items[j];
         const aId = a.part.id;
         const bId = b.part.id;
-        if (focusIds && !focusIds.has(aId) && !focusIds.has(bId)) continue;
+        if (focusIds && ![aId,bId,...(a.ownerIds||[]),...(b.ownerIds||[])].some(id=>focusIds.has(id))) continue;
         if (this.isIntentionalContact(a.part,b.part)) continue;
         const relation = this.classify(a,b);
         if (relation.kind === 'INTERFERENCE') {
           issuePartIds.add(aId); issuePartIds.add(bId);
           issues.push({
-            partIds:[aId,bId],
+            partIds:[...new Set([...(a.ownerIds||[aId]),...(b.ownerIds||[bId])])],
+            connectionIds:[a.connectionId,b.connectionId].filter(Boolean),
             exact:relation.exact,
             penetrationMm:relation.penetrationMm,
-            message:`${label(a.part)} 与 ${label(b.part)} 干涉 ${round(relation.penetrationMm)} mm`
+            message:relation.exact?`${label(a.part)} 与 ${label(b.part)} 干涉 ${round(relation.penetrationMm)} mm`:`${label(a.part)} 与 ${label(b.part)} 安装空间重叠（包络检查）`
           });
         } else if (relation.kind === 'CONTACT') {
           contactPartIds.add(aId); contactPartIds.add(bId);
@@ -77,7 +93,7 @@ export default class InterferenceFeedbackManager {
             gapMm:relation.gapMm,
             message:`${label(a.part)} 与 ${label(b.part)} 面接触`
           });
-        }
+        } else if(relation.kind==='NEAR')nearContacts.push({partIds:[aId,bId],gapMm:relation.gapMm,message:`${label(a.part)} 与 ${label(b.part)} 接近，间隙 ${round(relation.gapMm)} mm，尚未贴合`});
       }
     }
 
@@ -91,11 +107,12 @@ export default class InterferenceFeedbackManager {
       live,
       count:issues.length,
       contactCount:contacts.length,
-      partIds:[...issuePartIds],
+      partIds:[...new Set(issues.flatMap(issue=>issue.partIds))],
       contactPartIds:[...contactPartIds],
       issues,
       contacts,
-      message:issues.length ? `${issues[0].message}${issues.length > 1 ? `，另有 ${issues.length - 1} 处` : ''}` : (contacts.length ? `${contacts[0].message} · 对齐有效` : '')
+      nearCount:nearContacts.length,nearContacts,
+      message:issues.length ? `${issues[0].message}${issues.length > 1 ? `，另有 ${issues.length - 1} 处` : ''}` : (contacts.length ? `${contacts[0].message} · 已贴合，连接件需另检查` : nearContacts[0]?.message||'')
     };
     this.onChanged?.(state);
     return state;
@@ -106,10 +123,11 @@ export default class InterferenceFeedbackManager {
     const contactTolerance = Math.max(collisionTolerance,Number(this.editor.projectSettings?.contactToleranceMm ?? 1));
     if (a.obb && b.obb) {
       const collision = intersectObb(a.obb,b.obb,collisionTolerance);
-      if (collision.intersects) return {kind:'INTERFERENCE',exact:true,penetrationMm:Number(collision.minPenetrationMm || 0),gapMm:0};
+      const exact=a.part?.type==='PROFILE'&&b.part?.type==='PROFILE';
+      if (collision.intersects) return {kind:'INTERFERENCE',exact,penetrationMm:Number(collision.minPenetrationMm || 0),gapMm:0};
       // 负 tolerance 等价于将 SAT 的允许间隙扩大 contactTolerance，用于识别“几乎贴面”。
       const expanded = intersectObb(a.obb,b.obb,-contactTolerance);
-      if (expanded.intersects) return {kind:'CONTACT',exact:true,penetrationMm:0,gapMm:Math.max(0,-Number(expanded.minPenetrationMm || 0))};
+      if (expanded.intersects) {const gapMm=Math.max(0,-Number(expanded.minPenetrationMm || 0));return {kind:gapMm<=.10001?'CONTACT':'NEAR',exact,penetrationMm:0,gapMm};}
       return {kind:'SEPARATE',exact:true,penetrationMm:0,gapMm:Infinity};
     }
     const boxA = a.box;
@@ -124,7 +142,7 @@ export default class InterferenceFeedbackManager {
     }
     if (overlapX >= -contactTolerance && overlapY >= -contactTolerance && overlapZ >= -contactTolerance) {
       const gap=Math.max(0,-Math.min(overlapX,overlapY,overlapZ));
-      return {kind:'CONTACT',exact:false,penetrationMm:0,gapMm:gap};
+      return {kind:gap<=.10001?'CONTACT':'NEAR',exact:false,penetrationMm:0,gapMm:gap};
     }
     return {kind:'SEPARATE',exact:false,penetrationMm:0,gapMm:Infinity};
   }
@@ -152,15 +170,15 @@ export default class InterferenceFeedbackManager {
 
   render(issuePartIds,contactPartIds,options={}) {
     this.clearVisuals();
-    for (const partId of issuePartIds) this.addHelper(partId,0xe54848,'INTERFERENCE');
     const items=new Map((options.items||[]).map(item=>[item.part.id,item]));
+    for (const partId of issuePartIds) this.addHelper(partId,0xe54848,'INTERFERENCE',items.get(partId)?.mesh);
     const selected=new Set((this.editor.selectedMeshes||[]).map(mesh=>mesh.userData?.part?.id));
     const coplanarFaces=new Set();
     for(const contact of this.contacts) {
       if(contact.partIds.some(id=>!contactPartIds.has(id)))continue;
       const [a,b]=contact.partIds.map(id=>items.get(id));
       // 近似 AABB 不冒充真实接触面；直型材才有稳定的领域 OBB。
-      if(!a?.obb||!b?.obb)continue;
+      if(!a?.obb||!b?.obb||a.connectionId||b.connectionId)continue;
       // 黄色只提示已实际贴合的局部材料面；近距离候选或已有设计关系不是零间隙证据。
       if(!options.live&&contact.gapMm>.1)continue;
       for(const [source,target] of [[a,b],[b,a]]) {
@@ -172,8 +190,8 @@ export default class InterferenceFeedbackManager {
     }
   }
 
-  addHelper(partId,color,kind) {
-    const mesh = this.editor.getMeshByPartId(partId);
+  addHelper(partId,color,kind,physicalMesh=null) {
+    const mesh = physicalMesh||this.editor.getMeshByPartId(partId);
     if (!mesh) return;
     const helper = new THREE.BoxHelper(mesh,color);
     helper.material.depthTest = false;
@@ -199,7 +217,7 @@ export default class InterferenceFeedbackManager {
     this.issues = [];
     this.contacts = [];
     this.clearVisuals();
-    const state = {active:false,live:false,count:0,contactCount:0,partIds:[],contactPartIds:[],issues:[],contacts:[],message:''};
+    const state = {active:false,live:false,count:0,contactCount:0,nearCount:0,nearContacts:[],partIds:[],contactPartIds:[],issues:[],contacts:[],message:''};
     this.onChanged?.(state);
     return state;
   }

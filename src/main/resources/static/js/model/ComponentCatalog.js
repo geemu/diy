@@ -48,7 +48,7 @@ export function connectionComponent(form) {
   const label=option?.label||'',numbers=label.match(/\d+/g)?.map(Number)||[20,20];
   const size=label.includes('A柱')?8:numbers[0];
   const p={size,width:size,height:numbers[1]||size,thickness:Math.max(2,size*.12),length:size,
-    holeCount:label.includes('4孔')?4:label.includes('3孔')?3:2,angle:Number(label.match(/-(\d+)°/)?.[1]||90)};
+    holeCount:label.includes('4孔')?4:label.includes('3孔')?3:(type==='ANGLE_BRACKET'&&numbers[1]>=size*2?4:2),angle:Number(label.match(/-(\d+)°/)?.[1]||90)};
   if(type==='HEAVY_CORNER')p.length=80;
   if(type==='SHELF_BRACKET')p.length=Number(label.match(/-(\d+)(?:\(|$)/)?.[1]||20);
   if(type==='PANEL_FIX_CONNECTOR'){p.size=p.width=p.height=numbers[0];p.rounded=label.startsWith('半圆');}

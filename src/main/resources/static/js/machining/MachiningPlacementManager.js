@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {resolveProfileFeature} from '../model/ProfileFeatureCatalog.js';
 import {localZToStation} from '../model/ProfileCoordinateSystem.js';
+import {machiningLocalPose} from './MachiningManager.js';
 
 /**
  * 玩家式加工放置器：先选“打孔/攻丝/开槽”，再点型材上的真实位置。
@@ -61,13 +62,12 @@ export default class MachiningPlacementManager {
   statusText(){if(!this.hover)return this.requiresEnd()?'请选择 A/B 端部':'请选择加工面上的位置';return `可添加：${modeLabel(this.mode)}`;}
   renderPreview(){
     this.clearPreview();if(!this.hover)return;
-    const geometry=this.requiresEnd()?new THREE.RingGeometry(7,11,24):new THREE.TorusGeometry(8,2.2,8,28);
-    const material=new THREE.MeshBasicMaterial({color:0xff8b2c,transparent:true,opacity:.82,depthTest:false,side:THREE.DoubleSide});
+    const radius=this.mode==='COUNTERSINK'?8:this.requiresEnd()?4:4.5;
+    const geometry=new THREE.RingGeometry(radius-.35,radius,40);
+    const material=new THREE.MeshBasicMaterial({color:0x70a0cc,transparent:true,opacity:.95,depthTest:true,depthWrite:false,side:THREE.DoubleSide});
     const mesh=new THREE.Mesh(geometry,material);mesh.position.copy(this.hover.point);mesh.renderOrder=1400;
-    if(!this.requiresEnd()){
-      const normal=faceWorldNormal(this.hover.mesh,this.hover.face);
-      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);
-    }
+    const normal=this.requiresEnd()?machiningLocalPose(this.hover.mesh.userData.part,{type:this.mode,end:this.hover.end}).normal.transformDirection(this.hover.mesh.matrixWorld):faceWorldNormal(this.hover.mesh,this.hover.face);
+    mesh.position.addScaledVector(normal,.7);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);
     this.previewGroup.add(mesh);
   }
   clearPreview(){while(this.previewGroup.children.length){const child=this.previewGroup.children.pop();child.geometry?.dispose?.();child.material?.dispose?.();}}

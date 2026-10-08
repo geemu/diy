@@ -179,7 +179,8 @@ export default class ConnectionPlacementManager {
 
   evaluateCandidate(context,options={}) {
     const mode=options.mode||this.mode,componentDefinition=options.componentDefinition??this.componentDefinition,existingPartId=options.existingPartId??this.existingPartId;
-    const item=context.designCandidates.find(row=>row.type===mode);
+    const ranked=componentDefinition?this.editor.connectionManager.recommendDesignFor(context.source.mesh,context.target.mesh,{sourceEnd:context.source.feature.end,targetFace:context.target.feature.face,sourceMountFace:context.sourceMountFace,componentDefinition}):context.designCandidates;
+    const item=ranked.find(row=>row.type===mode);
     if(!item)return null;
     const {source,target}=context,geometry=item.geometry;
     const key=`${source.mesh.userData.part.id}|${source.feature.end}|${target.mesh.userData.part.id}|${target.feature.face}`;
@@ -188,7 +189,7 @@ export default class ConnectionPlacementManager {
     if(componentDefinition&&Number(componentDefinition.dimensions?.size)!==Number(profileSeries(source.mesh.userData.part)))fail('连接件规格与型材系列不匹配，请调整适用规格');
     const outward=new THREE.Vector3(0,0,source.feature.end==='START'?-1:1).transformDirection(source.mesh.matrixWorld);
     if(outward.dot(slotWorldNormal(target.mesh,target.feature.face))>-.99)fail('端面方向不相对，请先把两根型材正确贴合');
-    if(Number(geometry?.contactGapMm)>Math.max(.1,Number(this.editor.projectSettings?.contactToleranceMm??.5)))fail('两根型材还没有贴合，请先吸附型材后安装连接件');
+    if(Number(geometry?.contactGapMm)>.10001)fail('两根型材还没有贴合，请先吸附型材后安装连接件');
     if(intersectObb(profileObb(source.mesh.userData.part),profileObb(target.mesh.userData.part),Number(this.editor.projectSettings?.collisionToleranceMm??.5)).intersects)fail('两根型材发生干涉，请先移开穿透位置');
     const occupied=this.editor.connectionManager.connections.find(c=>c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end);
     if(occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接');
@@ -236,12 +237,13 @@ export default class ConnectionPlacementManager {
     const ranked=this.editor.connectionManager.recommendDesignFor(source.mesh,target.mesh,{
       sourceEnd:source.feature.end,
       targetFace:target.feature.face,
-      sourceMountFace:options.sourceMountFace
+      sourceMountFace:options.sourceMountFace,
+      componentDefinition:options.componentDefinition||this.componentDefinition
     });
     const validItems=ranked.filter(item=>item.valid);
     const distance=source.point.distanceTo(clickedPoint)+target.point.distanceTo(clickedPoint);
     list.push({
-      source,target,distance,designCandidates:ranked,valid:validItems.length>0,
+      source,target,distance,sourceMountFace:options.sourceMountFace,designCandidates:ranked,valid:validItems.length>0,
       bestScore:validItems.length?Math.max(...validItems.map(item=>Number(item.score||0))):0
     });
   }

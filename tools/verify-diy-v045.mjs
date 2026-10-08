@@ -13,7 +13,8 @@ const css=fs.readFileSync(path.join(staticRoot,'css/app.css'),'utf8');
 
 for(const token of ['框架参数','每层中间承托梁','生成框架','用途预设']) assert.ok(html.includes(token),`missing DIY UI: ${token}`);
 for(const token of ['DiyGenerator','DiyTemplateList','generateDiyTemplate','selectDiyTemplate']) assert.ok(app.includes(token),`missing app DIY integration: ${token}`);
-for(const token of ['addLayeredRack(options = {})','中间承托梁','assemblyManager.reconcile']) assert.ok(editor.includes(token),`missing Editor DIY capability: ${token}`);
+for(const token of ['addLayeredRack(options = {})','layeredRackLayout','assemblyManager.reconcile']) assert.ok(editor.includes(token),`missing Editor DIY capability: ${token}`);
+assert.ok(fs.readFileSync(path.join(staticRoot,'js/diy/LayeredRackModel.js'),'utf8').includes('中间承托梁'),'共享布局保留每层承托梁，生成和回改使用同一事实');
 for(const token of ['.diy-template-grid','.diy-template-choice','.diy-template-summary']) assert.ok(css.includes(token),`missing DIY CSS: ${token}`);
 
 const catalogModule=await import(pathToFileURL(path.join(staticRoot,'js/diy/DiyTemplateCatalog.js')).href);
@@ -41,4 +42,4 @@ assert.equal(calls[0][1].centerBeamCount,0);
 assert.ok(catalogModule.DiyTemplateList.every(item=>item.generator==='LAYERED_RACK'));
 assert.equal(calls[1][0],'LAYERED_RACK');
 
-console.log(JSON.stringify({ok:true,version:'0.75.20',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.23',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));

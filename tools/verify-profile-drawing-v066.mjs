@@ -69,4 +69,4 @@ ed.interferenceFeedbackManager.refresh=()=>({active:true});const captures=ed.cap
 assert.equal(tool.commitLength(100),true);assert.equal(ed.parts.length,count+1);assert.equal(ed.captures,captures+1,'明确确认的 FREE 干涉位置保留并标红，一次撤销；不能派生假连接');
 tool.begin('DIAGONAL');tool.start={point:new THREE.Vector3(0,15,0)};tool.hover={point:new THREE.Vector3(300,15,400)};
 assert.equal(tool.typedCandidate(500).point.x,300);assert.equal(tool.typedCandidate(500).point.z,400,'斜角模式不能被默认正交开关掰直');
-console.log(JSON.stringify({ok:true,version:'0.75.20',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,explicitInterferencePlacement:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.23',axisCases,groundedVertical:true,actualCutLength:true,previewIsTransient:true,explicitInterferencePlacement:true}));
