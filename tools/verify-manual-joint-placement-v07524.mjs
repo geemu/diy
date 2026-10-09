@@ -115,4 +115,4 @@ function commit(m,c){return m.installConnection(c.source,c.target,c.item.type,'å
   const hit=scene.pickHit({},[parent]);assert.equal(hit.object,parent);assert.ok(hit.surfaceNormal.distanceTo(local.clone().transformDirection(child.matrixWorld))<1e-6);assert.deepEqual(local.toArray(),[0,1,0]);
   outcomes.actualChildWorldSurfaceNormal=true;
 }
-console.log(JSON.stringify({ok:true,version:'0.75.25',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.32',...outcomes}));

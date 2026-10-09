@@ -52,4 +52,4 @@ for(const aspect of [.6,1.4,2])for(const size of [[30,30,105],[12,12,108],[500,4
 }
 assert.ok(preview.includes('this.renderer.forceContextLoss()'));
 assert.ok(preview.includes('if(!this.canvas.isConnected)this.renderer.forceContextLoss()'),'不能强制丢失仍由创建页复用的画布上下文');
-console.log(JSON.stringify({ok:true,version:'0.75.25',sharedCatalogLayout:5,darkControlStates:true,uniformMenuStates:true,previewFitCases:fitCases,remoteImages:false,schema:62}));
+console.log(JSON.stringify({ok:true,version:'0.75.32',sharedCatalogLayout:5,darkControlStates:true,uniformMenuStates:true,previewFitCases:fitCases,remoteImages:false,schema:62}));

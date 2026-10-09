@@ -45,7 +45,7 @@ assert.equal(signature(e),before);numbers.refresh(e.meshes);assert.equal(numbers
 mesh.position.y+=150;mesh.rotation.set(.4,.7,.3);numbers.update();assert.deepEqual(stamp.matrix.elements,mesh.matrixWorld.elements,'印字跟随实际模型矩阵');
 const oldTexture=record.texture;let textureDisposed=0;oldTexture.addEventListener('dispose',()=>textureDisposed++);
 mesh.userData.part.displayId='P-002';numbers.refresh(e.meshes);assert.equal(textureDisposed,1);assert.notEqual(numbers.records.get(mesh),record);
-mesh.userData.part.color=0x111827;numbers.refresh(e.meshes);assert.deepEqual(printed.at(-1),{text:'P-002',ink:'#edf2f7'});
+mesh.userData.part.color=0x111827;numbers.refresh(e.meshes);assert.deepEqual(printed.at(-1),{text:'P-002 · 2020 · 300 mm',ink:'#edf2f7'});
 const length=mesh.userData.part.dimensions.length;mesh.userData.part.dimensions.length=450;mesh.userData.part.profilePath.length=450;Factory.rebuildLinearGroup(mesh,mesh.userData.part);numbers.refresh(e.meshes);assert.ok(numbers.records.get(mesh).stamp.geometry.attributes.position.count>0);mesh.userData.part.dimensions.length=length;mesh.userData.part.profilePath.length=length;
 mesh.visible=false;numbers.update();assert.equal(numbers.records.get(mesh).stamp.visible,false);numbers.refresh(e.meshes);assert.equal(numbers.records.size,3);
 numbers.refresh(e.meshes,false);assert.equal(numbers.records.size,0);assert.equal(numbers.group.children.length,0);numbers.dispose();assert.equal(numbers.group.parent,null);
@@ -59,4 +59,4 @@ assert.ok(deleteSource.includes('await confirmWorkbench'));assert.ok(!deleteSour
 assert.ok(html.includes('aria-label="型材总长度（mm）"'));assert.ok(html.includes(':disabled="!contextLengthEditable(\'END\')"'));
 assert.ok(css.includes('.context-menu button.active{background:#ff8a001a'));assert.ok(css.includes('.context-menu kbd{background:#1e2230'));assert.ok(css.includes('background:#191c29!important'));assert.ok(css.includes('.workbench-confirm-backdrop{z-index:30000'));
 results.inPageConfirmationContextStatesAndKeyboardContract=true;
-dispose(e);console.log(JSON.stringify({ok:true,version:'0.75.25',...results}));
+dispose(e);console.log(JSON.stringify({ok:true,version:'0.75.32',...results}));

@@ -40,13 +40,22 @@ export default class InfiniteGround {
         }
         void main(){
           vec4 nearView=inverseProjection*vec4(screenPoint,-1.0,1.0);
-          vec4 farView=inverseProjection*vec4(screenPoint,1.0,1.0);
-          vec3 origin=(cameraWorld*vec4(nearView.xyz/nearView.w,1.0)).xyz;
-          vec3 farPoint=(cameraWorld*vec4(farView.xyz/farView.w,1.0)).xyz;
-          vec3 ray=normalize(farPoint-origin);
-          if(abs(ray.y)<0.000001)discard;
+          // 大远近比下最远裁剪点的 w 会因浮点相减变成零，改用投影内部的点确定射线。
+          vec4 middleView=inverseProjection*vec4(screenPoint,0.0,1.0);
+          if(!(abs(nearView.w)>0.00000001)||!(abs(middleView.w)>0.00000001))discard;
+          vec3 nearPoint=nearView.xyz/nearView.w;
+          vec3 middlePoint=middleView.xyz/middleView.w;
+          vec3 viewDelta=middlePoint-nearPoint;
+          if(!(dot(viewDelta,viewDelta)>0.000000000001))discard;
+          vec3 viewRay=normalize(viewDelta);
+          if(!(abs(viewRay.z)>0.000001))discard;
+          // 在相机坐标中求方向，并把起点移到眼平面；正交大裁剪范围和远处相机也避免世界坐标相减。
+          vec3 viewOrigin=nearPoint-viewRay*(nearPoint.z/viewRay.z);
+          vec3 origin=(cameraWorld*vec4(viewOrigin,1.0)).xyz;
+          vec3 ray=normalize(mat3(cameraWorld)*viewRay);
+          if(!(abs(ray.y)>0.000001))discard;
           float travel=(groundHeight-origin.y)/ray.y;
-          if(travel<=0.0)discard;
+          if(!(0.0<travel))discard;
           vec3 hit=origin+ray*travel;
           // 远近过渡按相机高度/正交跨度调整，不出现固定米数处的硬截止。
           float fade=exp(-max(0.0,travel-fadeDistance*0.2)/fadeDistance);

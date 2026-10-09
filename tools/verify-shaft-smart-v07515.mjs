@@ -102,4 +102,4 @@ assert.ok(html.includes('id="shaft-smart-type"')&&html.includes('id="shaft-smart
 for(const action of ['openShaftSmart','clearAllConnections','openQuickPanel(\'drawer\')','openQuickPanel(\'panel\')','toggleSelectionVisibility','mirrorAlong(axis)'])assert.ok(html.includes(action));
 assert.ok(app.includes('if(shaftSmart.visible){event.preventDefault();shaftSmart.visible=false;return;}'));
 assert.ok(html.includes('quickPanel===\'batch\'')&&html.includes('quickPanel===\'drawer\''));
-console.log(JSON.stringify({ok:true,version:'0.75.25',fixtureTypes:types.length,boreCases,transforms,reverseTransforms,selectedHoleDiameter:true,hostFollow:true,oneHistory:true,guards:true,clearConnectionTransaction:true,modalAndTools:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.32',fixtureTypes:types.length,boreCases,transforms,reverseTransforms,selectedHoleDiameter:true,hostFollow:true,oneHistory:true,guards:true,clearConnectionTransaction:true,modalAndTools:true}));

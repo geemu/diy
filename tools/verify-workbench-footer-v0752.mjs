@@ -32,4 +32,4 @@ assert.equal(state.floaters.toolbar,undefined);
 assert.deepEqual(state.floaters.viewCube,{custom:true,x:8,y:9});
 assert.deepEqual(calls.filter(item=>item[0]==='floater'),[['floater','viewCube','.view-cube']]);
 assert.ok(layoutSource.includes("document.querySelector('.canvas-stage')"),'浮动导航限制到实际画布，不可覆盖底栏');
-console.log(JSON.stringify({ok:true,version:'0.75.25',separateCanvas:true,dockedToolbar:true,dockedRotation:true,dockedStatus:true,oldToolbarPositionIgnored:true,resizeObserver:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.32',separateCanvas:true,dockedToolbar:true,dockedRotation:true,dockedStatus:true,oldToolbarPositionIgnored:true,resizeObserver:true}));

@@ -32,4 +32,4 @@ const c=collisionModule.profileObb(make(100));
 assert.equal(collisionModule.intersectObb(a,b,0.5).intersects,true);
 assert.equal(collisionModule.intersectObb(a,c,0.5).intersects,false);
 
-console.log(JSON.stringify({ok:true,version:'0.75.25',schema:62,liveInterference:true,persistentRedOutline:true,snapPreview:true,contextActions:true,topMenus:8,pricing:false},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.32',schema:62,liveInterference:true,persistentRedOutline:true,snapPreview:true,contextActions:true,topMenus:8,pricing:false},null,2));

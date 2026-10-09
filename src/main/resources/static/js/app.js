@@ -319,8 +319,8 @@ createApp({
     const hardwareCatalog = HardwareCatalogList;
 
     const newProfile = reactive({
-      nominal:'2040',
-      catalogId:getDefaultDesignProfileId('2040'),
+      nominal:'3030',
+      catalogId:getDefaultDesignProfileId('3030'),
       length:500,
       free:true,
       faceClosures:[],
