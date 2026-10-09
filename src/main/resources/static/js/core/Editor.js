@@ -1257,11 +1257,7 @@ export default class Editor {
     this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback?.();this.onSnapChanged?.(null);
     const additive = options.additive === true;
     const toggle = options.toggle === true;
-    if(mesh&&!additive&&!toggle&&!options.individual&&mesh.userData.part?.assemblyId){
-      const groupId=mesh.userData.part.assemblyId,ancestors=this.assemblyManager.ancestors(groupId),rootId=ancestors[ancestors.length-1]||groupId;
-      const members=this.assemblyManager.partIds(rootId).map(id=>this.getMeshByPartId(id)).filter(item=>item&&item.visible!==false);
-      if(members.length>1){this.selectMany(members);return;}
-    }
+    // 单击只选当前构件；组件归属不扩大选择，整架移动由显式装配入口决定。
     if (!mesh) {
       if (!additive) this.selectedMeshes = [];
       this.selected = this.selectedMeshes[this.selectedMeshes.length - 1] || null;
@@ -1275,7 +1271,7 @@ export default class Editor {
       this.selected = mesh;
     }
 
-    if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
+    if (this.isSelectionTransformable()) this.sceneManager.transformControls.attach(this.selected);
     else this.sceneManager.transformControls.detach();
     this.sceneManager.setSelections(this.selectedMeshes,this.selected);
     this.interferenceFeedbackManager?.requestRefresh();
@@ -1291,12 +1287,18 @@ export default class Editor {
     this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.sceneManager.hideSnapFeedback?.();this.onSnapChanged?.(null);
     this.selectedMeshes = [...new Set((meshes || []).filter(Boolean))];
     this.selected = this.selectedMeshes[this.selectedMeshes.length - 1] || null;
-    if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
+    if (this.isSelectionTransformable()) this.sceneManager.transformControls.attach(this.selected);
     else this.sceneManager.transformControls.detach();
     this.sceneManager.setSelections(this.selectedMeshes,this.selected);
     this.interferenceFeedbackManager?.requestRefresh();
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
+  }
+
+  /** 全选沿用画布可见性和类型过滤；不把接头展示网格、地面或印字作为构件。 */
+  selectAll() {
+    this.selectMany(this.selectableMeshes());
+    return this.selectedMeshes.length;
   }
 
   /** 点击角码只定位其连接，不把派生展示对象作为可移动 Part 或新增业务记录。 */
@@ -1319,6 +1321,11 @@ export default class Editor {
       && !this.assemblyManager.isPartEffectivelyLocked(part);
   }
 
+  /** 多选不能因最后选中的构件可编辑而绕过其他成员的锁定或安装保护。 */
+  isSelectionTransformable() {
+    return this.isMeshTransformable(this.selected) && this.selectedMeshes.every(mesh => this.isMeshTransformable(mesh));
+  }
+
   setMarqueeMode(enabled) {
     const active = enabled === true;
     if (active) this.sceneManager.setLassoMode(false);
@@ -1334,7 +1341,7 @@ export default class Editor {
   selectByPartId(partId, options = {}) {
     const mesh = this.getMeshByPartId(partId);
     if (!mesh) return null;
-    this.select(mesh,{individual:true,...options});
+    this.select(mesh,options);
     return mesh;
   }
 
@@ -1792,11 +1799,7 @@ export default class Editor {
     const partIds = new Set(this.assemblyManager.partIds(assemblyId,true));
     const meshes = this.meshes.filter(mesh => partIds.has(mesh.userData.part?.id) && mesh.visible !== false);
     if (!meshes.length) return;
-    this.selectedMeshes = meshes;
-    this.selected = meshes[meshes.length - 1];
-    if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
-    this.sceneManager.setSelections(meshes,this.selected);
-    if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...meshes]);
+    this.selectMany(meshes);
   }
 
   setAssemblyVisibility(assemblyId, visible) {
@@ -1810,7 +1813,7 @@ export default class Editor {
 
   setAssemblyLocked(assemblyId, locked) {
     this.assemblyManager.setLocked(assemblyId, locked === true, true);
-    if (!this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.detach();
+    if (!this.isSelectionTransformable()) this.sceneManager.transformControls.detach();
     else this.sceneManager.transformControls.attach(this.selected);
     this.historyManager.capture();
     this.emitProjectChanged();
@@ -1949,7 +1952,7 @@ export default class Editor {
     }
     const locked = this.selected.userData.part?.locked !== true;
     for (const mesh of targets) mesh.userData.part.locked = locked;
-    if (locked || !this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.detach();
+    if (locked || !this.isSelectionTransformable()) this.sceneManager.transformControls.detach();
     else this.sceneManager.transformControls.attach(this.selected);
     this.historyManager.capture();
     this.emitProjectChanged();
@@ -2601,7 +2604,7 @@ export default class Editor {
       this.machiningManager.refreshProfile(next);
       this.connectionManager.updateConnectionsForProfile(part.id);
     }
-    if (this.isMeshTransformable(this.selected)) this.sceneManager.transformControls.attach(this.selected);
+    if (this.isSelectionTransformable()) this.sceneManager.transformControls.attach(this.selected);
     else this.sceneManager.transformControls.detach();
     this.sceneManager.setSelections(this.selectedMeshes,this.selected);
     this.updateDimensions();

@@ -1,4 +1,19 @@
-# 项目交接文档 — v0.75.34
+# 项目交接文档 — v0.75.36
+
+## v0.75.36 全可见型材齐平反馈
+
+- 用户确认紫色齐平说明，并要求不直接接触的同平面型材也显色。InterferenceFeedbackManager.render在原红色干涉/黄色接触带之后，以editor.selected为基准检查物理快照中所有其他可见PROFILE，不再在CONTACT循环内局限于邻梁。选中或干涉成员不被紫色覆盖，基准自身干涉或实时拖动时不发布静态齐平集合。
+- CoplanarSurfaceFeedback复用profileSidePlanes和0.1mm双方角点偏差、同向法向判断，基准面只算一次，实际材料支持探测每面一次并立即释放。目标仅创建真实材料三角面提示；隐藏、弧形、竖直杆端盖与未知面不伪报。现有吸附候选的compareProfileTopPlanes/addCoplanarSurfaceFeedback接口及预测补偿语义保持。
+- onChanged/clear同步coplanarCount/partIds/referenceId/label；app底栏增加小紫色色标、实际着色数量与统一tip，明确基准编号、齐平不是多选或一起移动。无常驻模型文字，不新增选择/约束/连接、工程字段、历史或草稿；普通单击/Shift/Ctrl+A规则保留。
+- Schema62/116模块0.75.36，无新依赖或模块；用户原JSON/实际localStorage不操作。按全局规则未新增/运行测试、Java编译、服务启动/重启或浏览器验收，资源同步见VALIDATION。待验：远处后梁真实共面、不同层/倾斜/0.1mm外不着色，单选/多选橙金及红色优先，隐藏/取消选择/几何重建/刷新、底栏tip和一次移动/撤销后的清理。
+
+## v0.75.35 单根、多选与全选
+
+- 用户确认修复单击型材误选34根整架，并要求Shift逐个多选、Ctrl+A全选。Editor.select不再根据assemblyId提升为顶层组件；普通单击替换选择，Shift追加且不重复，Ctrl/Meta切换单件。selectByPartId不再需要individual例外，画布/清单/右键遵循同一规则；组件成员与参数不解除。
+- 显式selectAssembly继续选择组件，通过selectMany更新全部反馈；SINGLE默认、CONNECTED/ASSEMBLY明确移动范围保留，选了多根仍按当前多选移动，不把“单个移动”解释为默默丢弃用户多选。Alt穿透与拖动/复制复用原事务。
+- Editor.selectAll通过selectableMeshes取得可见且符合类型过滤的Part，复用selectMany；不选择地面/印字/接头helper，不自动显示隐藏件。app的Ctrl/Meta+A与编辑菜单共用入口，帮助及底栏tip同步。字段/可编辑文本保留原生全选，模态/绘制/安装/审阅及进行中拖动、框选/套索不会改变后台选择。
+- isSelectionTransformable检查每个已选成员，锁定/继承锁定/安装配件只可查看；选择、组件锁定、锁定切换和网格重建保持Gizmo守卫。SelectionGestureManager也拒绝不可编辑多选的直接拖动/复制，不依赖最后一个成员是否可编辑。
+- Schema62/116模块0.75.35，不新增依赖，不改用户JSON/localStorage。没有新增/运行测试、Java编译、服务启动/重启或浏览器验收；资源同步状态见VALIDATION。待验：整架中普通单击/拖动仅一根、Shift追加/Ctrl取消、Ctrl+A/Esc、输入框与模态隔离、锁定/已安装多选、显式整架移动、撤销和连接随动。
 
 ## v0.75.34 自动生成连接件：简洁操作与分帧计算
 

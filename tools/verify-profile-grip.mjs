@@ -43,4 +43,4 @@ assert.ok(html.includes('profile-grip-hud'));
 assert.ok(html.includes('双击端点可输入精确总长'));
 assert.ok(css.includes('.profile-grip-hud'));
 
-console.log(JSON.stringify({ok:true,version:'0.75.34',schema:62,grips:['A','B'],fixedOppositeEnd:true,numericInput:true,featureSnap:true,gridSnap:true,constraintGuard:true,machiningDatumPreserved:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.36',schema:62,grips:['A','B'],fixedOppositeEnd:true,numericInput:true,featureSnap:true,gridSnap:true,constraintGuard:true,machiningDatumPreserved:true},null,2));

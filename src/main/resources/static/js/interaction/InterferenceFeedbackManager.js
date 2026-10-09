@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
 import {createSurfaceFeedback,disposeFeedback} from './SurfaceFeedback.js';
-import {addCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
+import {addSelectionCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
 import {connectorEnvelope} from '../connection/ConnectionPlacementManager.js';
 
 /**
@@ -101,7 +101,7 @@ export default class InterferenceFeedbackManager {
     for (const id of issuePartIds) contactPartIds.delete(id);
     this.issues = issues;
     this.contacts = contacts;
-    this.render(issuePartIds,contactPartIds,{live,items,focusIds});
+    const coplanar=this.render(issuePartIds,contactPartIds,{live,items,focusIds});
     const state = {
       active:issues.length > 0,
       live,
@@ -109,6 +109,10 @@ export default class InterferenceFeedbackManager {
       contactCount:contacts.length,
       partIds:[...new Set(issues.flatMap(issue=>issue.partIds))],
       contactPartIds:[...contactPartIds],
+      coplanarCount:coplanar.partIds.length,
+      coplanarPartIds:coplanar.partIds,
+      coplanarReferenceId:coplanar.referencePartId,
+      coplanarReferenceLabel:coplanar.referencePartId?label(this.editor.selected.userData.part):'',
       issues,
       contacts,
       nearCount:nearContacts.length,nearContacts,
@@ -172,8 +176,6 @@ export default class InterferenceFeedbackManager {
     this.clearVisuals();
     const items=new Map((options.items||[]).map(item=>[item.part.id,item]));
     for (const partId of issuePartIds) this.addHelper(partId,0xe54848,'INTERFERENCE',items.get(partId)?.mesh);
-    const selected=new Set((this.editor.selectedMeshes||[]).map(mesh=>mesh.userData?.part?.id));
-    const coplanarFaces=new Set();
     for(const contact of this.contacts) {
       if(contact.partIds.some(id=>!contactPartIds.has(id)))continue;
       const [a,b]=contact.partIds.map(id=>items.get(id));
@@ -185,9 +187,14 @@ export default class InterferenceFeedbackManager {
         const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),color:options.live?0x25c778:0xffc400,opacity:options.live?0.36:0.55,renderOrder:1601});
         if(helper){helper.userData.__contact=true;this.group.add(helper);}
       }
-      // 静止时仅解释当前选择的邻接面，不把整个框架每层都染成紫色；拖动由 Snap 候选负责。
-      if(!options.live&&contact.partIds.some(id=>selected.has(id)))addCoplanarSurfaceFeedback(this.group,a.mesh,b.mesh,coplanarFaces);
     }
+    const reference=this.editor.selected;
+    const referenceId=reference?.userData?.part?.id;
+    // 全局齐平独立于接触关系；主选/其他已选保留橙金，干涉红色优先。拖动仍由 Snap 候选解释。
+    if(options.live||!items.has(referenceId)||issuePartIds.has(referenceId))return {referencePartId:null,partIds:[]};
+    const selected=new Set(this.editor.selectedMeshes||[]);
+    const targets=[...items.values()].filter(item=>item.part.type==='PROFILE'&&!selected.has(item.mesh)&&!issuePartIds.has(item.part.id)).map(item=>item.mesh);
+    return addSelectionCoplanarSurfaceFeedback(this.group,reference,targets);
   }
 
   addHelper(partId,color,kind,physicalMesh=null) {
@@ -217,7 +224,7 @@ export default class InterferenceFeedbackManager {
     this.issues = [];
     this.contacts = [];
     this.clearVisuals();
-    const state = {active:false,live:false,count:0,contactCount:0,nearCount:0,nearContacts:[],partIds:[],contactPartIds:[],issues:[],contacts:[],message:''};
+    const state = {active:false,live:false,count:0,contactCount:0,nearCount:0,nearContacts:[],partIds:[],contactPartIds:[],coplanarCount:0,coplanarPartIds:[],coplanarReferenceId:null,coplanarReferenceLabel:'',issues:[],contacts:[],message:''};
     this.onChanged?.(state);
     return state;
   }

@@ -62,4 +62,4 @@ for(const size of [20,30,40,45,60,80]){
 }
 const css=fs.readFileSync(path.join(root,'src/main/resources/static/css/app.css'),'utf8');
 for(const token of ['.inspector-panel .machining-item-card','.inspector-panel .connection-quick-change select','.inspector-panel select:focus','.inspector-panel option:disabled'])assert.ok(css.includes(token));
-console.log(JSON.stringify({ok:true,version:'0.75.34',realSurface:true,holesOpen:true,clipContact:true,readOnly:true,inspectorDarkStates:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.36',realSurface:true,holesOpen:true,clipContact:true,readOnly:true,inspectorDarkStates:true}));

@@ -30,6 +30,7 @@ export default class SelectionGestureManager {
     const hit=s.pickHit(event,e.selectableMeshes());
     if(!hit?.object||!e.isMeshTransformable(hit.object))return;
     if(!copy&&!e.selectedMeshes.includes(hit.object))return;
+    if(e.selectedMeshes.includes(hit.object)&&!e.isSelectionTransformable())return;
     event.preventDefault();event.stopImmediatePropagation();
     this.canvas.setPointerCapture(event.pointerId);
     // 点击不产生副本和历史；越过阈值后才启动事务。

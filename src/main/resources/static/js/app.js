@@ -81,8 +81,8 @@ createApp({
       const selection=selectionCount.value>1?`已选择 ${selectionCount.value} 个构件`:selectedPart.value?`${selectedPart.value.displayId} · ${selectedPart.value.name}`:'未选择构件';
       const operation=drawState.active
         ?`${drawState.start?'选择终点，输入长度后按 Enter 确认':'点击画布选择起点'}${drawState.axisLock?' · 锁定 '+drawState.axisLock+' 轴':''}\nEsc 或右键单击结束绘制，已完成构件保留。`
-        :profilePlacementState.active?profilePlacementState.message:wholeStretchState.active?wholeStretchState.message:'Shift+点击：多选\nSpace+左键拖动：框选\nCtrl / Alt+左键拖动：复制\nAlt+点击：穿透选择\nE：快速对齐 · G：组合 · X：解组';
-      return `${selection}\n${operation}\n尺寸单位：毫米（mm）`;
+        :profilePlacementState.active?profilePlacementState.message:wholeStretchState.active?wholeStretchState.message:'单击：选择单个构件\nShift+点击：追加多选 · Ctrl+点击：切换选择\nCtrl+A：全选可见构件 · Esc：取消选择\nSpace+左键拖动：框选\nCtrl / Alt+左键拖动：复制\nAlt+点击：穿透选择\nE：快速对齐 · G：组合 · X：解组';
+      return `${selection}\n${operation}\n橙金表示选中；紫色表示与主选型材上表面齐平，不是多选。\n尺寸单位：毫米（mm）`;
     });
     const connectionSource = ref(null);
     const sectionRevision = ref(0);
@@ -288,7 +288,8 @@ createApp({
     const contextMenu = reactive({visible:false,x:0,y:0,partType:null,partId:null,worldPoint:null,end:null,lengthMm:0,nearJoint:false,connectionCandidates:[],accessoryCandidates:[]});
     const jointQuickMenu = reactive({visible:false,x:0,y:0,partId:null,worldPoint:null,end:null,connectionCandidates:[],accessoryCandidates:[]});
     const relationQuickMenu = reactive({visible:false,x:0,y:0,constraintId:null,type:null,edgeA:0,edgeB:1,pointA:0,pointB:1,mode:'HORIZONTAL'});
-    const interferenceState = reactive({active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[]});
+    const interferenceState = reactive({active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[],coplanarCount:0,coplanarPartIds:[],coplanarReferenceId:null,coplanarReferenceLabel:''});
+    const coplanarTip=computed(()=>`紫色：${interferenceState.coplanarCount} 根型材与 ${interferenceState.coplanarReferenceLabel||'主选型材'} 上表面齐平，不要求直接接触；并非选中，也不代表会一起移动。`);
     const dragAsset = ref(null);
     const dimensions = reactive({width:0,depth:0,height:0});
     const stats = reactive({profiles:0,shafts:0,panels:0,accessories:0,machining:0,connections:0,total:0});
@@ -1017,7 +1018,7 @@ createApp({
         notify(`已自动连接：${label}`,'success');
       };
       editor.onInterferenceChanged = state => {
-        Object.assign(interferenceState,{active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[],...(state||{})});
+        Object.assign(interferenceState,{active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[],coplanarCount:0,coplanarPartIds:[],coplanarReferenceId:null,coplanarReferenceLabel:'',...(state||{})});
       };
       editor.onTransformBlocked = state => {
         lastSnap.value=null;
@@ -1267,6 +1268,13 @@ createApp({
       }
       const target = event.target;
       if (target && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName)||target.isContentEditable)) return;
+      // 全选文字仍归表单/弹窗；画布全选不得替换进行中的拖动或放置选择。
+      if((event.ctrlKey||event.metaKey)&&!event.altKey&&event.key.toLowerCase()==='a'){
+        if(document.querySelector('.engineering-center-backdrop'))return;
+        event.preventDefault();
+        if(!event.repeat&&!event.isComposing)selectAll();
+        return;
+      }
       if(quickAlignmentVisible.value||connectionBatchState.active||frameEdit.active){
         // 审阅保留正常 Tab 导航及按钮的 Enter/Space，不能把“取消”键盘点击改成确认。
         if(event.key==='Tab'||(target?.closest('button,a,summary')&&['Enter',' '].includes(event.key)))return;
@@ -2715,6 +2723,13 @@ createApp({
       contextMenu.visible=false;
     }
 
+    function selectAll() {
+      const scene=editor?.sceneManager;
+      if(!editor?.selectionGestureManager.available()||scene.transformControls.dragging||editor.selectionGestureManager.drag||scene.marqueeStart||scene.lassoPoints.length)return;
+      const count=editor.selectAll();
+      notify(count?`已选择 ${count} 个可见构件`:'画布中没有可选构件',count?'success':'warning');
+    }
+
     function toggleWorkPlane() {
       workPlaneVisible.value = !workPlaneVisible.value;
       editor?.setWorkPlaneVisible(workPlaneVisible.value);
@@ -3618,7 +3633,7 @@ createApp({
       profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
       shaftSmart,shaftSmartTypes,shaftSmartDefinition,shaftSmartPorts,shaftSmartBaseLabel,shaftSmartAvailable,createShaftSmartFixture,
       hasHiddenParts,toggleSelectionVisibility,mirrorAlong,clearAllConnections,
-      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
+      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,coplanarTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
       ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
       catalogConnectionForm,catalogAccessoryForm,profileClosure,profileChoices,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,selectedConnectionInstallable,snapSelectedConnection,editorCycleConnectionCandidate,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
@@ -3634,7 +3649,7 @@ createApp({
       selectedNominalChanged,selectedProfileModelChanged,profileMetaChanged,toggleSelectedFaceClosure,selectedPathChanged,primitiveChanged,
       profileLengthForm,profileLengthEditable,profileLengthEndBlocked,syncProfileLengthForm,applyProfileLength,
       importSectionDxf,handleSectionDxf,restoreReferenceSection,
-      startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
+      startConnectionPlacement,cancelConnectionPlacement,startMachiningPlacement,cancelMachiningPlacement,contextStartConnection,quickStartConnection,contextStartAccessory,quickStartAccessory,contextOpenAccessories,contextOpenMachining,contextOpenPanelTools,setMode,toggleTransformSpace,setTransformSpace,setMovementStep,setTransformMoveScope,toggleWorkPlane,setWorkPlane,applyContextProfileLength,promptProfileLength,toggleSnap,toggleAutoConnection,completeExistingConnections,clearAutoConnections,toggleGrid,toggleProjection,toggleMeasure,toggleDimensionMode,updateAnnotationOptions,removeUserDimension,clearUserDimensions,userDimensionChanged,userDimensionValue,userDimensionDrivenChanged,userDimensionBindingLabel,userDimensionUnit,userDimensionMin,createSelectionAxisDimension,createSelectionSlotDimension,createSelectionAngleDimension,createDimensionChain,createSelectedRadiusDimension,createSelectedArcAngleDimension,createMachiningDimension,createMachiningOffsetDimension,createMachiningBaselineChain,toggleBoxSelect,toggleLassoSelect,deleteSelected,duplicateSelected,selectAll,groupSelection,ungroupSelection,hideSelection,toggleLockSelection,focusSelection,undo,redo,fitView,viewIso,viewFront,viewBack,viewLeft,viewRight,viewTop,viewBottom,capturePng,
       propertyChanged,applyTransformFromFields,setRotationField,radToDeg,
       importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,downloadLocalDraft,autosaveError,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
       addThroughHole,addCountersink,addStartTap,addEndTap,addSlot,addObroundSlot,addMillingRegion,addStartEndHole,addEndEndHole,machiningChanged,deleteMachining,machiningTypeName,machiningLinearPattern,machiningRectangularPattern,machiningEditPattern,machiningDissolvePattern,machiningCopy,machiningPaste,machiningMirrorOffset,machiningMirrorFace,machiningMirrorEnd,toggleMachiningSelection,applyMachiningBatchFace,clearMachiningSelection,

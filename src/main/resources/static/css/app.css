@@ -945,6 +945,8 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .workbench-footer-status button:hover,.workbench-footer-status button:focus-visible{background:#fff;color:#a65300;outline:1px solid #ee9b45}
 .workbench-footer-status .footer-help.is-drawing{color:#a65300;font-size:11px}
 .workbench-footer-status .footer-alert{color:#b45309;font-size:11px;cursor:pointer}
+.workbench-footer-status .footer-coplanar{display:inline-flex;align-items:center;gap:4px;color:#7450ad;font-size:11px}
+.workbench-footer-status .footer-coplanar i{width:6px;height:6px;border-radius:2px;background:#a17af5}
 .footer-unit{font-size:10px;color:#64748b}
 /* v0.75.5：紧凑导航增加离底阴影，尺寸和上前相机方向保持不变。 */
 .view-cube-viewport canvas{filter:drop-shadow(0 2px 2px rgba(41,59,83,.24))}

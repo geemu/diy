@@ -68,4 +68,4 @@ assert.ok(sceneSource.includes('pmrem.fromScene(room,.04)')&&sceneSource.include
 assert.ok(html.includes('three/addons/environments/RoomEnvironment.js')&&pom.includes('environments/RoomEnvironment.js'));
 assert.ok(fs.existsSync(path.join(vendor,'examples/jsm/environments/RoomEnvironment.js')),'环境模块必须在构建期本地交付');
 geometry.dispose();round.dispose();
-console.log(JSON.stringify({ok:true,version:'0.75.34',moveCases,arrows:3,negativePickers:false,cavityVertices,endVertices,geometryUnchanged:true,localEnvironment:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.36',moveCases,arrows:3,negativePickers:false,cavityVertices,endVertices,geometryUnchanged:true,localEnvironment:true}));
