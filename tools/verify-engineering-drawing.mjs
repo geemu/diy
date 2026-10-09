@@ -15,8 +15,8 @@ const pom=read('pom.xml');
 
 assert.match(schema,/CURRENT_PROJECT_SCHEMA_VERSION = 62/);
 assert.match(schema,/CURRENT_APP_VERSION = '0\.75\.24'/);
-assert.ok(html.includes('v0.75.32'));
-assert.ok(pom.includes('<version>0.75.32</version>'));
+assert.ok(html.includes('v0.75.34'));
+assert.ok(pom.includes('<version>0.75.34</version>'));
 for(const token of ['二维工程图','A3 横向','A4 横向','导出 DXF 制图文件']) assert.ok(html.includes(token),`missing UI: ${token}`);
 for(const token of ['EngineeringDrawingService','engineeringDrawingService','drawingSettings']) assert.ok(editor.includes(token),`missing editor integration: ${token}`);
 for(const token of ['装配工程图','总装工程图_model.json','drawingPaper','buildSubassemblySheets']) assert.ok(factory.includes(token),`missing factory drawing output: ${token}`);
@@ -57,4 +57,4 @@ assert.ok(layout.titleBlock.height>0);
 const svg=new svgModule.default().export(model,layout,{projectName:'Test Frame',revision:'B'});
 for(const token of ['正视图','俯视图','右视图','等轴测图','title-block','Test Frame','版本 B']) assert.ok(svg.includes(token),`missing SVG token ${token}`);
 
-console.log(JSON.stringify({ok:true,version:'0.75.32',schema:62,drawingModel:1,views:['FRONT','TOP','RIGHT','ISO'],paper:['A3','A4'],factoryPackage:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.34',schema:62,drawingModel:1,views:['FRONT','TOP','RIGHT','ISO'],paper:['A3','A4'],factoryPackage:true},null,2));

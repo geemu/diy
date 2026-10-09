@@ -59,4 +59,4 @@ assert.ok(deleteSource.includes('await confirmWorkbench'));assert.ok(!deleteSour
 assert.ok(html.includes('aria-label="型材总长度（mm）"'));assert.ok(html.includes(':disabled="!contextLengthEditable(\'END\')"'));
 assert.ok(css.includes('.context-menu button.active{background:#ff8a001a'));assert.ok(css.includes('.context-menu kbd{background:#1e2230'));assert.ok(css.includes('background:#191c29!important'));assert.ok(css.includes('.workbench-confirm-backdrop{z-index:30000'));
 results.inPageConfirmationContextStatesAndKeyboardContract=true;
-dispose(e);console.log(JSON.stringify({ok:true,version:'0.75.32',...results}));
+dispose(e);console.log(JSON.stringify({ok:true,version:'0.75.34',...results}));

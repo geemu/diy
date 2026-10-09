@@ -149,5 +149,5 @@ outcomes.nineMappedTypes=true;
   assert.ok(!app.includes("const preferred = new Set(['2020','3030','4040','4545','6060','8080'])"),'框架不能继续使用只允许六个方截面的旧白名单');
   outcomes.invalidFrameAtomicAndUnifiedForm=true;dispose(e);
 }
-console.log(JSON.stringify({ok:true,version:'0.75.32',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.34',...outcomes}));
 export {editor,joint,dispose,signature,countMeshes,THREE,load};

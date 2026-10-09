@@ -90,4 +90,4 @@ assert.deepEqual(getCenterAndSize.call({meshes:[]},THREE).center.toArray(),[0,0,
 const existingMesh=new THREE.Mesh(new THREE.BoxGeometry(100,200,300));existingMesh.position.set(250,700,-100);
 assert.deepEqual(getCenterAndSize.call({meshes:[existingMesh]},THREE).center.toArray(),[250,700,-100],'已有工程必须围绕模型中心，不移动或强制居中原点');
 existingMesh.geometry.dispose();existingMesh.material.dispose();
-console.log(JSON.stringify({ok:true,version:'0.75.32',pickCases,centerCases,litFaces:true,perspectiveDepth:true,initialUpperFront:true,emptyViewCentered:true,existingModelCenterPreserved:true,renderOnly:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.34',pickCases,centerCases,litFaces:true,perspectiveDepth:true,initialUpperFront:true,emptyViewCentered:true,existingModelCenterPreserved:true,renderOnly:true}));

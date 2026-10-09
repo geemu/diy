@@ -43,4 +43,4 @@ assert.ok(app.includes('editor.setSelectedProfileLengthFromEnd('),'长度草稿�
 assert.ok(html.includes('固定 A 端，调整 B 端')&&html.includes('固定 B 端，调整 A 端'));
 assert.ok(html.includes('v-model.number="profileLengthForm.lengthMm"'),'输入不能直接修改业务长度');
 assert.ok(app.includes("input?.focus();input?.select()"),'双击端点聚焦侧栏长度输入');
-console.log(JSON.stringify({ok:true,version:'0.75.32',hoverOnly:true,pixelSized:true,endpointProtection:true,placementShield:true,anchoredInput:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.34',hoverOnly:true,pixelSized:true,endpointProtection:true,placementShield:true,anchoredInput:true}));

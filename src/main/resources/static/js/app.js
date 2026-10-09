@@ -110,8 +110,9 @@ createApp({
     const quickAlignmentForm=reactive({kind:'END',referenceId:null,axis:'X',axes:['Y'],end:'START',targetFace:'FRONT',stationPercent:50});
     const quickAlignmentPreview=reactive({ready:false,changedCount:0,rows:[],collisions:[],message:'',error:''});
     const alignmentReferences=computed(()=>selectedMeshes.value.map(mesh=>({id:mesh.userData.part.id,label:mesh.userData.part.displayId||mesh.userData.part.name||mesh.userData.part.id})));
-    const connectionBatchState=reactive({active:false,profileCount:0,contactCount:0,readyCount:0,existingCount:0,blockedCount:0,invalidCount:0,uncheckedCount:0,nearbyCount:0,skippedCount:0,freeEndCount:0,rows:[]});
-    const connectionBatchForm=reactive({type:'AUTO',spec:'AUTO',sides:'BOTH',scope:'ALL',supplement:true});
+    const connectionBatchState=reactive({active:false,busy:false,phase:'',progress:0,processedCount:0,totalCount:0,profileCount:0,contactCount:0,readyCount:0,existingCount:0,blockedCount:0,invalidCount:0,uncheckedCount:0,nearbyCount:0,skippedCount:0,freeEndCount:0,rows:[]});
+    const connectionBatchForm=reactive({type:'AUTO',spec:'AUTO'});
+    const connectionBatchNotice=ref('');
     const frameEdit=reactive({active:false,assemblyId:null,ready:false,memberCount:0,addedCount:0,removedCount:0,panelCount:0,collisionCount:0,error:''});
     const selectedParameterFrame=computed(()=>{projectRevision.value;const id=selectedPart.value?.assemblyId;return id&&selectedMeshes.value.every(mesh=>mesh.userData.part.assemblyId===id)?editor?.assemblyManager.get(id)?.configurator==='LAYERED_RACK'?editor.assemblyManager.get(id):null:null;});
     function beginFrameEdit(){
@@ -174,16 +175,19 @@ createApp({
       catch(error){quickAlignmentPreview.ready=false;quickAlignmentPreview.error=error.message;notify(error.message,'warning');}
     }
     function closeQuickAlignment(){editor?.quickAlignmentManager.cancel();quickAlignmentVisible.value=false;}
-    function scanConnectionComponents(){
-      try{editor.connectionBatchManager.scan({...connectionBatchForm,profileIds:connectionBatchForm.scope==='SELECTED'?[...selectedProfileIds.value]:null});}
+    async function scanConnectionComponents(){
+      try{return await editor.connectionBatchManager.scan({...connectionBatchForm,sides:'BOTH',supplement:true,profileIds:null});}
       catch(error){cancelConnectionBatch();notify(error.message,'warning');}
     }
-    function connectionBatchTypeChanged(){connectionBatchForm.spec='AUTO';scanConnectionComponents();}
-    function toggleConnectionBatchRow(row,enabled){editor?.connectionBatchManager.toggle(row.id,enabled);}
-    function focusConnectionBatchRow(row){editor?.focusPartIds([row.sourceId,row.targetId],{select:false});}
+    function connectionBatchTypeChanged(){connectionBatchForm.spec='AUTO';connectionBatchNotice.value='';}
     function cancelConnectionBatch(){editor?.connectionBatchManager.cancel();}
-    function confirmConnectionBatch(){
-      try{const result=editor.connectionBatchManager.confirm();notify('已在 '+result.connectionCount+' 处接头生成 '+result.createdCount+' 个设计连接件，可撤销；制造方案仍需配置');}
+    async function confirmConnectionBatch(){
+      if(!editor?.connectionBatchManager.isActive()||connectionBatchState.busy)return;
+      connectionBatchNotice.value='';
+      const manager=editor.connectionBatchManager,pending=scanConnectionComponents(),revision=manager.runRevision;
+      const state=await pending;if(!state||!manager.isActive()||manager.busy||revision!==manager.runRevision)return;
+      if(!state.readyCount){connectionBatchNotice.value=state.blockedCount?'所选连接件暂无可安装的位置，请换个类型或先调整型材。':state.existingCount?'未发现需要新增的位置，已有连接件已保留。':'暂无可安装的位置，请先把型材吸附贴合。';return;}
+      try{const result=editor.connectionBatchManager.confirm();notify('已生成 '+result.createdCount+' 个连接件，可撤销');}
       catch(error){notify(error.message,'warning');}
     }
     function openShaftSmart(){
@@ -2757,13 +2761,12 @@ createApp({
       notify(`新建构件自动连接已${autoConnectionEnabled.value ? '开启' : '关闭'}`,'warning');
     }
 
-    function completeExistingConnections() {
+    async function completeExistingConnections() {
       if (!editor) return;
       returnToSelection();
-      if(connectionBatchForm.scope==='SELECTED'&&selectedProfileIds.value.length<2)connectionBatchForm.scope='ALL';
+      rightPanelMode.value='create';quickPanel.value='';connectionBatchNotice.value='';
       try {
-        editor.connectionBatchManager.begin({...connectionBatchForm,profileIds:connectionBatchForm.scope==='SELECTED'?[...selectedProfileIds.value]:null});
-        rightPanelMode.value='create';quickPanel.value='';
+        await editor.connectionBatchManager.begin({...connectionBatchForm,sides:'BOTH',supplement:true,profileIds:null},{interactive:true,scanImmediately:false});
       } catch (error) {
         notify(error.message || '扫描连接失败','error');
       }
@@ -3612,7 +3615,7 @@ createApp({
     return {
       workbenchConfirm,finishWorkbenchConfirm,contextLengthEditable,
       wholeStretchState,startWholeStretch,confirmWholeStretch,cancelWholeStretch,stretchRangeMode,
-      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,toggleConnectionBatchRow,focusConnectionBatchRow,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
+      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
       shaftSmart,shaftSmartTypes,shaftSmartDefinition,shaftSmartPorts,shaftSmartBaseLabel,shaftSmartAvailable,createShaftSmartFixture,
       hasHiddenParts,toggleSelectionVisibility,mirrorAlong,clearAllConnections,
       quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,

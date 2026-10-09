@@ -183,14 +183,8 @@ export default class ConnectionPlacementManager {
         if(event&&hit?.object&&sourceMesh!==hit.object&&targetMesh!==hit.object&&point.distanceTo(hit.point)>Math.max(56,...sourceMesh.userData.part.dimensions.sectionSize))continue;
         const faces=this.componentDefinition&&this.mode==='ANGLE_BRACKET'?[null,'FRONT','BACK','LEFT','RIGHT']:[null];
         for(const face of faces){
-          // 目录角码的接触角点在源侧面，不只在端中心；两根梁的侧面内角也可按真实腿/孔位检查。
-          const contact=point.clone();
-          if(face){const size=sourceMesh.userData.part.dimensions.sectionSize;contact.addScaledVector(slotWorldNormal(sourceMesh,face),Number(['FRONT','BACK'].includes(face)?size[1]:size[0])/2);}
-          const targetFeature=resolveProfileSurfaceFeature(targetMesh,contact,{slotToleranceMm:24});
-          const targetPoint=targetFeature&&profileFeatureWorldPoint(targetMesh,targetFeature);
-          if(!targetPoint||targetPoint.distanceTo(contact)>12.01)continue;
-          const target={mesh:targetMesh,feature:targetFeature,point:targetPoint,displayId:targetMesh.userData.part.displayId||targetMesh.userData.part.name};
-          this.pushJointCandidate(list,source,target,point,{sourceMountFace:face});
+          const context=this.resolveJointContact(source,targetMesh,face);if(!context)continue;
+          this.pushJointCandidate(list,source,context.target,point,{sourceMountFace:face});
           list[list.length-1].distance=distance;
         }
       }
@@ -198,7 +192,26 @@ export default class ConnectionPlacementManager {
     return list;
   }
 
+  /** 手动与批量安装共用真实侧面角点；这里只找特征，腿支撑、孔槽和空间仍由安装校验决定。 */
+  resolveJointContact(source,targetMesh,sourceMountFace=null) {
+    if(!source?.point||source.mesh===targetMesh)return null;
+    const contactPoint=source.point.clone();
+    if(sourceMountFace){
+      const size=source.mesh.userData.part.dimensions.sectionSize;
+      contactPoint.addScaledVector(slotWorldNormal(source.mesh,sourceMountFace),Number(['FRONT','BACK'].includes(sourceMountFace)?size[1]:size[0])/2);
+    }
+    const feature=resolveProfileSurfaceFeature(targetMesh,contactPoint,{slotToleranceMm:24});
+    const point=feature&&profileFeatureWorldPoint(targetMesh,feature);
+    if(!point||point.distanceTo(contactPoint)>12.01)return null;
+    const target={mesh:targetMesh,feature,point,displayId:targetMesh.userData.part.displayId||targetMesh.userData.part.name};
+    // 去重锚点取两材料面的交点，不让允许范围内的微小端面间隙产生正反两份内角。
+    const normal=slotWorldNormal(targetMesh,feature.face);
+    contactPoint.addScaledVector(normal,-contactPoint.clone().sub(point).dot(normal));
+    return {source,target,sourceMountFace,contactPoint};
+  }
+
   evaluateCandidate(context,options={}) {
+    if(!context?.source||!context?.target)return null;
     const mode=options.mode||this.mode,componentDefinition=options.componentDefinition??this.componentDefinition,existingPartId=options.existingPartId??this.existingPartId;
     const preserveExisting=options.preserveExisting??this.isActive();
     const ranked=componentDefinition?this.editor.connectionManager.recommendDesignFor(context.source.mesh,context.target.mesh,{sourceEnd:context.source.feature.end,targetFace:context.target.feature.face,sourceMountFace:context.sourceMountFace,componentDefinition}):context.designCandidates;
@@ -231,15 +244,15 @@ export default class ConnectionPlacementManager {
     if(!transform)fail('无法确定连接件安装方向');
     let envelope=null;
     if(valid&&componentDefinition){
-      const ghost=connectorGhost(mode,transform.position,0x24b36b,componentDefinition,transform);
-      ghost.updateMatrixWorld(true);
-      if(mode==='ANGLE_BRACKET'&&!connectorFootprintFits(ghost,source.mesh,target.mesh,geometry.sourceMountFace,target.feature.face))fail('所选方向没有足够的型材安装面，请换另一面或更小的连接件');
-      envelope=connectorEnvelope(ghost);
+      // 批量扫描只复用本轮实际目录几何的局部包络，不缓存安装合法性或提交结果。
+      envelope=componentEnvelope(mode,componentDefinition,transform,options.evaluationCache?.componentBounds);
+      if(mode==='ANGLE_BRACKET'&&!connectorFootprintFits(null,source.mesh,target.mesh,geometry.sourceMountFace,target.feature.face,envelope))fail('所选方向没有足够的型材安装面，请换另一面或更小的连接件');
       // 复杂配件只承诺安装包络检查，不将包络重叠当成精确实体布尔。
       for(const mesh of this.editor.meshes){
         const part=mesh.userData?.part;
         if(!part||part.hidden||mesh.visible===false||[source.mesh,target.mesh].includes(mesh)||part.id===existingPartId)continue;
-        const other=profileObb(part)||connectorEnvelope(mesh);
+        const cache=options.evaluationCache?.bodyEnvelopes;
+        const other=cache?.has(mesh)?cache.get(mesh):profileObb(part)||connectorEnvelope(mesh);
         if(envelopesOverlap(envelope,other,Number(this.editor.projectSettings?.collisionToleranceMm??.5))){fail(`安装空间与 ${part.displayId||part.name} 重叠，请移开障碍或切换候选`);break;}
       }
       if(preserveExisting)for(const connection of this.editor.connectionManager.connections){
@@ -247,7 +260,6 @@ export default class ConnectionPlacementManager {
         if(!connection.designComponent||connection.manufacturingRuleId||!helper||helper.visible===false)continue;
         if(helper.children.some(child=>envelopesOverlap(envelope,connectorEnvelope(child),Number(this.editor.projectSettings?.collisionToleranceMm??.5)))){fail('这个位置已有连接件占用，请切换空闲安装侧');break;}
       }
-      disposePreview(ghost);
     }
     return {...context,item,key,valid,message,transform,envelope};
   }
@@ -460,9 +472,20 @@ export function connectorEnvelope(object){
   return {center,axes:axes.map(axis=>axis.clone().normalize()),half:axes.map((axis,index)=>axis.length()*half.getComponent(index))};
 }
 export function envelopesOverlap(a,b,tolerance=.5){return !!a&&!!b&&intersectObb(a,b,tolerance).intersects;}
+function componentEnvelope(mode,definition,transform,cache){
+  const key=cache&&JSON.stringify([definition.accessoryType,definition.dimensions]);
+  let local=cache?.get(key);
+  if(!local){
+    const ghost=connectorGhost(mode,new THREE.Vector3(),0x24b36b,definition,{quaternion:new THREE.Quaternion()});
+    try{local=connectorEnvelope(ghost);}finally{disposePreview(ghost);}
+    if(local)cache?.set(key,local);
+  }
+  if(!local)return null;
+  return {center:local.center.clone().applyQuaternion(transform.quaternion).add(transform.position),axes:local.axes.map(axis=>axis.clone().applyQuaternion(transform.quaternion)),half:[...local.half]};
+}
 /** 角码两条腿都要有实际宿主支撑；端部朝外的悬空腿不能算成“另一侧可安装”。只读包络，不移动主体。 */
-export function connectorFootprintFits(object,source,target,sourceFace,targetFace){
-  const envelope=connectorEnvelope(object);if(!envelope)return false;
+export function connectorFootprintFits(object,source,target,sourceFace,targetFace,envelope=connectorEnvelope(object)){
+  if(!envelope)return false;
   const corners=[];
   for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1])corners.push(new THREE.Vector3().copy(envelope.center).addScaledVector(envelope.axes[0],x*envelope.half[0]).addScaledVector(envelope.axes[1],y*envelope.half[1]).addScaledVector(envelope.axes[2],z*envelope.half[2]));
   for(const [mesh,face] of [[source,sourceFace],[target,targetFace]]){
