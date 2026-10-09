@@ -2952,6 +2952,18 @@ export default class Editor {
     return {center,max:Math.max(size.x,size.y,size.z,500),radius:size.length()/2};
   }
 
+  /** 首次恢复没有历史镜头时优先框住主体，避免远处误放的自由配件把整个框架压成小点。 */
+  getPrimaryCenterAndSize() {
+    const visible=this.meshes.filter(mesh=>mesh.visible!==false);
+    const structural=visible.filter(mesh=>['PROFILE','SHAFT','PANEL'].includes(mesh.userData.part?.type));
+    const candidates=structural.length?structural:(visible.length?visible:this.meshes);
+    if(!candidates.length)return {center:new THREE.Vector3(0,0,0),max:1200,radius:600};
+    const box=new THREE.Box3();
+    for(const mesh of candidates)box.expandByObject(mesh);
+    const center=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
+    return {center,max:Math.max(size.x,size.y,size.z,500),radius:size.length()/2};
+  }
+
   fitView() {
     const {center,max,radius} = this.getCenterAndSize();
     const manager=this.sceneManager;
@@ -2966,6 +2978,17 @@ export default class Editor {
     const halfFov=Math.min(verticalHalfFov,Math.atan(Math.tan(verticalHalfFov)*aspect));
     const distance=paddedRadius/Math.sin(halfFov);
     this.sceneManager.setView('iso',center,distance/Math.hypot(.78,.62,.78));
+  }
+
+  fitPrimaryView() {
+    const {center,max,radius}=this.getPrimaryCenterAndSize(),manager=this.sceneManager;
+    const aspect=Math.max(.1,manager.container.clientWidth/Math.max(1,manager.container.clientHeight));
+    const paddedRadius=Math.max(radius||max*.866,250)*1.2;
+    if(manager.camera.isOrthographicCamera){manager.camera.zoom=2200/(2*paddedRadius/Math.min(1,aspect));manager.resize();}
+    const verticalHalfFov=THREE.MathUtils.degToRad(manager.perspectiveCamera.fov/2);
+    const halfFov=Math.min(verticalHalfFov,Math.atan(Math.tan(verticalHalfFov)*aspect));
+    const distance=paddedRadius/Math.sin(halfFov);
+    manager.setView('iso',center,distance/Math.hypot(.78,.62,.78));
   }
 
   viewDirection(direction) { const {center,max}=this.getCenterAndSize(); this.sceneManager.setView(direction,center,max*1.65); }

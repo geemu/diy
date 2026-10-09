@@ -37,4 +37,4 @@ a.pointer={x:(p.x+1)*400,y:(1-p.y)*300};e.addProfile('DESIGN-4040',260,{position
 a.dispose();assert.equal(e.sceneManager.renderer.domElement.listeners.size,0);assert.equal(e.sceneManager.container.dataset.machiningHover,undefined);delete globalThis.document;delete globalThis.requestAnimationFrame;
 const css=fs.readFileSync('src/main/resources/static/css/app.css','utf8');assert.ok(css.includes('.scene-annotation-label.machining{background:#17202e'));assert.ok(!css.includes('.scene-annotation-label.machining{background:#25c86b'));
 outcomes.oneCompactHoverTipOcclusionDragDefaultAndCleanup=true;dispose(e);
-console.log(JSON.stringify({ok:true,version:'0.75.24',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.25',...outcomes}));

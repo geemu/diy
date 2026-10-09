@@ -21,6 +21,7 @@ export default class SceneManager {
     this.hoveredObject = null;
     this.hoverLabel = null;
     this.cameraTween = null;
+    this.onViewChanged = null;
     this.measurementGroup = null;
     this.projection = 'perspective';
     this.gridVisible = true;
@@ -44,7 +45,7 @@ export default class SceneManager {
     const width = this.container.clientWidth || 1000;
     const height = this.container.clientHeight || 700;
 
-    this.perspectiveCamera = new THREE.PerspectiveCamera(38, width / height, 1, 50000);
+    this.perspectiveCamera = new THREE.PerspectiveCamera(38, width / height, .05, 2000000);
     this.perspectiveCamera.position.set(1800, 1450, 1800);
 
     const frustum = 2200;
@@ -53,8 +54,8 @@ export default class SceneManager {
       frustum * width / height / 2,
       frustum / 2,
       -frustum / 2,
-      -50000,
-      50000
+      -2000000,
+      2000000
     );
     this.orthographicCamera.position.copy(this.perspectiveCamera.position);
     this.camera = this.perspectiveCamera;
@@ -124,13 +125,8 @@ export default class SceneManager {
     this.snapPreviewGroup.renderOrder = 1500;
     this.scene.add(this.snapPreviewGroup);
 
-    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControls.enableDamping = true;
-    this.orbitControls.dampingFactor = 0.08;
+    this.orbitControls = this.configureOrbitControls(new OrbitControls(this.camera, this.renderer.domElement));
     this.orbitControls.target.set(0, 0, 0);
-    this.orbitControls.screenSpacePanning = true;
-    this.orbitControls.minDistance = 40;
-    this.orbitControls.maxDistance = 40000;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
     this.compactTranslationGizmo();
@@ -207,6 +203,50 @@ export default class SceneManager {
   resetInitialView() {
     // 空白工作台围绕世界原点观察，使四象限轴交点位于实际画布中心，而非偏向底部。
     this.setView(new THREE.Vector3(0,1,1),new THREE.Vector3(0,0,0),3000,{immediate:true});
+  }
+
+  /** 所有投影共用鼠标位置缩放和实用的近距离范围，切换投影后也不能退回默认限制。 */
+  configureOrbitControls(controls) {
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.screenSpacePanning = true;
+    controls.zoomToCursor = true;
+    controls.minDistance = 1;
+    controls.maxDistance = 1000000;
+    controls.minZoom = .0001;
+    controls.maxZoom = 100000;
+    controls.addEventListener('change',()=>this.onViewChanged?.());
+    return controls;
+  }
+
+  /** 只导出本机相机状态；不包含构件、临时预览或任何制造事实。 */
+  captureViewState() {
+    return {
+      version:1,
+      projection:this.projection,
+      position:this.camera.position.toArray(),
+      target:this.orbitControls.target.toArray(),
+      orthographicZoom:Number(this.orthographicCamera.zoom||1)
+    };
+  }
+
+  restoreViewState(state) {
+    const vector=value=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite);
+    if(state?.version!==1||!vector(state.position)||!vector(state.target))return false;
+    const position=new THREE.Vector3().fromArray(state.position),target=new THREE.Vector3().fromArray(state.target);
+    if(position.distanceToSquared(target)<1e-6)return false;
+    this.cameraTween=null;
+    this.setProjection(state.projection==='orthographic'?'orthographic':'perspective');
+    this.camera.position.copy(position);
+    this.orbitControls.target.copy(target);
+    if(this.camera.isOrthographicCamera&&Number.isFinite(state.orthographicZoom)){
+      this.camera.zoom=THREE.MathUtils.clamp(state.orthographicZoom,this.orbitControls.minZoom,this.orbitControls.maxZoom);
+    }
+    this.camera.lookAt(target);
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
+    this.orbitControls.update();
+    return true;
   }
 
   /** 仅裁掉负轴显示件及拾取件；正轴柄仍使用原 TransformControls 双向拖动事务。 */
@@ -673,13 +713,11 @@ export default class SceneManager {
     this.projection = targetType;
     const target = this.orbitControls.target.clone();
     this.orbitControls.dispose();
-    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControls.enableDamping = true;
-    this.orbitControls.dampingFactor = 0.08;
-    this.orbitControls.screenSpacePanning = true;
+    this.orbitControls = this.configureOrbitControls(new OrbitControls(this.camera, this.renderer.domElement));
     this.orbitControls.target.copy(target);
     this.transformControls.camera = this.camera;
     this.resize();
+    this.onViewChanged?.();
   }
 
   setView(direction, center = new THREE.Vector3(), distance = 2500, options={}) {

@@ -305,6 +305,7 @@ createApp({
     let layoutManager = null;
     const localDraft = new LocalProjectDraft();
     let autosaveReady = false;
+    let viewportSaveTimer = null;
 
     // 用户确认尺寸归组后选择具体型号。只投影几何，不提前绑定制造材料属性。
     const designProfiles = DesignProfileList;
@@ -1188,6 +1189,7 @@ createApp({
       await loadAccessoryCatalog({silent:true});
       // 目录注册和回调就绪后再恢复；成功或确认新建以前，启动空白状态不得覆盖旧草稿。
       initializeLocalDraft();
+      editor.sceneManager.onViewChanged=scheduleViewportSave;
       window.addEventListener('pagehide',flushLocalDraft);
       window.addEventListener('beforeunload',flushLocalDraft);
       document.addEventListener('visibilitychange',handleDraftVisibility);
@@ -1206,6 +1208,7 @@ createApp({
 
     onBeforeUnmount(() => {
       hideFooterTip();
+      clearTimeout(viewportSaveTimer);
       viewportResizeObserver?.disconnect();
       window.removeEventListener('keydown', handleKeyboard);
       window.removeEventListener('keyup', handleKeyboardUp);
@@ -2143,6 +2146,9 @@ createApp({
         const project=localDraft.read();
         if(project){
           editor.loadProject(project);syncManufacturingForm();sectionRevision.value++;projectRevision.value++;
+          const restored=editor.sceneManager.restoreViewState(localDraft.readViewport());
+          if(!restored)editor.fitPrimaryView();
+          projection.value=editor.sceneManager.projection;
           autosaveInfo.value=localDraft.savedAt()?new Date(localDraft.savedAt()).toLocaleTimeString('zh-CN',{hour12:false}):'上次会话';
           notify('已自动继续上次的本地工程');
         }
@@ -2162,6 +2168,17 @@ createApp({
     function flushLocalDraft(){
       if(!autosaveReady)return;
       try{localDraftSaved(localDraft.flush());}catch(error){localDraftFailed(error);}
+      saveViewportState();
+    }
+
+    function saveViewportState(){
+      if(!editor||!autosaveReady)return;
+      try{localDraft.captureViewport(editor.sceneManager.captureViewState());}catch(_){}
+    }
+
+    function scheduleViewportSave(){
+      clearTimeout(viewportSaveTimer);
+      viewportSaveTimer=setTimeout(saveViewportState,140);
     }
 
     function handleDraftVisibility(){if(document.visibilityState==='hidden')flushLocalDraft();}
@@ -2177,6 +2194,9 @@ createApp({
         if(dirty.value&&!confirm('恢复本地草稿会替换当前未保存的修改。确定继续？'))return;
         const previous=autosaveReady;autosaveReady=false;
         try{editor.loadProject(project);}catch(error){autosaveReady=previous;throw error;}
+        const restored=editor.sceneManager.restoreViewState(localDraft.readViewport());
+        if(!restored)editor.fitPrimaryView();
+        projection.value=editor.sceneManager.projection;
         syncManufacturingForm();
         sectionRevision.value++;projectRevision.value++;autosaveReady=true;autosaveError.value='';dirty.value=false;
         notify('已恢复本地草稿');
@@ -2879,6 +2899,7 @@ createApp({
       try {
         const project=await ProjectIO.read(file),previous=autosaveReady;autosaveReady=false;
         try{editor.loadProject(project);}catch(error){autosaveReady=previous;throw error;}
+        localDraft.clearViewport();editor.fitPrimaryView();projection.value=editor.sceneManager.projection;
         Object.assign(engineeringDrawingForm,editor.drawingSettings);
         syncManufacturingForm();
         sectionRevision.value++; dirty.value=false; projectRevision.value++;
@@ -2919,7 +2940,7 @@ createApp({
       editor.historyManager.reset();
       sectionRevision.value++;projectRevision.value++;dirty.value=false;
       saveAutosave(true);
-      editor.sceneManager.resetInitialView();notify('已新建空白工程');
+      localDraft.clearViewport();editor.sceneManager.resetInitialView();saveViewportState();notify('已新建空白工程');
     }
 
     async function loadSample() {
@@ -2936,6 +2957,7 @@ createApp({
         });
         syncManufacturingForm();
         sectionRevision.value++; dirty.value=false; projectRevision.value++;
+        localDraft.clearViewport();editor.fitPrimaryView();
         saveAutosave(true);
         notify(`已生成鱼缸 / 龟缸架示例 · ${result.createdPartCount} 个构件`);
       } catch (error) {

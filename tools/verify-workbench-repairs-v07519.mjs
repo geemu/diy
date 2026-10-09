@@ -167,4 +167,4 @@ const outcomes={};
   labels.length=0;annotations.options.showPartDimensions=true;annotations.addProfileDimensions();assert.equal(labels.length,2);
   outcomes.contextDimensionsAndAllOption=true;dispose(e);
 }
-console.log(JSON.stringify({ok:true,version:'0.75.24',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.25',...outcomes}));

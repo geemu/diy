@@ -60,4 +60,4 @@ for(const token of ['BOM/','项目汇总.csv','型材BOM.csv','五金BOM.csv','�
 }
 for(const forbidden of ['StockCutOptimizer','StockLayoutExporter','原料排料.csv']) assert.ok(!factory.includes(forbidden),`raw-material feature leaked into FactoryPackageExporter: ${forbidden}`);
 
-console.log(JSON.stringify({ok:true,version:'0.75.24',schema:62,summary,cutRows:cut.length-1,machiningRows:machining.length-1,machiningBomGroups:machiningBom.length-1,rawMaterialScope:false},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.25',schema:62,summary,cutRows:cut.length-1,machiningRows:machining.length-1,machiningBomGroups:machiningBom.length-1,rawMaterialScope:false},null,2));

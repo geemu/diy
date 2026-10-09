@@ -11,5 +11,5 @@ for(const token of ['设计连接方式','换一个推荐方式','去制造配�
 assert.ok(html.includes('真实角码、螺钉、螺母和加工参数统一在“制造配置”中确定'));
 assert.ok(schema.includes('connectionQuickChangeVersion:1'));
 assert.ok(schema.includes('manufacturingConfigurationVersion:1'));
-assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.24'"));
-console.log(JSON.stringify({ok:true,version:'0.75.24',designQuickChange:true,sameConnectionId:true,manufacturingInvalidatedOnDesignChange:true,manufacturingConfiguredSeparately:true},null,2));
+assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.25'"));
+console.log(JSON.stringify({ok:true,version:'0.75.25',designQuickChange:true,sameConnectionId:true,manufacturingInvalidatedOnDesignChange:true,manufacturingConfiguredSeparately:true},null,2));

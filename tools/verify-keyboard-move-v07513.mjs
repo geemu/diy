@@ -55,4 +55,4 @@ assert.throws(()=>e.moveSelectionByDistance('X',NaN),/无效/);
 e.transformSpace='local';part.rotation.z=Math.PI/2;e.moveSelectionByDistance('X',10);assert.ok(part.position.distanceTo(new THREE.Vector3(102.5,30,30))<1e-6);
 e.isMeshTransformable=()=>false;assert.throws(()=>e.moveSelectionByDistance('X',5),/锁定/);
 const app=fs.readFileSync(path.join(js,'app.js'),'utf8');assert.ok(app.includes('target.isContentEditable'));assert.ok(app.indexOf("event.key==='Tab'&&connectionPlacementState.active")<app.indexOf('axisClearanceManager.handleKey(event)'));
-console.log(JSON.stringify({ok:true,version:'0.75.24',screenDirections:true,worldAndLocal:true,stepAndShift:true,tabContext:true,transaction:true,dragTotal:true,cancelNoHistory:true,lockedGuard:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.25',screenDirections:true,worldAndLocal:true,stepAndShift:true,tabContext:true,transaction:true,dragTotal:true,cancelNoHistory:true,lockedGuard:true}));
