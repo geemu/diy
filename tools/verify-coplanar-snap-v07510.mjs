@@ -70,4 +70,4 @@ const editorSource=fs.readFileSync(path.join(js,'core/Editor.js'),'utf8');
 assert.ok(editorSource.includes('this.onSnapChanged?.(null)'),'干涉位置保留，但清除 UI 绿色吸附状态');
 const connectionSource=fs.readFileSync(path.join(js,'connection/ConnectionManager.js'),'utf8');
 assert.ok(connectionSource.includes('error:best?.valid===true?null:'),'合法连接不能同时返回几何不满足的错误提示');
-console.log(JSON.stringify({ok:true,version:'0.75.36',sameTopNotCenter:true,tiltRejected:true,candidateCollision:true,thirdPartyObstacle:true,commitRecheck:true,readonly:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.39',sameTopNotCenter:true,tiltRejected:true,candidateCollision:true,thirdPartyObstacle:true,commitRecheck:true,readonly:true}));

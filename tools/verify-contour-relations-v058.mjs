@@ -13,7 +13,7 @@ const app=read('src/main/resources/static/js/app.js');
 const html=read('src/main/resources/static/index.html');
 const css=read('src/main/resources/static/css/app.css');
 
-assert.equal(CURRENT_APP_VERSION,'0.75.36');
+assert.equal(CURRENT_APP_VERSION,'0.75.39');
 assert.equal(CURRENT_PROJECT_SCHEMA_VERSION,62);
 for(const token of ['simpleConstraints','EQUAL_LENGTH','PARALLEL','ALIGN_POINTS','addSimpleConstraint','removeSimpleConstraint','validateSimpleConstraints','applyEqualLengthRelations']) assert.ok(manager.includes(token),`轮廓简单关系缺少 ${token}`);
 for(const token of ['addContourFrameConstraint','removeContourFrameConstraint','contourFrameVersion:5','connectionInstallationDiagramVersion:4']) assert.ok(editor.includes(token),`Editor 缺少 ${token}`);

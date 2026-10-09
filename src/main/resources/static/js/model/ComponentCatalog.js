@@ -1,8 +1,11 @@
 import {ComponentCatalogData as data} from './ComponentCatalogData.js';
+import {hiddenCornerLayout,hiddenCornerDimensions} from './ConnectionComponentPorts.js';
 
 /** 玩家组件目录：选项、规格与几何参数共用一份事实，预览与实际添加不得各自猜尺寸。 */
 const category = name => data.categories[name];
-export const ConnectionComponentOptions = category('连接').selects[0].options.filter(x=>!x.disabled);
+// 隐藏角槽件与原目录的一字长条不是同一零件，不改写原始参照目录数据。
+const hiddenCornerSpecs=[30,40].map(size=>({value:String(size),label:`${size}系列 · 槽8 · 隐藏角槽件`}));
+export const ConnectionComponentOptions = [...category('连接').selects[0].options.filter(x=>!x.disabled),{value:'HIDDEN_CORNER',label:'内置角槽连接件'}];
 export const ShaftComponentOptions = category('光轴').selects[0].options;
 export const PanelShapeOptions = category('板材').selects[0].options;
 export const AccessoryComponentOptions = category('配件').selects[0].options;
@@ -16,13 +19,15 @@ export const EndCapMaterialOptions = category('配件').variants.find(x=>x.selec
 export const APillarLengthOptions = category('连接').variants.at(-1).selects[2].options;
 export const APillarSideOptions = category('连接').variants.at(-1).selects[3].options;
 export function profileId(label) { return label.includes('A柱')?'DESIGN-U88':`DESIGN-${label.replace('欧标','').replace('x','')}`; }
-export function connectionSpecs(type) { return category('连接').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []; }
+export function connectionSpecs(type) { return type==='HIDDEN_CORNER'?hiddenCornerSpecs:category('连接').variants.find(x=>x.selects[0].value===type)?.selects[1].options || []; }
 /** 只有已有接头规则覆盖的组件才进入自动安装；不能把任意多向件当成直角角码。 */
-export function connectionDesignType(definition) {
+export function connectionDesignType(definition,{savedRecord=false}={}) {
   const d=definition?.dimensions||{};
   if(Number(d.size)===15)return null;
   if(['L_BRACKET','ANGLE_BRACKET','CORNER_CUBE','HEAVY_CORNER'].includes(d.geometryKind)&&Math.abs(Number(d.angle||90)-90)<.01)return 'ANGLE_BRACKET';
-  if(d.geometryKind==='INNER_BRACKET')return 'INTERNAL_CONNECTOR';
+  if(hiddenCornerLayout(d))return 'INTERNAL_CONNECTOR';
+  // 当前Schema已有记录只保留其原模型/位置；长条不能再冒充隐藏直角件安装。
+  if(d.geometryKind==='INNER_BRACKET'&&savedRecord)return 'INTERNAL_CONNECTOR';
   if(['FLAT_PLATE','T_PLATE','L_PLATE','CROSS_PLATE'].includes(d.geometryKind)&&Math.abs(Number(d.angle||90)-90)<.01)return 'CONNECTION_PLATE';
   return null;
 }
@@ -53,6 +58,11 @@ function definition(kind,label,dimensions,options={}) {
     dimensions:{geometryKind:kind,...dimensions},mountRule:options.mountRule||{target:'FREE'},...options};
 }
 export function connectionComponent(form) {
+  if(form.type==='HIDDEN_CORNER'){
+    const option=hiddenCornerSpecs.find(x=>x.value===String(form.spec))||hiddenCornerSpecs[0],size=Number(option.value);
+    return definition('HIDDEN_CORNER',option.label,hiddenCornerDimensions(size),
+      {color:'#a9adb2',note:'T槽窄颈宽脚、倒角与紧定螺钉设计参考；按本项目槽腔适配，不是采购尺寸或真实五金加工配置'});
+  }
   const type=form.type,option=connectionSpecs(type).find(x=>x.value===String(form.spec)) || connectionSpecs(type)[0];
   const label=option?.label||'',numbers=label.match(/\d+/g)?.map(Number)||[20,20];
   const size=label.includes('A柱')?8:numbers[0];

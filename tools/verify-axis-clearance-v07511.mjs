@@ -41,4 +41,4 @@ assert.ok(axis.includes("querySelector('.workbench-tools-row')"),'距离提示�
 assert.ok(axis.includes('onGroundCrossed')&&axis.includes('groundSide'),'跨平面反馈具备去抖');
 assert.ok(axis.includes('getWorldQuaternion'),'局部方向沿构件实际朝向');
 const gate=fs.readFileSync(path.join(js,'validation/FactoryValidator.js'),'utf8');assert.ok(gate.includes('PartCollisionDetector'),'制造导出干涉门禁仍保留');
-console.log(JSON.stringify({ok:true,version:'0.75.36',surfaceGap:true,directionalTarget:true,signedGroundDistance:true,allowBelowGround:true,keepInterference:true,factoryGate:true}));
+console.log(JSON.stringify({ok:true,version:'0.75.39',surfaceGap:true,directionalTarget:true,signedGroundDistance:true,allowBelowGround:true,keepInterference:true,factoryGate:true}));

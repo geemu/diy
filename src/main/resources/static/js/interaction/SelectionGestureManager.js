@@ -27,7 +27,8 @@ export default class SelectionGestureManager {
     const e=this.editor,s=e.sceneManager,controls=s.transformControls;
     const copy=event.ctrlKey||event.metaKey||event.altKey;
     if(event.button!==0||!this.available()||this.space||s.marqueeMode||controls.mode!=='translate'||controls.dragging||(!copy&&controls.axis)||event.shiftKey)return;
-    const hit=s.pickHit(event,e.selectableMeshes());
+    const hit=e.pickInteractionHit(event);
+    if(e.connectionForMesh(hit?.object))return;
     if(!hit?.object||!e.isMeshTransformable(hit.object))return;
     if(!copy&&!e.selectedMeshes.includes(hit.object))return;
     if(e.selectedMeshes.includes(hit.object)&&!e.isSelectionTransformable())return;

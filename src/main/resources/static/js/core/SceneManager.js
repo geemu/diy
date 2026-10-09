@@ -193,6 +193,7 @@ export default class SceneManager {
       if(this.skipContextMenu){this.skipContextMenu=false;return;}
       if (this.contextMenuHandler) this.contextMenuHandler(event);
     });
+    this.renderer.domElement.addEventListener('pointerleave',()=>{this.clearHover();this.pointerLeaveHandler?.();});
 
     this.applyViewportAnchor(width,height);
     this.resetInitialView();
@@ -489,7 +490,10 @@ export default class SceneManager {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    return this.raycaster.intersectObjects(roots, true);
+    return this.raycaster.intersectObjects(roots, true).filter(hit=>{
+      for(let object=hit.object;object;object=object.parent)if(object.visible===false)return false;
+      return true;
+    });
   }
 
   resolveRoot(object) {
@@ -542,9 +546,11 @@ export default class SceneManager {
     }
     this.clearHover();
     if (!object) return;
+    const connection=object.userData?.connectionId||object.userData?.part?.generatedByConnectionId;
+    const helper=connection?createSurfaceFeedback(object,{color:0x7aa7ff,opacity:.18,renderOrder:999}):new THREE.BoxHelper(object,0x7aa7ff);
+    if(!helper)return;
     this.hoveredObject = object;
-    const helper = new THREE.BoxHelper(object,0x7aa7ff);
-    helper.material.depthTest=false;helper.material.transparent=true;helper.material.opacity=.72;helper.renderOrder=998;
+    if(!connection){helper.material.depthTest=false;helper.material.transparent=true;helper.material.opacity=.72;helper.renderOrder=998;}
     this.hoverHelper=helper;this.scene.add(helper);
     this.renderer.domElement.style.cursor='pointer';
     if(event)this.positionHoverLabel(event,label);
@@ -560,7 +566,7 @@ export default class SceneManager {
   }
 
   clearHover() {
-    if(this.hoverHelper){this.scene.remove(this.hoverHelper);this.hoverHelper.geometry?.dispose?.();this.hoverHelper.material?.dispose?.();}
+    if(this.hoverHelper)disposeFeedback(this.hoverHelper);
     this.hoverHelper=null;this.hoveredObject=null;
     if(this.hoverLabel)this.hoverLabel.style.display='none';
     if(!this.marqueeMode && !this.lassoMode)this.renderer.domElement.style.cursor='';

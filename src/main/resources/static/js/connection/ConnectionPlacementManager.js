@@ -181,7 +181,7 @@ export default class ConnectionPlacementManager {
       for(const targetMesh of profiles){
         if(sourceMesh===targetMesh||(!event&&sourceMesh!==hit.object&&targetMesh!==hit.object))continue;
         if(event&&hit?.object&&sourceMesh!==hit.object&&targetMesh!==hit.object&&point.distanceTo(hit.point)>Math.max(56,...sourceMesh.userData.part.dimensions.sectionSize))continue;
-        const faces=this.componentDefinition&&this.mode==='ANGLE_BRACKET'?[null,'FRONT','BACK','LEFT','RIGHT']:[null];
+        const faces=this.componentDefinition&&['ANGLE_BRACKET','INTERNAL_CONNECTOR'].includes(this.mode)?[null,'FRONT','BACK','LEFT','RIGHT']:[null];
         for(const face of faces){
           const context=this.resolveJointContact(source,targetMesh,face);if(!context)continue;
           this.pushJointCandidate(list,source,context.target,point,{sourceMountFace:face});
@@ -214,6 +214,7 @@ export default class ConnectionPlacementManager {
     if(!context?.source||!context?.target)return null;
     const mode=options.mode||this.mode,componentDefinition=options.componentDefinition??this.componentDefinition,existingPartId=options.existingPartId??this.existingPartId;
     const preserveExisting=options.preserveExisting??this.isActive();
+    const ignoreConnectionId=options.ignoreConnectionId||null;
     const ranked=componentDefinition?this.editor.connectionManager.recommendDesignFor(context.source.mesh,context.target.mesh,{sourceEnd:context.source.feature.end,targetFace:context.target.feature.face,sourceMountFace:context.sourceMountFace,componentDefinition}):context.designCandidates;
     const item=ranked.find(row=>row.type===mode);
     if(!item)return null;
@@ -228,17 +229,13 @@ export default class ConnectionPlacementManager {
     if(Number(geometry?.contactGapMm)>.10001)fail('两根型材还没有贴合，请先吸附型材后安装连接件');
     if(intersectObb(profileObb(source.mesh.userData.part),profileObb(target.mesh.userData.part),Number(this.editor.projectSettings?.collisionToleranceMm??.5)).intersects)fail('两根型材发生干涉，请先移开穿透位置');
     if(valid&&this.editor.isMeshTransformable&&(!this.editor.isMeshTransformable(source.mesh)||!this.editor.isMeshTransformable(target.mesh)))fail('安装位置包含锁定构件，请先解锁');
-    const occupied=this.editor.connectionManager.connections.find(c=>c.jointKind!=='SIDE_CORNER'&&c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end);
+    const occupied=this.editor.connectionManager.connections.find(c=>c.id!==ignoreConnectionId&&c.jointKind!=='SIDE_CORNER'&&c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end&&c.targetProfileId!==target.mesh.userData.part.id);
     if(geometry?.jointKind!=='SIDE_CORNER'&&occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接');
-    const same=this.editor.connectionManager.connections.find(c=>c.sourceProfileId===source.mesh.userData.part.id&&c.targetProfileId===target.mesh.userData.part.id&&c.sourceEnd===source.feature.end&&c.targetFace===target.feature.face);
+    const joint=this.editor.connectionManager.connectionsAtJoint(source.mesh.userData.part.id,target.mesh.userData.part.id,source.feature.end,target.feature.face).filter(c=>c.id!==ignoreConnectionId);
+    const same=joint.find(c=>this.editor.connectionManager.mountFaces(c).includes(mountFace))||joint.find(c=>!c.designComponent&&!c.designComponentVariants);
     if(valid&&same?.manufacturingRuleId)fail('接头已配置制造方案，请到连接页修改');
     if(valid&&preserveExisting&&same&&(same.status==='INVALID'||same.validation?.ok===false))fail('这个接头已有失效连接，请先在连接页检查；原记录保持不变');
-    if(valid&&preserveExisting&&same?.designComponent){
-      const faces=same.designComponentMountFaces?.length?same.designComponentMountFaces:[same.designComponentMountFace||same.sourceMountFace];
-      if(same.designType!==mode||same.designComponent.id!==componentDefinition?.id)fail('这里已有其他型号的连接件，请到连接页修改；不会自动替换');
-      else if(faces.includes(mountFace))fail('这一侧已经安装连接件，请切换到空闲侧');
-      else if(mode!=='ANGLE_BRACKET'||faces.length!==1||oppositeFace(faces[0])!==mountFace)fail('该接头没有可追加的空闲侧，请选择其他安装位置');
-    }
+    if(valid&&preserveExisting&&same&&(same.designComponent||same.designComponentVariants))fail('这一侧已经安装连接件，请切换到空闲侧；修改请选中这一件');
     const descriptor={designType:mode,designComponent:componentDefinition,sourceEnd:source.feature.end,targetFace:target.feature.face,validation:geometry,sourceMountFace:geometry?.sourceMountFace,targetSlot:geometry?.targetSlot};
     const transform=geometry&&this.editor.connectionManager.resolveDesignComponentTransform(descriptor,source.mesh,target.mesh);
     if(!transform)fail('无法确定连接件安装方向');
@@ -250,12 +247,13 @@ export default class ConnectionPlacementManager {
       // 复杂配件只承诺安装包络检查，不将包络重叠当成精确实体布尔。
       for(const mesh of this.editor.meshes){
         const part=mesh.userData?.part;
-        if(!part||part.hidden||mesh.visible===false||[source.mesh,target.mesh].includes(mesh)||part.id===existingPartId)continue;
+        if(!part||part.hidden||mesh.visible===false||[source.mesh,target.mesh].includes(mesh)||part.id===existingPartId||(ignoreConnectionId&&part.generatedByConnectionId===ignoreConnectionId))continue;
         const cache=options.evaluationCache?.bodyEnvelopes;
         const other=cache?.has(mesh)?cache.get(mesh):profileObb(part)||connectorEnvelope(mesh);
         if(envelopesOverlap(envelope,other,Number(this.editor.projectSettings?.collisionToleranceMm??.5))){fail(`安装空间与 ${part.displayId||part.name} 重叠，请移开障碍或切换候选`);break;}
       }
       if(preserveExisting)for(const connection of this.editor.connectionManager.connections){
+        if(connection.id===ignoreConnectionId)continue;
         const helper=this.editor.connectionManager.helperMeshes.get(connection.id);
         if(!connection.designComponent||connection.manufacturingRuleId||!helper||helper.visible===false)continue;
         if(helper.children.some(child=>envelopesOverlap(envelope,connectorEnvelope(child),Number(this.editor.projectSettings?.collisionToleranceMm??.5)))){fail('这个位置已有连接件占用，请切换空闲安装侧');break;}

@@ -33,9 +33,9 @@ export default class FeatureHoverManager {
    * 根据当前鼠标命中的真实表面解析 Feature，并绘制轻量高亮。
    * hit.point 是 Raycaster 命中的世界坐标，因此不会使用屏幕近似点猜测特征。
    */
-  update(event) {
+  update(event,hit) {
     if (!this.enabled) return this.clear();
-    const hit = this.sceneManager.pickHit(event, this.editor.selectableMeshes());
+    if(hit===undefined)hit=this.editor.pickInteractionHit(event);
     const mesh = hit?.object;
     const part = mesh?.userData?.part;
     if (!mesh || part?.type !== 'PROFILE' || !hit?.point) return this.clear();

@@ -42,4 +42,4 @@ assert.equal(calls[0][1].centerBeamCount,0);
 assert.ok(catalogModule.DiyTemplateList.every(item=>item.generator==='LAYERED_RACK'));
 assert.equal(calls[1][0],'LAYERED_RACK');
 
-console.log(JSON.stringify({ok:true,version:'0.75.36',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.39',templates:catalogModule.DiyTemplateList.map(item=>item.id),currentSchema:62,unifiedWorkbench:true},null,2));

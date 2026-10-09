@@ -78,7 +78,7 @@ createApp({
     const footerTip=reactive({visible:false,text:'',x:0,y:0});
     let footerTipAnchor=null,footerTipSequence=0;
     const footerContextTip=computed(()=>{
-      const selection=selectionCount.value>1?`已选择 ${selectionCount.value} 个构件`:selectedPart.value?`${selectedPart.value.displayId} · ${selectedPart.value.name}`:'未选择构件';
+      const selection=selectedConnection.value?`已选择连接件：${selectedConnectionLabel.value}`:selectionCount.value>1?`已选择 ${selectionCount.value} 个构件`:selectedPart.value?`${selectedPart.value.displayId} · ${selectedPart.value.name}`:'未选择构件';
       const operation=drawState.active
         ?`${drawState.start?'选择终点，输入长度后按 Enter 确认':'点击画布选择起点'}${drawState.axisLock?' · 锁定 '+drawState.axisLock+' 轴':''}\nEsc 或右键单击结束绘制，已完成构件保留。`
         :profilePlacementState.active?profilePlacementState.message:wholeStretchState.active?wholeStretchState.message:'单击：选择单个构件\nShift+点击：追加多选 · Ctrl+点击：切换选择\nCtrl+A：全选可见构件 · Esc：取消选择\nSpace+左键拖动：框选\nCtrl / Alt+左键拖动：复制\nAlt+点击：穿透选择\nE：快速对齐 · G：组合 · X：解组';
@@ -186,8 +186,8 @@ createApp({
       connectionBatchNotice.value='';
       const manager=editor.connectionBatchManager,pending=scanConnectionComponents(),revision=manager.runRevision;
       const state=await pending;if(!state||!manager.isActive()||manager.busy||revision!==manager.runRevision)return;
-      if(!state.readyCount){connectionBatchNotice.value=state.blockedCount?'所选连接件暂无可安装的位置，请换个类型或先调整型材。':state.existingCount?'未发现需要新增的位置，已有连接件已保留。':'暂无可安装的位置，请先把型材吸附贴合。';return;}
-      try{const result=editor.connectionBatchManager.confirm();notify('已生成 '+result.createdCount+' 个连接件，可撤销');}
+      if(!state.readyCount){connectionBatchNotice.value=state.blockedCount||state.blockedSideCount?'暂无适配且不影响放东西的位置；已有连接件保留，可换类型或调整型材。':state.existingCount?'未发现需要新增的位置，已有连接件已保留。':'暂无可安装的位置，请先把型材吸附贴合。';return;}
+      try{const result=editor.connectionBatchManager.confirm();const skipped=state.blockedCount+state.blockedSideCount;notify('已生成 '+result.createdCount+' 个连接件，可撤销'+(skipped?'；部分位置不适配，未强行放置':''));}
       catch(error){notify(error.message,'warning');}
     }
     function openShaftSmart(){
@@ -285,7 +285,7 @@ createApp({
     const autosaveInfo = ref('');
     const hasAutosave = ref(false);
     const autosaveError = ref('');
-    const contextMenu = reactive({visible:false,x:0,y:0,partType:null,partId:null,worldPoint:null,end:null,lengthMm:0,nearJoint:false,connectionCandidates:[],accessoryCandidates:[]});
+    const contextMenu = reactive({visible:false,x:0,y:0,partType:null,partId:null,connectionId:null,worldPoint:null,end:null,lengthMm:0,nearJoint:false,connectionCandidates:[],accessoryCandidates:[]});
     const jointQuickMenu = reactive({visible:false,x:0,y:0,partId:null,worldPoint:null,end:null,connectionCandidates:[],accessoryCandidates:[]});
     const relationQuickMenu = reactive({visible:false,x:0,y:0,constraintId:null,type:null,edgeA:0,edgeB:1,pointA:0,pointB:1,mode:'HORIZONTAL'});
     const interferenceState = reactive({active:false,live:false,count:0,contactCount:0,message:'',partIds:[],contactPartIds:[],coplanarCount:0,coplanarPartIds:[],coplanarReferenceId:null,coplanarReferenceLabel:''});
@@ -457,8 +457,11 @@ createApp({
     const newProfileThicknessOptions = computed(() => []);
     const selectedThicknessOptions = computed(() => []);
     const selectedPathMetrics = computed(() => selectedIsProfile.value ? getPathMetrics(selectedPart.value) : null);
+    const selectedConnection=computed(()=>{projectRevision.value;const id=selectedConnectionId.value;return id&&editor?editor.connectionManager.connections.find(connection=>connection.id===id)||null:null;});
+    const selectedConnectionLabel=computed(()=>selectedConnection.value?editor.connectionLabel(selectedConnection.value):'');
     const relatedConnections = computed(() => {
       projectRevision.value;
+      if(selectedConnection.value)return [selectedConnection.value];
       if (!selectedIsProfile.value || !editor) return [];
       const id = selectedPart.value.id;
       return editor.connectionManager.connections.filter(connection => connection.sourceProfileId === id || connection.targetProfileId === id);
@@ -987,6 +990,7 @@ createApp({
       viewCube = new ViewCube(viewCubeViewport.value,editor.sceneManager,direction=>editor.viewDirection(direction));
       editor.onSelectionChanged = (object,selection = []) => {
         selectedConnectionId.value=null;
+        contextMenu.visible=false;jointQuickMenu.visible=false;
         if(quickAlignmentVisible.value&&(!editor.quickAlignmentManager.isActive()||!selection.some(mesh=>mesh.userData.part.id===quickAlignmentForm.referenceId)))closeQuickAlignment();
         selected.value = object;
         selectedMeshes.value = selection;
@@ -1056,6 +1060,7 @@ createApp({
         contextMenu.y = Number(payload.event.clientY||0);
         contextMenu.partType = payload.mesh?.userData?.part?.type || null;
         contextMenu.partId = payload.mesh?.userData?.part?.id || null;
+        contextMenu.connectionId = payload.connectionId || null;
         contextMenu.worldPoint = payload.hit?.point ? {x:payload.hit.point.x,y:payload.hit.point.y,z:payload.hit.point.z} : null;
         contextMenu.end = null;
         contextMenu.lengthMm = Number(payload.mesh?.userData?.part?.dimensions?.length || 0);
@@ -1076,24 +1081,8 @@ createApp({
         contextMenu.visible = true;
         fitFloatingMenu(contextMenu,'[data-context-menu=\"main\"]',payload.event.clientX,payload.event.clientY,8);
       };
-      editor.onJointHover = payload => {
-        if(!payload?.hit || contextMenu.visible || relationQuickMenu.visible) { if(!contextMenu.visible)jointQuickMenu.visible=false; return; }
-        const partId=payload.hit?.object?.userData?.part?.id||null;
-        const worldPoint=payload.hit?.point?{x:payload.hit.point.x,y:payload.hit.point.y,z:payload.hit.point.z}:null;
-        const feature=payload.hit?.object&&payload.hit?.point?editor.snapManager.resolveFeatureAtPoint(payload.hit.object,payload.hit.point,{endToleranceMm:46,slotToleranceMm:20}):null;
-        const end=feature?.type==='PROFILE_END'?feature.end:null;
-        const connectionCandidates=(payload.joint?.designCandidates||[]).filter(item=>item.valid).map(item=>({type:item.type,label:item.label,score:item.score}));
-        const accessoryCandidates=buildEndCapCandidates(partId,worldPoint,end);
-        if(!connectionCandidates.length&&!accessoryCandidates.length){jointQuickMenu.visible=false;return;}
-        const keepPosition=jointQuickMenu.visible && jointQuickMenu.partId===partId && jointQuickMenu.end===end;
-        Object.assign(jointQuickMenu,{
-          visible:true,
-          x:keepPosition?jointQuickMenu.x:Number(payload.event?.clientX||0)+14,
-          y:keepPosition?jointQuickMenu.y:Number(payload.event?.clientY||0)+14,
-          partId,worldPoint,end,connectionCandidates,accessoryCandidates
-        });
-        if(!keepPosition)fitFloatingMenu(jointQuickMenu,'[data-context-menu=\"joint\"]',Number(payload.event?.clientX||0),Number(payload.event?.clientY||0),14);
-      };
+      // 普通悬停只做实体预高亮；接头安装菜单保留在明确的右键入口，不自动展开。
+      editor.onJointHover = () => {jointQuickMenu.visible=false;};
       editor.onFeatureSelectionChanged = items => { selectedFeatures.value = items || []; };
       editor.featureHoverManager.onChanged = value => { featureHover.value = value; editor.annotationManager.requestRefresh(); };
       editor.profileDrawTool.onStateChanged = state => {
@@ -1326,7 +1315,7 @@ createApp({
         return;
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (selected.value) {
+        if (selected.value || selectedConnection.value) {
           event.preventDefault();
           deleteSelected(false);
         }
@@ -1355,7 +1344,7 @@ createApp({
       else if (event.key.toLowerCase() === 'l') toggleLassoSelect();
       else if (event.key.toLowerCase() === 'x') ungroupSelection();
       else if (event.key.toLowerCase() === 't') toggleMeasure();
-      else if (event.key.toLowerCase() === 'd') {if(selected.value)deleteSelected(false);}
+      else if (event.key.toLowerCase() === 'd') {if(selected.value||selectedConnection.value)deleteSelected(false);}
       else if (['w','m'].includes(event.key.toLowerCase())) setMode('translate');
       else if (event.key.toLowerCase() === 'r') setMode('rotate');
       else if (event.key.toLowerCase() === 's') openShaftSmart();
@@ -2821,6 +2810,7 @@ createApp({
     }
 
     async function deleteSelected(confirmDelete = true) {
+      if(selectedConnection.value)return removeConnection(selectedConnection.value,confirmDelete);
       if (!selected.value) return;
       const targets=editor.selectedMeshes.length?[...editor.selectedMeshes]:[editor.selected];
       const ids=targets.map(mesh=>mesh.userData.part.id).sort().join('|');
@@ -3235,7 +3225,7 @@ createApp({
         if(!result.changed)return;
         editor.emitStats();
         editor.historyManager.capture();
-        projectRevision.value++;
+        editor.emitProjectChanged();
         notify(`已切换设计连接：${previous} → ${connectionRuleLabel(result.connection)}；制造方案需要重新配置`,'success');
       } catch(error) {
         notify(error.message,'warning');
@@ -3253,18 +3243,19 @@ createApp({
         }
         editor.emitStats();
         editor.historyManager.capture();
-        projectRevision.value++;
+        editor.emitProjectChanged();
         notify(`已从 ${previous} 切换为 ${connectionRuleLabel(result.connection)}；制造方案需要重新配置`,'success');
       } catch(error) {
         notify(error.message,'warning');
       }
     }
 
-    function removeConnection(connection) {
-      editor.connectionManager.removeConnection(connection.id);
-      editor.emitStats();
-      editor.historyManager.capture();
-      editor.emitProjectChanged();
+    async function removeConnection(connection,confirmDelete=true) {
+      const current=editor?.connectionManager.connections.find(item=>item.id===connection.id);
+      if(!current)return;
+      if(confirmDelete&&!await confirmWorkbench({title:'删除这个连接件？',description:'只清理当前连接及其派生连接件和加工，不删除型材。',labels:[editor.connectionLabel(current)],confirmLabel:'删除连接件'}))return;
+      if(editor.connectionManager.connections.find(item=>item.id===current.id)!==current)return notify('连接已变化，请重新确认','warning');
+      editor.removeConnection(current.id);
     }
 
     function changeSelectionFilter() {
@@ -3639,7 +3630,7 @@ createApp({
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
       PanelShapeFields,updatePanelShapeParameter,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
-      selectedConnectionId,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
+      selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
       catalogProfileCanvas,selectedDesignProfile,newProject,renameProject,activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
       designProfiles,profileCatalog,profileSystems,nominalOptions,newVariants,selectedVariants,visibleProfileVariants,frameProfileOptions,connectionRules,connectionRuleId,hardwareCatalog,databaseAccessories,databaseAccessoryRows,visibleAccessories,accessoryManagerRows,accessoryCategoryOptions,
       newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyTemplates,diyTemplateId,diyForm,diyPartCount,selectedDiyTemplate,drawForm,drawerForm,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,catalogAccessoryId,selectedCatalogAccessory,selectedConnectionPreview,

@@ -67,6 +67,7 @@ export default class Editor {
     this.meshes = [];
     this.selected = null;
     this.selectedMeshes = [];
+    this.selectedConnectionId = null;
     this.selectionFilter = 'ALL';
     this.transformSpace = 'world';
     this.movementStepMm = 5;
@@ -83,6 +84,7 @@ export default class Editor {
     this.onUserDimensionsChanged = null;
     this.partSequence = 1;
     this.onSelectionChanged = null;
+    this.onConnectionSelected = null;
     this.onDimensionsChanged = null;
     this.onStatsChanged = null;
     this.onSnapChanged = null;
@@ -197,21 +199,18 @@ export default class Editor {
         return;
       }
       let mesh;
-      if(!event.altKey){
-        const hit=this.sceneManager.pickHit(event,[...this.selectableMeshes(),...this.connectionManager.selectableHelpers()]);
-        const connectionId=hit?.object?.userData?.connectionId||hit?.object?.userData?.part?.generatedByConnectionId;
-        if(connectionId){this.selectConnection(connectionId);return;}
-      }
       // Alt + 单击用于“穿透/循环选择”，解决复杂装配中前方构件遮挡后方构件的问题。
       if (event.altKey) {
-        const candidates = this.sceneManager.pickRoots(event, this.selectableMeshes());
+        const candidates = this.sceneManager.pickRoots(event, this.interactionMeshes());
         const cycle = this.selectionCycleManager.next(event,candidates);
         mesh = cycle?.mesh || null;
         if (cycle?.count > 1) mesh.userData.selectionCycle = {index:cycle.index+1,count:cycle.count};
       } else {
         this.selectionCycleManager.reset();
-        mesh = this.sceneManager.pick(event, this.selectableMeshes());
+        mesh = this.pickInteractionHit(event)?.object || null;
       }
+      const connection=this.connectionForMesh(mesh);
+      if(connection){this.selectConnection(connection.id);return;}
       this.featureHoverManager.clear();
       this.sceneManager.clearHover();
       this.select(mesh,{additive:event.ctrlKey || event.metaKey || event.shiftKey,toggle:event.ctrlKey || event.metaKey});
@@ -226,19 +225,23 @@ export default class Editor {
       if (this.profileDrawTool.isActive()) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); this.profileDrawTool.handlePointerMove(event); return; }
       const exclusiveMode = this.featureSelectionManager.enabled || this.measureMode || this.dimensionMode || this.sceneManager.marqueeMode || this.sceneManager.lassoMode || this.profileGripEditor?.drag || this.contourFrameManager?.dragIndex>=0;
       if (exclusiveMode) { this.onJointHover?.(null); this.featureHoverManager.clear(); this.sceneManager.clearHover(); return; }
+      const hit=this.pickInteractionHit(event);
+      const connection=this.connectionForMesh(hit?.object);
+      if(connection){
+        this.featureHoverManager.clear();
+        if(this.selectedConnectionId===connection.id)this.sceneManager.clearHover();
+        else this.sceneManager.setHover(hit.object,event,this.connectionLabel(connection));
+        return;
+      }
       // 拉伸端部仅显示小箭头，不能再叠一个随模型放大的 Feature 球。
       if(this.profileGripEditor.pickHandle(event)){
         this.onJointHover?.(null);this.featureHoverManager.clear();this.sceneManager.clearHover();return;
       }
 
-      const jointHit=this.sceneManager.pickHit(event,this.connectionPlacementManager.profileMeshes());
-      const joint=this.connectionPlacementManager.resolveJointContext(jointHit);
-      this.onJointHover?.(jointHit?{event,hit:jointHit,joint}:null);
-
       // 型材优先显示 Feature 级预高亮；非型材仍保留整构件 hover。
-      const feature = this.featureHoverManager.update(event);
+      const feature = this.featureHoverManager.update(event,hit);
       if (feature) return;
-      const mesh=this.sceneManager.pick(event,this.selectableMeshes());
+      const mesh=hit?.object;
       if(mesh && !this.selectedMeshes.includes(mesh)) {
         const part=mesh.userData?.part;
         const label=[part?.displayId,part?.name || profileDisplayName(part) || part?.type].filter(Boolean).join(' · ');
@@ -249,11 +252,15 @@ export default class Editor {
     this.sceneManager.contextMenuHandler = event => {
       if (this.isBuilderReviewActive() || this.sceneManager.transformControls.dragging || this.profileDrawTool.isActive() || this.connectionPlacementManager.isActive() || this.accessoryPlacementManager.isActive() || this.machiningPlacementManager.isActive() || this.contourFrameManager?.dragIndex>=0) return;
       this.featureHoverManager.clear();
-      const hit = this.sceneManager.pickHit(event,this.selectableMeshes());
+      this.sceneManager.clearHover();
+      const hit = this.pickInteractionHit(event);
       const mesh = hit?.object || null;
-      if (mesh && !this.selectedMeshes.includes(mesh)) this.select(mesh);
-      if (this.onContextMenu) this.onContextMenu({event,mesh,hit,selection:[...this.selectedMeshes]});
+      const connection=this.connectionForMesh(mesh);
+      if(connection)this.selectConnection(connection.id);
+      else if (mesh && !this.selectedMeshes.includes(mesh)) this.select(mesh);
+      if (this.onContextMenu) this.onContextMenu({event,mesh,hit,connectionId:connection?.id||null,selection:[...this.selectedMeshes]});
     };
+    this.sceneManager.pointerLeaveHandler=()=>{this.featureHoverManager.clear();this.sceneManager.clearHover();};
 
     this.sceneManager.marqueeHandler = payload => {
       const visible = this.selectableMeshes();
@@ -1250,6 +1257,7 @@ export default class Editor {
   }
 
   select(mesh, options = {}) {
+    this.selectedConnectionId=null;
     this.annotationManager?.requestRefresh();
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
@@ -1280,6 +1288,7 @@ export default class Editor {
   }
 
   selectMany(meshes = []) {
+    this.selectedConnectionId=null;
     this.annotationManager?.requestRefresh();
     this.wholeStretchManager?.cancel();
     this.axisClearanceManager?.hide();
@@ -1301,14 +1310,52 @@ export default class Editor {
     return this.selectedMeshes.length;
   }
 
-  /** 点击角码只定位其连接，不把派生展示对象作为可移动 Part 或新增业务记录。 */
+  /** 点击派生角码选择连接本身；不扩大到宿主，也不把展示网格伪装成可移动 Part。 */
   selectConnection(connectionId) {
     const connection=this.connectionManager.connections.find(item=>item.id===connectionId);
     if(!connection)return false;
-    const hosts=[connection.sourceProfileId,connection.targetProfileId].map(id=>this.getMeshByPartId(id)).filter(mesh=>mesh&&mesh.visible!==false);
-    if(!hosts.length)return false;
-    this.selectMany(hosts);this.sceneManager.transformControls.detach();
+    const roots=this.connectionSelectionMeshes(connection);
+    if(!roots.length)return false;
+    this.select(null);this.sceneManager.clearHover();
+    this.selectedConnectionId=connection.id;
+    this.sceneManager.setSelections(roots,roots[0]);
     this.onConnectionSelected?.(connection);return true;
+  }
+
+  connectionForMesh(mesh) {
+    const id=mesh?.userData?.connectionId||mesh?.userData?.part?.generatedByConnectionId;
+    return id?this.connectionManager.connections.find(connection=>connection.id===id)||null:null;
+  }
+
+  /** 悬停、点选、右键和直接拖动共用前方实体命中；不透过角码选中背后的型材。 */
+  interactionMeshes() {return [...this.selectableMeshes(),...this.connectionManager.selectableHelpers()];}
+  pickInteractionHit(event) {return this.sceneManager.pickHit(event,this.interactionMeshes());}
+
+  connectionSelectionMeshes(connection) {
+    if(!connection)return [];
+    const helper=this.connectionManager.helperMeshes.get(connection.id);
+    return [...new Set([helper,...this.meshes.filter(mesh=>mesh.userData?.part?.generatedByConnectionId===connection.id)].filter(mesh=>mesh&&mesh.visible!==false))];
+  }
+
+  connectionLabel(connection) {
+    const hosts=[connection.sourceProfileId,connection.targetProfileId].map(id=>this.getMeshByPartId(id)?.userData?.part?.displayId||'型材');
+    return `${connection.manufacturingCode||'连接件'} · ${hosts.join(' ↔ ')}`;
+  }
+
+  /** 连接重建/隐藏/删除后重新绑定只读高亮；选择状态不进入工程或历史。 */
+  refreshConnectionSelection() {
+    if(!this.selectedConnectionId)return;
+    const connection=this.connectionManager.connections.find(item=>item.id===this.selectedConnectionId);
+    const hosts=connection&&[connection.sourceProfileId,connection.targetProfileId].map(id=>this.getMeshByPartId(id));
+    if(!connection||hosts.some(mesh=>!mesh||mesh.visible===false)){this.select(null);return;}
+    const roots=this.connectionSelectionMeshes(connection);
+    this.sceneManager.setSelections(roots,roots[0]);
+  }
+
+  removeConnection(connectionId) {
+    if(!this.connectionManager.connections.some(connection=>connection.id===connectionId))return false;
+    this.connectionManager.removeConnection(connectionId);
+    this.updateDimensions();this.emitStats();this.historyManager.capture();this.emitProjectChanged();return true;
   }
 
   isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive();}
@@ -1496,6 +1543,7 @@ export default class Editor {
   }
 
   deleteSelected() {
+    if(this.selectedConnectionId)return this.removeConnection(this.selectedConnectionId);
     const targets = this.selectedMeshes.length ? [...this.selectedMeshes] : (this.selected ? [this.selected] : []);
     if (!targets.length) return;
     const partIds = new Set(targets.map(mesh => mesh.userData.part?.id).filter(Boolean));
@@ -1960,7 +2008,8 @@ export default class Editor {
   }
 
   focusSelection() {
-    const targets = this.selectedMeshes.length ? this.selectedMeshes : (this.selected ? [this.selected] : []);
+    const connection=this.selectedConnectionId&&this.connectionManager.connections.find(item=>item.id===this.selectedConnectionId);
+    const targets = connection?this.connectionSelectionMeshes(connection):this.selectedMeshes.length ? this.selectedMeshes : (this.selected ? [this.selected] : []);
     if (!targets.length) return;
     const box = new THREE.Box3();
     for (const mesh of targets) box.expandByObject(mesh);
@@ -2873,6 +2922,7 @@ export default class Editor {
     }
     const part = mesh.userData.part;
     const selectionChanged=this.selected===mesh||this.selectedMeshes.includes(mesh);
+    if(this.sceneManager.hoveredObject===mesh)this.sceneManager.clearHover();
     this.parts = this.parts.filter(item => item !== part);
     this.meshes = this.meshes.filter(item => item !== mesh);
     this.selectedMeshes = this.selectedMeshes.filter(item => item !== mesh);
@@ -3105,7 +3155,9 @@ export default class Editor {
   }
 
   emitProjectChanged() {
+    this.connectionManager?.clearDesignSwitchCache?.();
     this.manufacturingIdentityManager?.reconcile();
+    this.refreshConnectionSelection();
     this.annotationManager?.requestRefresh();
     this.interferenceFeedbackManager?.requestRefresh();
     if (this.onProjectChanged) this.onProjectChanged({parts:this.parts,connections:this.connectionManager.connections,constraints:this.constraintManager.constraints,dimensions:this.userDimensions});

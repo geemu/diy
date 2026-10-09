@@ -117,6 +117,8 @@ export default class ProfileGripEditor {
       const distance=Math.hypot(event.clientX-rect.left-(point.x+1)*rect.width/2,event.clientY-rect.top-(1-point.y)*rect.height/2);
       if(distance<bestDistance){best=handle;bestDistance=distance;}
     }
+    // 端点附近的角码是实际前方实体，不允许隐形端部热区抢走连接件点击。
+    if(best&&this.editor.connectionForMesh(this.editor.pickInteractionHit(event)?.object))return null;
     return best;
   }
 

@@ -1,4 +1,32 @@
-# 项目交接文档 — v0.75.36
+# 项目交接文档 — v0.75.39
+
+## v0.75.39 每层承托面选型与槽内角槽件
+
+- ConnectionAutoPolicy按当前两宿主水平梁实际上向侧面/高度判断，每层独立、不看镜头或整架最高点。普通角码包络高于承托面0.1mm即从AUTO排除，合法梁下角码优先；自动目录仅CORNER_CUBE/HIDDEN_CORNER，相反安装侧独立规划，可混合角码和隐藏件。指定目录类型不套AUTO策略。
+- ComponentCatalog新增独立HIDDEN_CORNER（30/40系列槽8），原始ComponentCatalogData不改。ConnectionComponentPorts共用两腿/孔心/支撑区，ComponentGeometryFactory生成带通孔的内沉L型实体；不复用INNER_BRACKET长条或HardwareCatalog占位块。安装原点为两安装面交线，+Z进源梁、-Y进目标槽；宽6/厚4/退让2/腿长20或24mm均为本地参考参数，不是采购图纸尺寸。
+- HiddenConnectionPlacement按getSectionDefinition的outer/holes检查完整腿区的材料归属、边界交叉及材料岛，并检查全部端范围和目标纵轴共线；槽匹配/孔轴继续共用SlotMatcher/Manager。封槽、未知空腔、斜切/缩放或站位悬空拒绝，不移动两宿主，贴合/第三方保守OBB不放宽。
+- Batch旧未修改自动单侧可补不同型号的合法缺侧，原件保留；已有另一侧不重复生成。fresh确认重查策略和侧占用，分帧/签名/代次、取消、整批一次历史/失败整图恢复保持。手工/已改/实体/制造保护，不自动替换旧梁上角码或长条，不编辑用户JSON/直接修改实际草稿。
+- 原INNER_BRACKET取消新直角安装映射，保留显式自由放置和当前Schema62旧记录/variants原模型；显式切到内置采用新合法槽内件。SIDE_CORNER仅实际端口/两腿槽腔通过时可为ANGLE或新隐藏件，仍无旧端面制造映射。新隐藏件getManufacturingOptions为空，configureManufacturingRule/Schema拒绝套旧圆柱内置/攻丝规则。
+- 简单类型/规格→生成只短提示跳过，不新增技术列表。Schema62/118模块0.75.39，新增两个本地模块，无依赖升级；已有verify仅身份同步，旧AUTO/INNER等期望待授权更新，未新增/运行测试、编译、启动/重启或浏览器验收，资源与待验见VALIDATION。
+
+## v0.75.38 双侧角码独立编辑与型号恢复
+
+- 用户确认下侧角码应单独选中/修改/删除、上侧不动，切换回来仍为同型号真实角码。原v0.75.37选择关系而非单件的问题来自一条Connection的双侧helper；当前目录设计组件按安装侧保存独立Connection，各helper只有一件，原拾取/临时选择/详情/聚焦/删除和历史链复用，不伪造可自由移动Part。
+- ConnectionManager.load在当前Schema62记录副本上将无正式制造方案的双側目录组件拆分，主安装侧保留原ID/manufacturingCode，另一侧新ID/待分配编号；每侧重建sourceSlot/姿态，位置/型号/宿主不改。制造关系不拆，不改用户原文件；导出和再次加载单侧记录不会继续增件，草稿由正常提交链保存。
+- 创建和批量确认逐件安装，两側能装仍各1件；addDesignComponentMountFace生成缺侧的新记录，不改原件。install/evaluate按接头+真实安装侧查询，另一目标的源端占用不被新增兄弟记录掩盖；重复侧/保护记录拒绝。所有既有组件仍参加安装空间检查，整批一次历史和异常整图恢复保留。
+- 可选designComponentVariants保存每种已用方式的目录定义/sourceMountFace；切回原类型恢复原型号，未记忆的ANGLE/INTERNAL/PLATE从同系列已映射真实目录定义选择，其余仍设计意图。designSwitchCandidate复用几何/孔轴/槽/足迹/包络，只忽略替换当前件，其他件仍真实占位；不允许为了切换移动主体或放宽制造门禁，失效切换恢复原对象并重建。
+- sourceMountFace在设计意图及正式重建中保留，制造推荐尊重所选侧，不回退默认第一面。切换清除当前件旧制造绑定和派生字段，保存模型记忆而非旧世界坐标/制造参数；SIDE_CORNER按新候选重判，不将内角套旧端面制造方案。
+- app切换与推荐加入emitProjectChanged，原历史/立即保存/反馈刷新接入。右侧显示当前件编号、安装侧和实际型号；候选列表在工程状态内复用，重建、删除、提交/加载清空，实际提交仍新鲜检查。
+- Schema62/116模块0.75.38，无新依赖或模块。用户原JSON/实际localStorage不直接操作；未新增/运行测试、Java编译、服务启动/重启或浏览器验收。旧“两个安装面一条记录”等verify期望待授权更新，资源同步和待验见VALIDATION。以下v0.75.37双侧共同选择描述为历史，由本版用户确认覆盖。
+
+## v0.75.37 连接件点选与悬停边界
+
+- 用户确认修复角码难点选和鼠标悬停自动弹出“接头/端部快捷菜单”。Editor普通pointerMove不再解析安装候选，app移除悬浮安装菜单DOM及自动开启回调；明确右键型材的安装候选仍在。SceneManager对连接实体复用真实三角面浅蓝预高亮及小tip，移开/离开画布、隐藏、删除和重建清理，不在孔槽上造填平面。
+- interactionMeshes/pickInteractionHit合并可选Part与可见helper，连接ID优先解根保留；悬停、单击、右键和直接拖动使用同一前方命中，Alt穿透循环可包含连接。SceneManager.raycast排除隐藏祖先，SelectionGestureManager与ProfileGripEditor拒绝用后方型材/端点热区覆盖角码的前方命中，不将全部连接件设成穿透优先级。
+- Editor.selectedConnectionId为临时选择事实。selectConnection清空Part选择和Gizmo，仅高亮本关系helper/派生实体，onConnectionSelected打开单独相关卡片；宿主不染选中色、不进入多选。普通select/selectMany、清空及历史恢复取消连接选择；连接重建/可见性/提交刷新重绑提示，不写Project或保存选择状态。
+- app.selectedConnection/label独立于selectedPart，右侧连接卡片只显示当前关系、编号/宿主；属性/加工不拿宿主冒充所选件。底栏tip、删除按钮、右键详情/聚焦/删除与D/Del保持连接选择可操作，当前关系双侧实体共同选择。自由配件保持原Part操作，安装派生件仍通过连接配置修改，不允许孤立移动绕过安装规则。
+- Editor.removeConnection共用Manager派生项清理、统计/总尺寸、一次历史及工程提交；鼠标删除用原WorkbenchConfirm，键盘直接删可撤销。Manager实际删除清空选中状态，重建不清连接ID，隐藏/移除释放悬停资源；不删除宿主型材或其他连接。
+- Schema62/116模块0.75.37，单根/Shift/Ctrl+A、紫色齐平、草稿/镜头及独立制造边界保持；用户原JSON/实际localStorage不操作。没有新增/运行测试、Java编译、服务启动/重启或浏览器验收。旧v07519“点击连接选两根宿主”回归期望待按新合同更新，资源交付及待授权场景见VALIDATION。
 
 ## v0.75.36 全可见型材齐平反馈
 

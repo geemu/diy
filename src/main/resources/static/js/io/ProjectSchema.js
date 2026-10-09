@@ -1,9 +1,11 @@
 import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSystem.js';
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
 import {panelDimensions} from '../model/PanelShapeModel.js';
+import {connectionDesignType} from '../model/ComponentCatalog.js';
+import {normalizeHiddenCornerDimensions} from '../model/ConnectionComponentPorts.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.36';
+export const CURRENT_APP_VERSION = '0.75.39';
 
 /**
  * Current-only project schema gate.
@@ -55,17 +57,32 @@ export default class ProjectSchema {
       if(!connection?.id)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接缺少 id`);
       if(!allowed.has(connection.designType))throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少有效 designType`);
       if(!connection.sourceProfileId || !connection.targetProfileId)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少源/目标型材`);
-      if(connection.jointKind!=null&&(connection.jointKind!=='SIDE_CORNER'||connection.designType!=='ANGLE_BRACKET'||!connection.designComponent||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的侧面内角只支持未配置制造方案的目录角码`);
+      if(connection.designComponent?.dimensions?.geometryKind==='HIDDEN_CORNER'&&(connectionDesignType(connection.designComponent)!==connection.designType||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的隐藏角槽件尺寸/方式无效，或绑定了尚未支持的制造方案`);
+      if(connection.jointKind!=null&&(connection.jointKind!=='SIDE_CORNER'||!(connection.designType==='ANGLE_BRACKET'||(connection.designType==='INTERNAL_CONNECTOR'&&connection.designComponent?.dimensions?.geometryKind==='HIDDEN_CORNER'))||!connection.designComponent||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的侧面内角只支持未配置制造方案的目录角码或槽内角槽件`);
       const faces=connection.designComponentMountFaces;
       const validFaces=['FRONT','BACK','LEFT','RIGHT'],opposite={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
       if(connection.designComponentMountFace!=null&&!validFaces.includes(connection.designComponentMountFace))throw new Error(`连接 ${connection.id} 的主安装面无效`);
       if(faces!=null&&(!Array.isArray(faces)||faces.length>2||faces.some(face=>!validFaces.includes(face))||new Set(faces).size!==faces.length))throw new Error(`连接 ${connection.id} 的安装面列表无效`);
       if(faces?.length===2&&(connection.designType!=='ANGLE_BRACKET'||opposite[faces[0]]!==faces[1]))throw new Error(`连接 ${connection.id} 的双侧安装面必须互为反面`);
       if(faces?.length&&connection.designComponentMountFace!=null&&connection.designComponentMountFace!==faces[0])throw new Error(`连接 ${connection.id} 的主安装面与列表不一致`);
+      const variants=connection.designComponentVariants;
+      if(variants!=null){
+        if(typeof variants!=='object'||Array.isArray(variants))throw new Error(`连接 ${connection.id} 的型号记录无效`);
+        for(const [type,variant] of Object.entries(variants)){
+          if(!allowed.has(type)||!variant?.designComponent?.id||connectionDesignType(variant.designComponent,{savedRecord:true})!==type||!validFaces.includes(variant.sourceMountFace))throw new Error(`连接 ${connection.id} 的 ${type} 型号记录无效`);
+        }
+      }
     }
   }
 
   static normalizeCurrent(project) {
+    // 更正当前模型的已知简化内置件，保留构件/连接ID、颜色、安装侧和其他件；不回写用户原文件。
+    for(const part of project.parts)if(part.dimensions?.geometryKind==='HIDDEN_CORNER')part.dimensions=normalizeHiddenCornerDimensions(part.dimensions);
+    for(const connection of project.connections){
+      for(const component of [connection.designComponent,...Object.values(connection.designComponentVariants||{}).map(variant=>variant.designComponent)]){
+        if(component?.dimensions?.geometryKind==='HIDDEN_CORNER')component.dimensions=normalizeHiddenCornerDimensions(component.dimensions);
+      }
+    }
     project.schemaVersion = CURRENT_PROJECT_SCHEMA_VERSION;
     project.metadata = {
       ...(project.metadata || {}),

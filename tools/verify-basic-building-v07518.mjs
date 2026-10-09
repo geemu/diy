@@ -132,4 +132,4 @@ const html=fs.readFileSync(path.join(root,'src/main/resources/static/index.html'
 assert.ok(html.includes('生成连接件预览'));assert.ok(html.includes('保持不动的基准'));assert.ok(html.includes('对齐方向（可多选）'));assert.ok(!html.includes('class="quick-alignment-panel"'));
 const app=fs.readFileSync(path.join(js,'app.js'),'utf8');assert.ok(app.includes('watch(catalogProfileCanvas,'),'退出审阅重新挂载目录 canvas 时恢复预览');
 assert.ok(app.includes("target?.closest('button,a,summary')"),'审阅页正常按钮确认/取消不被全局 Enter 抢走');
-console.log(JSON.stringify({ok:true,version:'0.75.36',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.39',...outcomes}));

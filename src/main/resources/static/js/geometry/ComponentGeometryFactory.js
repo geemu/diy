@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {panelContours} from '../model/PanelShapeModel.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {buildDesignProfileSection} from '../model/DesignProfileSection.js';
-import {angleBracketLayout} from '../model/ConnectionComponentPorts.js';
+import {angleBracketLayout,hiddenCornerLayout} from '../model/ConnectionComponentPorts.js';
 
 /** 通用参数化组件几何，预览与实际构件共用。通孔使用带孔轮廓挤出，不依赖远程图片和模型。 */
 export default class ComponentGeometryFactory {
@@ -150,6 +150,33 @@ export default class ComponentGeometryFactory {
       for(const x of [-s*.58,s*.58])plate(s*.65,s*.65,t,[circle(0,0,s*.13)],[x,0,0],[0,Math.PI/2,0],circle(0,0,s*.325));
       box(s*.8,s*.25,s*.85,[0,-s*.4,0]);
       plate(s*1.2,s*1.2,t,[-1,1].flatMap(x=>[-1,1].map(y=>circle(x*s*.35,y*s*.35,r))),[0,s*.78,0],[Math.PI/2,0,0]);
+    } else if(kind==='HIDDEN_CORNER') {
+      const layout=hiddenCornerLayout(d);
+      if(!layout)throw new Error('隐藏角槽件缺少有效的槽内尺寸');
+      const {neck,depth,recess,shoulder,bevel,radius,sourceLength,targetLength,sourceHole,targetHole,crossSection}=layout;
+      const centerDepth=-(depth+recess)/2;
+      // 有孔窄颈与两侧T脚分别挤出，避免把槽腔/螺孔填成两块宽平板。立腿沿 +Y，而不是向梁下翻。
+      plate(neck,sourceLength,depth-recess,[circle(0,sourceHole-sourceLength/2,radius)],
+        [0,centerDepth,sourceLength/2],[Math.PI/2,0,0],chamferedRectangle(neck,sourceLength,bevel));
+      plate(neck,targetLength,depth-recess,[circle(0,targetHole-targetLength/2,radius)],
+        [0,targetLength/2,centerDepth],[0,0,0],chamferedRectangle(neck,targetLength,bevel));
+      const rightWing=[point(neck/2,-shoulder),...crossSection.slice(3,7).map(([x,y])=>point(x,y))];
+      for(const sign of [-1,1]){
+        const wing=rightWing.map(p=>point(p.x*sign,p.y));
+        add(extrude(wing,[],sourceLength),[0,0,sourceLength/2]);
+        add(extrude(wing,[],targetLength),[0,targetLength/2,0],[Math.PI/2,0,0]);
+      }
+      // 连接两条腿的窄颈转角完全位于目标槽，不跨过槽唇或伸到梁上。
+      box(neck,depth,depth,[0,-depth/2,-depth/2]);
+      // 紧定螺钉只属于设计组件展示，不另外生成Hardware/BOM或宿主加工；内六角是真凹口。
+      const top=-recess-.2,socketDepth=1.15,totalDepth=depth-recess-.3,shaftDepth=totalDepth-socketDepth;
+      const screwRadius=radius-.1,socket=circle(0,0,1.65,6);
+      const sourceCap=plate(screwRadius*2,screwRadius*2,socketDepth,[socket],[0,top-socketDepth/2,sourceHole],[Math.PI/2,0,0],circle(0,0,screwRadius));
+      const targetCap=plate(screwRadius*2,screwRadius*2,socketDepth,[socket],[0,targetHole,top-socketDepth/2],[0,0,0],circle(0,0,screwRadius));
+      const screwMaterial=material.clone();screwMaterial.color.set('#72777e');screwMaterial.metalness=.8;screwMaterial.roughness=.34;
+      sourceCap.material=targetCap.material=screwMaterial;
+      add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,top-socketDepth-shaftDepth/2,sourceHole],[0,0,0],'#72777e');
+      add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,targetHole,top-socketDepth-shaftDepth/2],[Math.PI/2,0,0],'#72777e');
     } else if(['INNER_BRACKET','SLIDE_BLOCK'].includes(kind)) {
       if(kind==='INNER_BRACKET'){
         plate(s*.40,s*4,t,[-1.5,-.5,.5,1.5].map(y=>circle(0,y*s,s*.11)));
@@ -196,6 +223,7 @@ export default class ComponentGeometryFactory {
 }
 const point=(x,y)=>({x,y});
 function rectangle(w,h){return [point(-w/2,-h/2),point(w/2,-h/2),point(w/2,h/2),point(-w/2,h/2)];}
+function chamferedRectangle(w,h,b){return [point(-w/2+b,-h/2),point(w/2-b,-h/2),point(w/2,-h/2+b),point(w/2,h/2-b),point(w/2-b,h/2),point(-w/2+b,h/2),point(-w/2,h/2-b),point(-w/2,-h/2+b)];}
 function roundedRectangle(w,h,r){const points=[];for(const [cx,cy,start] of [[w/2-r,h/2-r,0],[-w/2+r,h/2-r,Math.PI/2],[-w/2+r,-h/2+r,Math.PI],[w/2-r,-h/2+r,Math.PI*1.5]])for(let i=0;i<=8;i++){const angle=start+i*Math.PI/16;points.push(point(cx+r*Math.cos(angle),cy+r*Math.sin(angle)));}return points;}
 function circle(x,y,r,n=48){return Array.from({length:n},(_,i)=>point(x+Math.cos(i*Math.PI*2/n)*r,y+Math.sin(i*Math.PI*2/n)*r));}
 function pointInside(outer,x,y){let inside=false;for(let i=0,j=outer.length-1;i<outer.length;j=i++){const a=outer[i],b=outer[j];if((a.y>y)!==(b.y>y)&&x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x)inside=!inside;}return inside;}

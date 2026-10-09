@@ -23,6 +23,6 @@ assert.ok(css.includes('.accessory-placement-hud'));
 assert.ok(css.includes('.accessory-placement-hud.invalid'));
 assert.ok(schema.includes('placementSystemVersion:1'));
 assert.ok(schema.includes('interactionPolishVersion:5'));
-assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.36'"));
+assert.ok(schema.includes("CURRENT_APP_VERSION = '0.75.39'"));
 
-console.log(JSON.stringify({ok:true,version:'0.75.36',schema:62,unifiedAccessoryPlacement:true,ghostPreview:true,collisionAwarePreview:true,contextSeed:true,liveSnapHint:true,topMenus:8,pricing:false},null,2));
+console.log(JSON.stringify({ok:true,version:'0.75.39',schema:62,unifiedAccessoryPlacement:true,ghostPreview:true,collisionAwarePreview:true,contextSeed:true,liveSnapHint:true,topMenus:8,pricing:false},null,2));
