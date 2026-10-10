@@ -72,4 +72,4 @@ for(const [width,height] of [[1192,952],[616,720],[336,720]])for(const size of [
   }
   fitCases++;
 }
-console.log(JSON.stringify({ok:true,version:'0.75.39',singleCatalogSelector:true,noLeftDrawPanel:true,localVectorIcons:true,topMenus:8,blankNewProject:true,unsavedGuard:true,darkShellBlueCanvas:true,fitCases,schema:62}));
+console.log(JSON.stringify({ok:true,version:'0.75.56',singleCatalogSelector:true,noLeftDrawPanel:true,localVectorIcons:true,topMenus:8,blankNewProject:true,unsavedGuard:true,darkShellBlueCanvas:true,fitCases,schema:62}));

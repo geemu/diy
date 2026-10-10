@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import FrameOpeningResolver from './FrameOpeningResolver.js';
 import {getDesignProfileDefinition,getDefaultDesignProfileId} from '../model/DesignProfileCatalog.js';
+import {panelMaterialContours} from '../model/PanelShapeModel.js';
 
 /**
  * Beginner-facing panel and door configurator.
@@ -60,8 +61,13 @@ export default class PanelDoorConfigurator {
     const width = opening.width - clearance * 2;
     const height = opening.height - clearance * 2;
     if (!(width > 1) || !(height > 1)) throw new Error('重新适配后板材净尺寸无效');
+    const draft=structuredClone(part);
+    draft.dimensions.width=width;draft.dimensions.height=height;
+    if(draft.dimensions.shapeParameters)Object.assign(draft.dimensions.shapeParameters,{width,height});
+    panelMaterialContours(draft);
     part.dimensions.width = width;
     part.dimensions.height = height;
+    if(part.dimensions.shapeParameters)Object.assign(part.dimensions.shapeParameters,{width,height});
     part.position = addScaled(opening.center,opening.basis.normal,Number(part.panelSpec.normalOffsetMm || 0));
     part.rotation = {...opening.rotation};
     part.panelSpec.openingAxes = {widthAxis:opening.widthAxis,heightAxis:opening.heightAxis,normalAxis:opening.normalAxis};
@@ -177,6 +183,7 @@ export default class PanelDoorConfigurator {
     const parameters = structuredClone(assembly.parameters || {});
     const opening = this.openingResolver.resolve(parameters.sourcePartIds);
     const generated = this.editor.parts.filter(part => part.configuratorId === assembly.id);
+    if(generated.some(part=>part.type==='PANEL'&&part.dimensions.edgeNotches?.length))throw new Error('门芯板已有裁角，请先处理裁剪轮廓；不会重建门组件覆盖原板');
     const ids = new Set(generated.map(part => part.id));
     for (const connection of [...this.editor.connectionManager.connections]) {
       if (ids.has(connection.sourceProfileId) || ids.has(connection.targetProfileId)) this.editor.connectionManager.removeConnection(connection.id);

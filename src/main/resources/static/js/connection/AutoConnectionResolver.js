@@ -1,3 +1,5 @@
+import {profileEndContact} from '../model/ProfileEndContact.js';
+
 /**
  * IdeaBuilder-style automatic connection coordinator.
  *
@@ -130,13 +132,18 @@ export default class AutoConnectionResolver {
     const allowed = new Set((profileIds || []).filter(Boolean));
     if (allowed.size < 2) return summary([],[],[]);
 
-    const proposals = [];
+    const proposals = [],plannedFailures=[];
+    const intended=new Map((options.sideJoints||[]).map(joint=>[endpointKey(joint.sourceProfileId,joint.sourceEnd),joint]));
     for (const source of this.editor.meshes || []) {
       const sourceId = source?.userData?.part?.id;
       if (!allowed.has(sourceId) || source.userData.part?.type !== 'PROFILE') continue;
       source.updateMatrixWorld?.(true);
       const candidates = (this.editor.snapManager.collectCandidates(source) || [])
-        .filter(candidate => candidate?.snap?.targetFace && allowed.has(candidate.snap.targetProfileId));
+        .filter(candidate => {
+          if(!candidate?.snap?.targetFace||!allowed.has(candidate.snap.targetProfileId))return false;
+          const joint=intended.get(endpointKey(sourceId,candidate.snap.sourceEnd));
+          return !joint||joint.targetProfileId===candidate.snap.targetProfileId&&joint.targetFace===candidate.snap.targetFace;
+        });
 
       for (const candidate of candidates) {
         const target = this.editor.getMeshByPartId(candidate.snap.targetProfileId);
@@ -158,6 +165,21 @@ export default class AutoConnectionResolver {
       }
     }
 
+    // 参数侧梁的两端分别连接指定宿主，不以“最近一根”抢占另一端；仍重新核对真实端面和孔槽。
+    // 这里只补零移动候选，不把布局意图当作安装成功，也不创建目录实体或绕过 Manager。
+    for(const joint of intended.values()){
+      const source=this.editor.getMeshByPartId(joint.sourceProfileId),target=this.editor.getMeshByPartId(joint.targetProfileId);
+      if(!allowed.has(joint.sourceProfileId)||!allowed.has(joint.targetProfileId)||source?.userData?.part?.type!=='PROFILE'||target?.userData?.part?.type!=='PROFILE'){
+        plannedFailures.push({...joint,message:'侧梁接头的宿主不存在'});continue;
+      }
+      const contact=profileEndContact(source,target,joint);
+      if(!contact.ok){plannedFailures.push({...joint,message:contact.errors[0]?.message||'侧梁端面没有完整贴合'});continue;}
+      const ranked=this.editor.connectionManager.recommendDesignFor(source,target,joint),recommended=ranked.find(item=>item.valid);
+      if(!recommended){plannedFailures.push({...joint,message:ranked[0]?.error||'侧梁接头的孔槽没有可用连接方式'});continue;}
+      const targetPoint=this.editor.snapManager.endpoints(source)[joint.sourceEnd==='END'?'end':'start'];
+      proposals.push({source,target,snap:{...joint,type:'END_TO_FACE'},candidate:{priority:0,score:0},recommended,targetInteriorMm:this.targetInteriorDistance(target,targetPoint),planned:true});
+    }
+
     const byPair = new Map();
     for (const proposal of proposals) {
       const key = pairKey(proposal.source.userData.part.id,proposal.target.userData.part.id);
@@ -168,11 +190,11 @@ export default class AutoConnectionResolver {
     const ordered = [...byPair.values()].sort(compareProposal);
     const created = [];
     const existing = [];
-    const failures = [];
+    const failures = [...plannedFailures];
     const skippedItems = [];
     const usedSourceEnds = new Set();
     for (const connection of this.editor.connectionManager.connections || []) {
-      if (connection.jointKind!=='SIDE_CORNER'&&allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
+      if (!['SIDE_CORNER','SIDE_MOUNT'].includes(connection.jointKind)&&allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
     }
     for (const proposal of ordered) {
       const sourceId = proposal.source.userData.part.id;
@@ -206,15 +228,15 @@ export default class AutoConnectionResolver {
 
   findConnectionBetween(sourceId,targetId) {
     return (this.editor.connectionManager.connections || []).find(connection => {
-      return (connection.sourceProfileId === sourceId && connection.targetProfileId === targetId)
-        || (connection.sourceProfileId === targetId && connection.targetProfileId === sourceId);
+      return connection.jointKind!=='SIDE_MOUNT'&&((connection.sourceProfileId === sourceId && connection.targetProfileId === targetId)
+        || (connection.sourceProfileId === targetId && connection.targetProfileId === sourceId));
     }) || null;
   }
 
   findConnectionAtSourceEnd(sourceId,sourceEnd) {
     const normalizedEnd = sourceEnd === 'END' ? 'END' : 'START';
     return (this.editor.connectionManager.connections || []).find(connection => {
-      return connection.jointKind!=='SIDE_CORNER'&&connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
+      return !['SIDE_CORNER','SIDE_MOUNT'].includes(connection.jointKind)&&connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
     }) || null;
   }
 
@@ -239,6 +261,7 @@ export default class AutoConnectionResolver {
 }
 
 function compareProposal(a,b) {
+  if(!!a.planned!==!!b.planned)return a.planned?-1:1;
   // Higher target interior distance first. It resolves reciprocal corner proposals
   // in favour of beam-end -> post-face semantics.
   const interior = Number(b.targetInteriorMm || 0) - Number(a.targetInteriorMm || 0);

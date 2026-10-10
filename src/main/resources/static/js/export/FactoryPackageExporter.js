@@ -1,6 +1,7 @@
 import BomExporter from './BomExporter.js';
 import {getSectionDefinition, getSectionInfo, sectionToSvg} from '../model/ProfileSectionRegistry.js';
 import FactoryValidator from '../validation/FactoryValidator.js';
+import {panelMaterialContours,SolidPanelShapes} from '../model/PanelShapeModel.js';
 
 export default class FactoryPackageExporter {
   constructor(editor) {
@@ -19,6 +20,16 @@ export default class FactoryPackageExporter {
     zip.file('生产检查报告.txt',FactoryValidator.toText(validation));
     zip.file('生产检查报告.json',JSON.stringify(validation,null,2));
     zip.file('工程.json',JSON.stringify(this.editor.exportProject(),null,2));
+    // 切割轮廓来自板材领域数据，不导出显示网格；局部XY及Z厚度与3D/总装图一致。
+    const panels=this.editor.parts.filter(p=>p.type==='PANEL'&&!SolidPanelShapes.includes(p.dimensions?.panelShape));
+    const panelContours=panels.map(part=>({partId:part.id,code:part.manufacturingCode||part.displayId,
+      unit:'mm',width:part.dimensions.width,height:part.dimensions.height,thickness:part.dimensions.thickness,
+      contours:panelMaterialContours(part),edgeNotches:part.dimensions.edgeNotches||[]}));
+    zip.file('板材切割轮廓.json',JSON.stringify(panelContours,null,2));
+    const notchRows=[['板材编号','板边','定位端','离端距离(mm)','缺口宽(mm)','内切深(mm)']];
+    for(const panel of panelContours)for(const n of panel.edgeNotches)notchRows.push([panel.code,
+      {LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge],n.anchor==='END'?'右/上端':'左/下端',n.offsetMm,n.widthMm,n.depthMm]);
+    zip.file('板材缺口.csv',BomExporter.fileText(notchRows));
     const bomConsistency=this.editor.bomExporter.validateConsistency();
     zip.file('BOM一致性报告.txt',BomExporter.consistencyText(bomConsistency));
     zip.file('BOM一致性报告.json',JSON.stringify(bomConsistency,null,2));

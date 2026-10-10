@@ -45,7 +45,7 @@ export default class SceneManager {
     const width = this.container.clientWidth || 1000;
     const height = this.container.clientHeight || 700;
 
-    this.perspectiveCamera = new THREE.PerspectiveCamera(38, width / height, .05, 2000000);
+    this.perspectiveCamera = new THREE.PerspectiveCamera(38, width / height, .05, 10000);
     this.perspectiveCamera.position.set(1800, 1450, 1800);
 
     const frustum = 2200;
@@ -54,8 +54,8 @@ export default class SceneManager {
       frustum * width / height / 2,
       frustum / 2,
       -frustum / 2,
-      -2000000,
-      2000000
+      -10000,
+      10000
     );
     this.orthographicCamera.position.copy(this.perspectiveCamera.position);
     this.camera = this.perspectiveCamera;
@@ -208,8 +208,8 @@ export default class SceneManager {
 
   /** 所有投影共用鼠标位置缩放和实用的近距离范围，切换投影后也不能退回默认限制。 */
   configureOrbitControls(controls) {
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    // 手动旋转松手即停；命名视角的短过渡仍由cameraTween单独管理。
+    controls.enableDamping = false;
     controls.screenSpacePanning = true;
     controls.zoomToCursor = true;
     controls.minDistance = 1;
@@ -814,6 +814,7 @@ export default class SceneManager {
   }
 
   capturePng(filename = 'design.png') {
+    this.updateCameraClipping();
     this.renderer.render(this.scene, this.camera);
     const link = document.createElement('a');
     link.download = filename;
@@ -826,10 +827,56 @@ export default class SceneManager {
     return () => { this.frameHandlers = this.frameHandlers.filter(item => item !== handler); };
   }
 
+  /**
+   * 按真实构件包络收紧裁剪范围，避免0.05~两百万毫米的固定范围损失深度精度。
+   * 只读取已有几何包围盒，不逐帧扫描顶点；无限地面/印字/反馈层不决定实体范围。
+   */
+  updateCameraClipping() {
+    const camera=this.camera;
+    camera.updateMatrixWorld(true);
+    let closest=Infinity,farthest=-Infinity;
+    const matrix=new THREE.Matrix4(),center=new THREE.Vector3(),half=new THREE.Vector3();
+    for(const root of this.scene.children) {
+      if(root.visible===false||!(root.userData?.part||root.userData?.connectionId||root.name==='__profile_draw_preview__'))continue;
+      root.updateWorldMatrix(true,true);
+      root.traverse(object=>{
+        if(!object.isMesh||object.name?.startsWith('__')||!object.geometry?.attributes?.position)return;
+        for(let ancestor=object;ancestor;ancestor=ancestor.parent)if(ancestor.visible===false)return;
+        const geometry=object.geometry;
+        if(!geometry.boundingBox)geometry.computeBoundingBox();
+        const box=geometry.boundingBox;
+        if(!box||box.isEmpty())return;
+        matrix.multiplyMatrices(camera.matrixWorldInverse,object.matrixWorld);
+        box.getCenter(center).applyMatrix4(matrix);box.getSize(half).multiplyScalar(.5);
+        const e=matrix.elements,radius=Math.abs(e[2])*half.x+Math.abs(e[6])*half.y+Math.abs(e[10])*half.z;
+        const depth=-center.z;
+        if(!Number.isFinite(depth+radius))return;
+        if(camera.isPerspectiveCamera&&depth+radius<=0)return;
+        closest=Math.min(closest,depth-radius);farthest=Math.max(farthest,depth+radius);
+      });
+    }
+    const distance=camera.position.distanceTo(this.orbitControls.target);
+    let near,far;
+    if(camera.isOrthographicCamera) {
+      const margin=Math.max(100,Math.abs(camera.top-camera.bottom)/camera.zoom*.5);
+      near=Number.isFinite(closest)?closest-margin:-10000;
+      far=Math.max(near+1000,Number.isFinite(farthest)?farthest+margin:10000);
+    } else {
+      // 包络跨过眼平面时保留0.05mm近看；其他时候近裁剪留足四倍空间余量。
+      near=Math.max(.05,Math.min(Number.isFinite(closest)?closest*.25:distance*.05,distance*.25));
+      far=Math.max(10000,Number.isFinite(farthest)?farthest*1.25:0,distance*2,near+1000);
+    }
+    // 小范围改变不反复更新投影；靠近实体/远处实体进入时立即扩展，不能迟滞裁掉内容。
+    if(near<camera.near||near>camera.near+Math.max(.005,Math.abs(camera.near)*.1)||far>camera.far||far<camera.far*.9) {
+      camera.near=near;camera.far=far;camera.updateProjectionMatrix();
+    }
+  }
+
   animate() {
     requestAnimationFrame(() => this.animate());
     this.updateCameraTween();
     this.orbitControls.update();
+    this.updateCameraClipping();
     this.refreshSelection();
     this.hoverHelper?.update?.();
     this.renderer.render(this.scene, this.camera);

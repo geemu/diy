@@ -1,4 +1,5 @@
-import {getDiyTemplate} from './DiyTemplateCatalog.js';
+import {getDiyTemplate,createQuickFrameDefaults} from './DiyTemplateCatalog.js';
+import {layeredRackLayout,rackSideJointPlan,RACK_LAYOUT_VERSION} from './LayeredRackModel.js';
 
 /**
  * DIY 模板到 Editor 领域操作的适配层。
@@ -16,36 +17,45 @@ export default class DiyGenerator {
     if (!template) throw new Error(`未知快速设计模板：${templateId}`);
 
     const parameters = normalizeParameters(template, input);
+    const before = this.editor.exportProject();
+    const selectedIds = this.editor.selectedMeshes.map(mesh => mesh.userData.part.id);
     const beforePartCount = this.editor.parts.length;
     let assemblyId = null;
 
-    // 用途只是预设，不再用“基础/高级”切换不同生成器，避免修改层数却被基础模板忽略。
-    if (template.generator === 'LAYERED_RACK') {
-      assemblyId = this.editor.addLayeredRack({
-        ...parameters,
-        name:String(input.name||template.label),
-        captureHistory:false
-      });
-    } else {
-      throw new Error(`暂不支持模板生成器：${template.generator}`);
+    try {
+      // 用途只是预设，不再用“基础/高级”切换不同生成器，避免修改层数却被基础模板忽略。
+      if (template.generator === 'LAYERED_RACK') {
+        assemblyId = this.editor.addLayeredRack({
+          ...parameters,
+          name:String(input.name||template.label),
+          captureHistory:false
+        });
+      } else {
+        throw new Error(`暂不支持模板生成器：${template.generator}`);
+      }
+
+      const createdParts = this.editor.parts.slice(beforePartCount).filter(part => !part.generatedByConnectionId);
+      const createdProfileIds = createdParts.filter(part => part.type === 'PROFILE').map(part => part.id);
+      const sideJoints=rackSideJointPlan(layeredRackLayout(parameters),this.editor.assemblyManager.get(assemblyId).parameters.memberIds);
+      const autoConnection = parameters.autoConnect !== false && this.editor.autoConnectProfiles
+        ? this.editor.autoConnectProfiles(createdProfileIds,{source:'DIY_TEMPLATE',sideJoints})
+        : {status:'SKIPPED',createdCount:0,existingCount:0,failureCount:0,created:[],existing:[],failures:[]};
+      this.editor.historyManager?.capture();
+      this.editor.emitProjectChanged?.();
+
+      return {
+        template,
+        parameters,
+        assemblyId,
+        createdPartCount:createdParts.length,
+        createdProfileIds,
+        autoConnection
+      };
+    } catch (error) {
+      this.editor.restoreProject(before);
+      this.editor.selectMany(selectedIds.map(id => this.editor.getMeshByPartId(id)).filter(Boolean));
+      throw error;
     }
-
-    const createdParts = this.editor.parts.slice(beforePartCount).filter(part => !part.generatedByConnectionId);
-    const createdProfileIds = createdParts.filter(part => part.type === 'PROFILE').map(part => part.id);
-    const autoConnection = parameters.autoConnect !== false && this.editor.autoConnectProfiles
-      ? this.editor.autoConnectProfiles(createdProfileIds,{source:'DIY_TEMPLATE'})
-      : {status:'SKIPPED',createdCount:0,existingCount:0,failureCount:0,created:[],existing:[],failures:[]};
-    this.editor.historyManager?.capture();
-    this.editor.emitProjectChanged?.();
-
-    return {
-      template,
-      parameters,
-      assemblyId,
-      createdPartCount:createdParts.length,
-      createdProfileIds,
-      autoConnection
-    };
   }
 }
 
@@ -60,7 +70,10 @@ function normalizeParameters(template, input) {
   if (!catalogId) throw new Error('请选择设计型材截面');
 
   const autoConnect = input.autoConnect !== false;
-  return {catalogId, width, depth, height, levels, centerBeamCount, autoConnect};
+  // 深拷贝预设，逐层数据与角色不共享可编辑引用；显式传入的结构参数仍优先。
+  const defaultParameters=structuredClone({...defaults,levelSettings:createQuickFrameDefaults(levels,centerBeamCount).levelSettings});
+  const parameters={...defaultParameters,...input,layoutVersion:RACK_LAYOUT_VERSION,catalogId,width,depth,height,levels,centerBeamCount,autoConnect};
+  return layeredRackLayout(parameters).parameters;
 }
 
 function positiveNumber(value, fallback, label) {

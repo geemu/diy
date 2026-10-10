@@ -16,6 +16,10 @@ export default class ProfileGeometryFactory {
       roughness: 0.36,
       envMapIntensity:0.65,
       vertexColors:true,
+      // 金属面略退后一个深度单位，真实轮廓线不再与同位置的面争抢像素。
+      polygonOffset:true,
+      polygonOffsetFactor:1,
+      polygonOffsetUnits:1,
       // 远处淡出只用于地面，不应让适配后的大型工程消失。
       fog:false,
       side: THREE.DoubleSide
@@ -159,9 +163,9 @@ export default class ProfileGeometryFactory {
     geometry.computeBoundingSphere();
   }
 
-  static addCadEdges(mesh) {
+  static addCadEdges(mesh, edgeGeometry=null) {
     if (!mesh?.geometry) return;
-    const geometry = new THREE.EdgesGeometry(mesh.geometry, 24);
+    const geometry = edgeGeometry || new THREE.EdgesGeometry(mesh.geometry, 24);
     const material = new THREE.LineBasicMaterial({
       color:0x4a535d,
       transparent:true,

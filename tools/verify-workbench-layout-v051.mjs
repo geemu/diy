@@ -32,7 +32,7 @@ assert.ok(layout.includes('window.dispatchEvent(new Event(\'resize\'))'),'布局
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.75.39',
+  version:'0.75.56',
   draggablePanels:true,
   resizablePanels:true,
   dockedToolbar:true,

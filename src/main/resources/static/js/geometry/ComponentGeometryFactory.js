@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {panelContours} from '../model/PanelShapeModel.js';
+import {panelContours,panelMaterialContours} from '../model/PanelShapeModel.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {buildDesignProfileSection} from '../model/DesignProfileSection.js';
 import {angleBracketLayout,hiddenCornerLayout} from '../model/ConnectionComponentPorts.js';
@@ -9,6 +9,7 @@ export default class ComponentGeometryFactory {
   static create(part) {
     const group=new THREE.Group(),d=part.dimensions||{},kind=d.geometryKind;
     group.userData.part=part;
+    if(part.type==='PANEL')group.userData.panelDimensionSnapshot=structuredClone(part.dimensions);
     // 画布使用本地环境反射表现五金金属；预览层仍统一中性照明，不改目录或制造参数。
     const material=kind==='FOOT_CUP'
       ?new THREE.MeshPhongMaterial({color:part.color||'#808080',specular:0x999999,shininess:40,side:THREE.DoubleSide})
@@ -30,7 +31,7 @@ export default class ComponentGeometryFactory {
       if(shape==='sphere')add(new THREE.SphereGeometry(p.radius,p.segments,p.segments));
       else if(shape==='cylinder'||shape==='cone')add(new THREE.CylinderGeometry(shape==='cone'?0:p.topRadius,p.bottomRadius,p.height,p.segments));
       else if(shape==='torus')add(new THREE.TorusGeometry(p.radius,p.tubeRadius,p.radialSegments,p.tubularSegments));
-      else {const c=panelContours(shape,p);add(extrude(c.outer,c.holes,d.thickness));}
+      else {const c=panelMaterialContours(part);add(extrude(c.outer,c.holes,d.thickness));}
     } else if(kind?.startsWith('SHAFT_')) {
       const type=kind.slice(6),a=d.diameter,b=d.secondDiameter||a,h=d.height,w=d.width;
       const block=(width,height,depth,bores,pos=[0,0,0])=>{
@@ -174,9 +175,9 @@ export default class ComponentGeometryFactory {
       const sourceCap=plate(screwRadius*2,screwRadius*2,socketDepth,[socket],[0,top-socketDepth/2,sourceHole],[Math.PI/2,0,0],circle(0,0,screwRadius));
       const targetCap=plate(screwRadius*2,screwRadius*2,socketDepth,[socket],[0,targetHole,top-socketDepth/2],[0,0,0],circle(0,0,screwRadius));
       const screwMaterial=material.clone();screwMaterial.color.set('#72777e');screwMaterial.metalness=.8;screwMaterial.roughness=.34;
-      sourceCap.material=targetCap.material=screwMaterial;
-      add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,top-socketDepth-shaftDepth/2,sourceHole],[0,0,0],'#72777e');
-      add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,targetHole,top-socketDepth-shaftDepth/2],[Math.PI/2,0,0],'#72777e');
+      const sourceShaft=add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,top-socketDepth-shaftDepth/2,sourceHole]);
+      const targetShaft=add(new THREE.CylinderGeometry(screwRadius,screwRadius,shaftDepth,32),[0,targetHole,top-socketDepth-shaftDepth/2],[Math.PI/2,0,0]);
+      sourceCap.material=targetCap.material=sourceShaft.material=targetShaft.material=screwMaterial;
     } else if(['INNER_BRACKET','SLIDE_BLOCK'].includes(kind)) {
       if(kind==='INNER_BRACKET'){
         plate(s*.40,s*4,t,[-1.5,-.5,.5,1.5].map(y=>circle(0,y*s,s*.11)));
@@ -206,12 +207,12 @@ export default class ComponentGeometryFactory {
       plate(s,s*2,t,[circle(0,s*.55,r)],[0,t/2,s],[Math.PI/2,0,0],outline);
       for(const mesh of boredBlock(s,s*.7,s*.7,[{axis:0,center:[0,0,0],radius:r}],material)){mesh.position.set(0,s*.35,s*.35);group.add(mesh);}
     } else {
-      const leg=kind==='SHELF_BRACKET'?d.length:s,w=kind==='L_BRACKET'?s*.45:Math.max(s,Number(d.height||s)),depth=kind==='HEAVY_CORNER'?d.length:leg;
-      const height=kind==='HEAVY_CORNER'?depth:s;
       const ports=angleBracketLayout(d);
-      const holes=kind==='HEAVY_CORNER'?[circle(0,depth*.35,r)]:(ports?.baseOffsets||(d.holeCount>=3?[-w*.22,w*.22]:[0])).map(offset=>circle(offset,0,r));
+      const leg=kind==='SHELF_BRACKET'?d.length:s,w=ports?.width||(kind==='L_BRACKET'?s*.45:Math.max(s,Number(d.height||s))),depth=ports?.depth||(kind==='HEAVY_CORNER'?d.length:leg);
+      const height=ports?.height||(kind==='HEAVY_CORNER'?depth:s);
+      const holes=kind==='HEAVY_CORNER'?[circle(0,depth*.35,r)]:(ports?.sourcePorts||(d.holeCount>=3?[-w*.22,w*.22]:[0]).map(offset=>({point:[offset,0,depth/2]}))).map(port=>circle(port.point[0],port.point[2]-depth/2,r));
       plate(w,depth,t,holes,[0,t/2,depth/2],[Math.PI/2,0,0]);
-      const uprightHoles=kind==='HEAVY_CORNER'?[circle(0,height*.35,r)]:(ports?.targetOffsets||(d.holeCount===4?[-w*.22,w*.22]:[0])).map(offset=>circle(offset,0,r));
+      const uprightHoles=kind==='HEAVY_CORNER'?[circle(0,height*.35,r)]:(ports?.targetPorts||(d.holeCount===4?[-w*.22,w*.22]:[0]).map(offset=>({point:[offset,height/2,0]}))).map(port=>circle(port.point[0],port.point[1]-height/2,r));
       const angle=(d.angle||90)*Math.PI/180;plate(w,height,t,uprightHoles,[0,height*Math.sin(angle)/2,height*Math.cos(angle)/2],[Math.PI/2-angle,0,0]);
       if(kind==='HEAVY_CORNER'||kind==='CORNER_CUBE')for(const x of [-(w-t)/2,(w-t)/2])plate(s,s,t,[],[x,0,0],[0,Math.PI/2,0],[point(0,0),point(-depth+t,0),point(0,height-t)]);
     }

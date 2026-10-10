@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "version": "0.75.39",
+    "version": "0.75.56",
     "generator": "DIY Web",
     "date": "2026-09-29T16:08:07.811Z",
     "schemaVersion": 62,
@@ -1538,7 +1538,8 @@
       "showOverall": true,
       "showPartDimensions": true,
       "showMachiningLabels": true,
-      "showMachiningDimensions": true,
+      "showMachiningSurface": true,
+      "showMachiningDimensions": false,
       "showUserDimensions": true
     },
     "machiningPatternDefaults": {

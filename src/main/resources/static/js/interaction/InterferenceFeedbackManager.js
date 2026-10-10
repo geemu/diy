@@ -3,6 +3,7 @@ import {profileObb, intersectObb} from '../validation/PartCollisionDetector.js';
 import {createSurfaceFeedback,disposeFeedback} from './SurfaceFeedback.js';
 import {addSelectionCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js';
 import {connectorEnvelope} from '../connection/ConnectionPlacementManager.js';
+import {panelObjectIntersection} from '../geometry/PanelReliefGeometry.js';
 
 /**
  * 设计阶段实时接触 / 干涉反馈。
@@ -86,6 +87,7 @@ export default class InterferenceFeedbackManager {
             penetrationMm:relation.penetrationMm,
             message:relation.exact?`${label(a.part)} 与 ${label(b.part)} 干涉 ${round(relation.penetrationMm)} mm`:`${label(a.part)} 与 ${label(b.part)} 安装空间重叠（包络检查）`
           });
+          if(relation.materialChecked)issues[issues.length-1].message=label(a.part)+' 与 '+label(b.part)+' 材料重叠（板材轮廓检查）';
         } else if (relation.kind === 'CONTACT') {
           contactPartIds.add(aId); contactPartIds.add(bId);
           contacts.push({
@@ -125,6 +127,12 @@ export default class InterferenceFeedbackManager {
   classify(a,b) {
     const collisionTolerance = Math.max(0.1,Number(this.editor.projectSettings?.collisionToleranceMm ?? 0.5));
     const contactTolerance = Math.max(collisionTolerance,Number(this.editor.projectSettings?.contactToleranceMm ?? 1));
+    // 薄板不能继续以完整矩形包络挡住已裁的角；宽阶段相交后检查实际剩余材料。
+    if(a.box.intersectsBox(b.box)&&(a.part.type==='PANEL'||b.part.type==='PANEL')){
+      const panel=a.part.type==='PANEL'?a:b,other=panel===a?b:a;
+      const relation=panelObjectIntersection(panel.part,other.mesh,collisionTolerance);
+      if(relation)return {kind:relation.intersects?'INTERFERENCE':'SEPARATE',exact:false,materialChecked:true,penetrationMm:0,gapMm:relation.intersects?0:Infinity};
+    }
     if (a.obb && b.obb) {
       const collision = intersectObb(a.obb,b.obb,collisionTolerance);
       const exact=a.part?.type==='PROFILE'&&b.part?.type==='PROFILE';

@@ -1,11 +1,13 @@
 import {createProjectCoordinateDescriptor} from '../model/ProfileCoordinateSystem.js';
 import {normalizeDimensionEntity, DIMENSION_SYSTEM_VERSION} from '../dimension/DimensionSystem.js';
-import {panelDimensions} from '../model/PanelShapeModel.js';
+import {panelDimensions,panelMaterialContours} from '../model/PanelShapeModel.js';
 import {connectionDesignType} from '../model/ComponentCatalog.js';
-import {normalizeHiddenCornerDimensions} from '../model/ConnectionComponentPorts.js';
+import {normalizeHiddenCornerDimensions,angleBracketLayout} from '../model/ConnectionComponentPorts.js';
+import {normalizeDesignAnchor,isCenteredDesignAnchor} from '../model/ConnectionAnchor.js';
+import {normalizeSideMount} from '../connection/SideMountConnection.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.39';
+export const CURRENT_APP_VERSION = '0.75.56';
 
 /**
  * Current-only project schema gate.
@@ -41,6 +43,7 @@ export default class ProjectSchema {
       if (!part || typeof part !== 'object') throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 存在无效构件数据`);
       if (!allowed.has(part.type)) throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 不支持构件类型：${part.type || '空'}`);
       if (!part.id) throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 构件缺少 id`);
+      if(part.type==='PANEL'&&part.dimensions?.edgeNotches!=null)panelMaterialContours(part);
       if(part.type==='PANEL'&&part.dimensions?.panelShape) {
         const expected=panelDimensions(part.dimensions.panelShape,part.dimensions.shapeParameters||{});
         for(const key of ['width','height','thickness'])if(Math.abs(Number(part.dimensions[key])-expected[key])>.01||!Number.isFinite(Number(part.dimensions[key])))throw new Error(`板材 ${part.id} 的 ${key} 与形状参数不一致`);
@@ -57,8 +60,14 @@ export default class ProjectSchema {
       if(!connection?.id)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接缺少 id`);
       if(!allowed.has(connection.designType))throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少有效 designType`);
       if(!connection.sourceProfileId || !connection.targetProfileId)throw new Error(`schema v${CURRENT_PROJECT_SCHEMA_VERSION} 连接 ${connection.id} 缺少源/目标型材`);
+      if(connection.designAnchorOffset!=null&&(!normalizeDesignAnchor(connection.designAnchorOffset)||(!isCenteredDesignAnchor(connection.designAnchorOffset)&&(!connection.designComponent||connection.manufacturingRuleId))))throw new Error(`连接 ${connection.id} 的多槽局部定位无效或绑定了未适配的制造方案`);
       if(connection.designComponent?.dimensions?.geometryKind==='HIDDEN_CORNER'&&(connectionDesignType(connection.designComponent)!==connection.designType||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的隐藏角槽件尺寸/方式无效，或绑定了尚未支持的制造方案`);
-      if(connection.jointKind!=null&&(connection.jointKind!=='SIDE_CORNER'||!(connection.designType==='ANGLE_BRACKET'||(connection.designType==='INTERNAL_CONNECTOR'&&connection.designComponent?.dimensions?.geometryKind==='HIDDEN_CORNER'))||!connection.designComponent||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的侧面内角只支持未配置制造方案的目录角码或槽内角槽件`);
+      if(connection.jointKind==='SIDE_MOUNT'){
+        if(connection.designType!=='ANGLE_BRACKET'||!normalizeSideMount(connection.sideMount)||connection.designComponent?.dimensions?.sideMountGeometryVersion!==1||!angleBracketLayout(connection.designComponent.dimensions)||!['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(connection.designComponent.dimensions.geometryKind)||connection.manufacturingRuleId||!isCenteredDesignAnchor(connection.designAnchorOffset))throw new Error(`连接 ${connection.id} 的梁侧安装定位 / 参考规格无效，或绑定了未适配制造方案`);
+      }else{
+        if(connection.sideMount!=null||connection.designComponent?.dimensions?.sideMountGeometryVersion!=null)throw new Error(`连接 ${connection.id} 的梁侧定位必须属于梁侧安装关系`);
+        if(connection.jointKind!=null&&(connection.jointKind!=='SIDE_CORNER'||!(connection.designType==='ANGLE_BRACKET'||(connection.designType==='INTERNAL_CONNECTOR'&&connection.designComponent?.dimensions?.geometryKind==='HIDDEN_CORNER'))||!connection.designComponent||connection.manufacturingRuleId))throw new Error(`连接 ${connection.id} 的侧面内角只支持未配置制造方案的目录角码或槽内角槽件`);
+      }
       const faces=connection.designComponentMountFaces;
       const validFaces=['FRONT','BACK','LEFT','RIGHT'],opposite={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
       if(connection.designComponentMountFace!=null&&!validFaces.includes(connection.designComponentMountFace))throw new Error(`连接 ${connection.id} 的主安装面无效`);
@@ -70,6 +79,8 @@ export default class ProjectSchema {
         if(typeof variants!=='object'||Array.isArray(variants))throw new Error(`连接 ${connection.id} 的型号记录无效`);
         for(const [type,variant] of Object.entries(variants)){
           if(!allowed.has(type)||!variant?.designComponent?.id||connectionDesignType(variant.designComponent,{savedRecord:true})!==type||!validFaces.includes(variant.sourceMountFace))throw new Error(`连接 ${connection.id} 的 ${type} 型号记录无效`);
+          if(variant.designAnchorOffset!=null&&!normalizeDesignAnchor(variant.designAnchorOffset))throw new Error(`连接 ${connection.id} 的 ${type} 局部定位无效`);
+          if((variant.sideMount!=null||variant.designComponent.dimensions.sideMountGeometryVersion!=null)&&(!normalizeSideMount(variant.sideMount)||variant.designComponent.dimensions.sideMountGeometryVersion!==1||type!=='ANGLE_BRACKET'||!angleBracketLayout(variant.designComponent.dimensions)))throw new Error(`连接 ${connection.id} 的 ${type} 梁侧型号定位无效`);
         }
       }
     }
@@ -151,12 +162,17 @@ export default class ProjectSchema {
       profileGripDefaults:{enabled:true,minLengthMm:10,gridSnap:true,gridStepMm:10,featureSnap:true,featureSnapDistanceMm:28,axisSnapToleranceMm:3},
       engineeringDrawing:{projectName:'未命名工程',revision:'A',paper:'A3',sideView:'RIGHT'},
       drawingDefaults:{catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000},
-      annotations:{showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningDimensions:false,showUserDimensions:true},
+      annotations:{showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningSurface:true,showMachiningDimensions:false,showUserDimensions:true},
       ...(project.editorState || {})
     };
     project.editorState.drawingDefaults = {catalogId:'DESIGN-3030',faceClosures:[],plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000,...(project.editorState.drawingDefaults || {})};
     project.editorState.drawingDefaults.continueDrawing = project.editorState.drawingDefaults.continueDrawing === true;
-    project.editorState.annotations = {showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningDimensions:false,showUserDimensions:true,...(project.editorState.annotations || {})};
+    const annotations=project.editorState.annotations||{};
+    const hasMachiningDisplayPreference=typeof annotations.showMachiningSurface==='boolean';
+    project.editorState.annotations = {showOverall:true,showPartDimensions:true,showPartNumbers:true,showMachiningLabels:true,showMachiningSurface:true,showMachiningDimensions:false,showUserDimensions:true,...annotations};
+    // 旧Schema62展示副本首次默认贴面；已有尺寸与驱动保留，之后尊重显式显示选择。
+    if(!hasMachiningDisplayPreference)project.editorState.annotations.showMachiningDimensions=false;
+    if(project.editorState.annotations.showMachiningDimensions)project.editorState.annotations.showMachiningSurface=false;
     project.editorState.dimensionSystemVersion = DIMENSION_SYSTEM_VERSION;
     project.editorState.engineeringDrawingSystemVersion = 2;
     project.editorState.engineeringDrawingDxfVersion = 1;

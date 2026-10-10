@@ -1,4 +1,71 @@
+import {getSlotDefinitionsForFace} from '../model/ProfileFeatureCatalog.js';
+import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
+import {getSectionDefinition} from '../model/ProfileSectionRegistry.js';
+
+const endBoreReferences = new WeakMap();
+
 export const MACHINING_FEATURE_VERSION = 1;
+
+/** 新手打孔的横向默认位置；长度站位不在这里修改，默认值不是永久槽位约束。 */
+export function centeredHoleOffset(part,face,hint=0) {
+  const slots=getSlotDefinitionsForFace(part,face).filter(slot=>Number.isFinite(Number(slot.offset)));
+  if(!slots.length)return 0;
+  const value=Number.isFinite(Number(hint))?Number(hint):0;
+  return Number(slots.reduce((best,slot)=>Math.abs(Number(slot.offset)-value)<Math.abs(Number(best.offset)-value)?slot:best).offset);
+}
+
+/**
+ * 加工辅助中线：整体中线加目录中各单元的中心，不等同于开放槽或永久加工约束。
+ * 3060长边的目录单元为-15/+15，再加整体0；未知截面只提示已知的整体中心。
+ */
+export function machiningCenterOffsets(part,face) {
+  const definition=getDesignProfileDefinition(part?.designProfile?.profileId);
+  const acrossWidth=['FRONT','BACK'].includes(face),faces=acrossWidth?['FRONT','BACK']:['LEFT','RIGHT'];
+  const span=Number(part?.dimensions?.sectionSize?.[acrossWidth?0:1]||0);
+  const values=[0,...(definition?.slotDefinitions||[]).filter(slot=>faces.includes(slot.face)).map(slot=>Number(slot.offset))];
+  return [...new Set(values.filter(value=>Number.isFinite(value)&&Math.abs(value)<=span/2+1e-6))].sort((a,b)=>a-b);
+}
+
+/** 只读实际截面中的完整圆孔；矩形空腔、T槽和单元辅助中线不冒充原孔。 */
+export function machiningEndBores(part) {
+  const section=getSectionDefinition(part?.designProfile?.profileId,part?.designProfile?.faceClosures||[]);
+  if(!section)return [];
+  let references=endBoreReferences.get(section);
+  if(!references) {
+    references=(section.holes||[]).map(circularBoreReference).filter(Boolean);
+    endBoreReferences.set(section,references);
+  }
+  return references;
+}
+
+function circularBoreReference(ring) {
+  const outline=(ring||[]).map(point=>({x:Number(point.x),y:Number(point.y)}));
+  if(outline.some(point=>!Number.isFinite(point.x)||!Number.isFinite(point.y)))return null;
+  if(outline.length>1&&Math.hypot(outline[0].x-outline.at(-1).x,outline[0].y-outline.at(-1).y)<1e-8)outline.pop();
+  if(outline.length<8)return null;
+  const meanX=outline.reduce((sum,point)=>sum+point.x,0)/outline.length,meanY=outline.reduce((sum,point)=>sum+point.y,0)/outline.length;
+  let xx=0,xy=0,yy=0,xr=0,yr=0;
+  for(const point of outline) {
+    const x=point.x-meanX,y=point.y-meanY,squared=x*x+y*y;
+    xx+=x*x;xy+=x*y;yy+=y*y;xr+=x*squared;yr+=y*squared;
+  }
+  const determinant=xx*yy-xy*xy;
+  if(!Number.isFinite(determinant)||determinant<=1e-12)return null;
+  const offsetX=meanX+(xr*yy-yr*xy)/(2*determinant),offsetY=meanY+(yr*xx-xr*xy)/(2*determinant);
+  const radii=outline.map(point=>Math.hypot(point.x-offsetX,point.y-offsetY)),radius=radii.reduce((sum,value)=>sum+value,0)/radii.length;
+  if(!Number.isFinite(radius)||radius<.05||radii.some(value=>Math.abs(value-radius)>Math.max(1e-4,radius*.015)))return null;
+  // 要求轮廓按同向走完一圈，拒绝局部圆弧、重复弧和自交近圆多边形。
+  let turn=0,direction=0;
+  for(let i=0;i<outline.length;i++) {
+    const a=outline[i],b=outline[(i+1)%outline.length];
+    const angle=Math.atan2((a.x-offsetX)*(b.y-offsetY)-(a.y-offsetY)*(b.x-offsetX),(a.x-offsetX)*(b.x-offsetX)+(a.y-offsetY)*(b.y-offsetY));
+    if(Math.abs(angle)<1e-8||Math.abs(angle)>Math.PI/2+1e-6)return null;
+    if(direction&&Math.sign(angle)!==direction)return null;
+    direction=Math.sign(angle);turn+=angle;
+  }
+  if(Math.abs(Math.abs(turn)-Math.PI*2)>1e-5)return null;
+  return {offsetX:Math.abs(offsetX)<1e-8?0:offsetX,offsetY:Math.abs(offsetY)<1e-8?0:offsetY,radius,outline,centerLabel:'原有圆孔中心'};
+}
 
 export const MachiningFeatureType = Object.freeze({
   THROUGH_HOLE:'THROUGH_HOLE',

@@ -214,11 +214,11 @@ export default class BomExporter {
     for(const part of source.filter(part=>part.type!=='PROFILE')){
       const descriptor=describeGenericPart(part);
       if(!descriptor)continue;
-      const key=[part.type,descriptor.spec,descriptor.size,descriptor.material].join('|');
+      const key=[part.type,descriptor.spec,descriptor.size,descriptor.material,descriptor.shapeKey||''].join('|');
       if(!genericGroups.has(key))genericGroups.set(key,{...descriptor,parts:[]});
       genericGroups.get(key).parts.push(part);
     }
-    for(const group of genericGroups.values())rows.push([index++,group.category,'-',group.spec,group.material,group.size,group.parts.length,group.parts.map(part=>this.code(part)).join(' / '),'']);
+    for(const group of genericGroups.values())rows.push([index++,group.category,'-',group.spec,group.material,group.size,group.parts.length,group.parts.map(part=>this.code(part)).join(' / '),group.note||'']);
     return rows;
   }
 
@@ -320,11 +320,11 @@ function describeBomPart(part,bom){
     return {category:'设计型材',spec:profileDisplayName(part),size:`${profileNominal(part)} / ${bom.n(metrics.developedLength)}mm`,note:(part.machiningItems||[]).length?bom.detail(part):''};
   }
   const generic=describeGenericPart(part);
-  return generic ? {category:generic.category,spec:generic.spec,size:generic.size,note:''} : {category:part.type||'构件',spec:part.name||'',size:'',note:''};
+  return generic ? {category:generic.category,spec:generic.spec,size:generic.size,note:generic.note||''} : {category:part.type||'构件',spec:part.name||'',size:'',note:''};
 }
 
 function describeGenericPart(part){
-  let spec='',size='',material=part.materialSpec?.material||'',category=part.type;
+  let spec='',size='',material=part.materialSpec?.material||'',category=part.type,note='',shapeKey='';
   if(part.type==='SHAFT'){category='光轴';spec=`Ø${part.dimensions?.diameter||''}`;size=`L${part.dimensions?.length||''}mm`;}
   else if(part.type==='PANEL'){category='板材';spec=part.name||'板材';size=`${part.dimensions?.width||''}×${part.dimensions?.height||''}×${part.dimensions?.thickness||''}mm`;}
   else if(part.type==='ACCESSORY'){
@@ -337,7 +337,11 @@ function describeGenericPart(part){
     else size=hardwareSizeLabel(definition||{},part)||`${part.dimensions?.size||''}mm`;
     material=part.hardwareSpec?.material||material;
   } else return null;
-  return {category,spec,size,material};
+  if(part.type==='PANEL'&&part.dimensions?.edgeNotches?.length){
+    shapeKey=JSON.stringify(part.dimensions.edgeNotches);
+    note=part.dimensions.edgeNotches.map(n=>({LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge])+'边缺口 '+n.widthMm+'×'+n.depthMm+'mm，距'+(n.anchor==='END'?'右/上':'左/下')+'端'+n.offsetMm+'mm').join('；');
+  }
+  return {category,spec,size,material,note,shapeKey};
 }
 
 function hardwareSizeLabel(definition,part){

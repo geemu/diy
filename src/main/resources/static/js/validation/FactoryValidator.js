@@ -6,7 +6,7 @@ import {getConnectionRule} from '../model/ConnectionRuleCatalog.js';
 import {effectiveDiameter, featureFootprint, isEndMachiningFeature, normalizeMachiningFeature} from '../machining/MachiningFeatureCatalog.js';
 import PartCollisionDetector from './PartCollisionDetector.js';
 import ConnectionCompletenessInspector from './ConnectionCompletenessInspector.js';
-import {panelDimensions,SolidPanelShapes} from '../model/PanelShapeModel.js';
+import {panelDimensions,panelMaterialContours,SolidPanelShapes} from '../model/PanelShapeModel.js';
 import {shaftFixturePorts} from '../model/ComponentCatalog.js';
 
 export default class FactoryValidator {
@@ -34,6 +34,9 @@ export default class FactoryValidator {
     for(const part of this.editor.parts.filter(item=>item?.type==='PANEL'&&item.dimensions?.panelShape)){
       try{panelDimensions(part.dimensions.panelShape,part.dimensions.shapeParameters);}catch(error){errors.push(issue('INVALID_PANEL_SHAPE','ERROR',part.displayId||part.name,error.message,{partIds:[part.id]}));}
       if(SolidPanelShapes.includes(part.dimensions.panelShape))warnings.push(issue('SOLID_REFERENCE_MODEL','WARNING',part.displayId||part.name,'该构件为三维设计几何体，不是板材切割件；需另行确认制造工艺',{partIds:[part.id]}));
+    }
+    for(const part of this.editor.parts.filter(item=>item?.type==='PANEL'&&item.dimensions?.edgeNotches!=null)){
+      try{panelMaterialContours(part);}catch(error){errors.push(issue('INVALID_PANEL_NOTCH','ERROR',part.displayId||part.name,error.message,{partIds:[part.id]}));}
     }
 
     for (const connection of this.editor.connectionManager.connections) {

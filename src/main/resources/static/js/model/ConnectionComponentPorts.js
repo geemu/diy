@@ -3,15 +3,17 @@ export function angleBracketLayout(dimensions={}) {
   const kind=dimensions.geometryKind,s=Number(dimensions.size||20),t=Number(dimensions.thickness||Math.max(2,s*.12));
   if(!['L_BRACKET','ANGLE_BRACKET','CORNER_CUBE','HEAVY_CORNER'].includes(kind)||Math.abs(Number(dimensions.angle||90)-90)>.01)return null;
   const width=kind==='L_BRACKET'?s*.45:Math.max(s,Number(dimensions.height||s));
-  const depth=kind==='HEAVY_CORNER'?Number(dimensions.length||80):s,height=kind==='HEAVY_CORNER'?depth:s;
+  const depth=kind==='HEAVY_CORNER'?Number(dimensions.length||80):dimensions.sideMountGeometryVersion===1?Number(dimensions.depth):s,height=kind==='HEAVY_CORNER'?depth:s;
   // 长截面的两列孔按系列节距；不能另用外观比例 w*.22 推测安装孔心。
   const pitch=width>=s*2-.01?s:width*.44;
   const baseOffsets=kind==='HEAVY_CORNER'||Number(dimensions.holeCount)<3?[0]:[-pitch/2,pitch/2];
   const targetOffsets=kind!=='HEAVY_CORNER'&&Number(dimensions.holeCount)===4?[-pitch/2,pitch/2]:[0];
-  const station=kind==='HEAVY_CORNER'?.85:.5;
+  const station=kind==='HEAVY_CORNER'?.85:.5,sourceStation=dimensions.sideMountGeometryVersion===1?Number(dimensions.sourceHoleStation):depth*station,targetStation=dimensions.sideMountGeometryVersion===1?Number(dimensions.targetHoleStation):height*station;
+  if(![width,depth,height,t,sourceStation,targetStation].every(value=>Number.isFinite(value)&&value>0)||sourceStation>=depth||targetStation>=height)return null;
+  if(dimensions.sideMountGeometryVersion===1&&(t>=Math.min(depth,height)||width<=s*.24||sourceStation<=s*.12||sourceStation>=depth-s*.12||targetStation<=s*.12||targetStation>=height-s*.12))return null;
   return {width,depth,height,thickness:t,radius:s*.12,baseOffsets,targetOffsets,
-    sourcePorts:baseOffsets.map((offset,index)=>({id:`BASE-${index+1}`,point:[offset,0,depth*station]})),
-    targetPorts:targetOffsets.map((offset,index)=>({id:`UPRIGHT-${index+1}`,point:[offset,height*station,-t/2]}))};
+    sourcePorts:baseOffsets.map((offset,index)=>({id:`BASE-${index+1}`,point:[offset,0,sourceStation]})),
+    targetPorts:targetOffsets.map((offset,index)=>({id:`UPRIGHT-${index+1}`,point:[offset,targetStation,-t/2]}))};
 }
 
 /** 参考角槽件的窄颈、宽脚和两条腿；宽脚适配本项目槽腔，不冒充供应商采购尺寸。 */
@@ -28,7 +30,7 @@ export function hiddenCornerDimensions(size) {
 export function normalizeHiddenCornerDimensions(dimensions={}) {
   const size=Number(dimensions.size);
   if(dimensions.geometryKind==='HIDDEN_CORNER'&&dimensions.hiddenGeometryVersion==null&&[30,40].includes(size)
-    &&Number(dimensions.width)===6&&Number(dimensions.thickness)===4&&Number(dimensions.recess)===2
+    &&Number(dimensions.width)===6&&Number(dimensions.height)===size&&Number(dimensions.thickness)===4&&Number(dimensions.recess)===2
     &&Number(dimensions.length)===(size===30?20:24)&&Number(dimensions.holeRadius)===1.7
     &&Number(dimensions.slotWidth)===8&&Number(dimensions.holeCount)===2&&Number(dimensions.angle)===90){
     return {...dimensions,...hiddenCornerDimensions(size)};
@@ -45,8 +47,8 @@ export function hiddenCornerLayout(dimensions={}) {
   const sourceLength=Number(d.length)-depth,targetLength=Number(d.height)-depth;
   const sourceHole=Number(d.sourceHoleStation)-depth,targetHole=Number(d.targetHoleStation)-depth;
   if(![width,neck,depth,recess,shoulder,bevel,radius,sourceLength,targetLength,sourceHole,targetHole].every(value=>Number.isFinite(value)&&value>0)
-    ||Number(d.slotWidth)!==8||neck>=8||width<=neck||radius>=neck/2||shoulder<=recess||depth<=shoulder+2*bevel
-    ||bevel>=(width-neck)/2||sourceHole+radius>=sourceLength||targetHole+radius>=targetLength
+    ||Number(d.slotWidth)!==8||neck>=8||width<=neck||radius<=1.75||radius>=neck/2||shoulder<=recess||depth<=shoulder+2*bevel||depth-recess<=1.6
+    ||bevel>=Math.min((width-neck)/2,neck/2,sourceLength/2,targetLength/2)||sourceHole+radius>=sourceLength||targetHole+radius>=targetLength
     ||sourceHole<=radius||targetHole<=radius||Number(d.holeCount)!==2||!(Math.abs(Number(d.angle)-90)<=.01))return null;
   const n=neck/2,w=width/2;
   // 与真实几何相同的T形轮廓；不能再用跨过槽唇的矩形包络判定宿主空腔。

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {getLocalEndpoints, isLinearProfile} from '../model/ProfilePath.js';
 import {resolveProfileFeature,findNearestProfileFeature,getSlotOffsetsForFace} from '../model/ProfileFeatureCatalog.js';
 import {profileObb,intersectObb} from '../validation/PartCollisionDetector.js';
+import {profileEndContact} from '../model/ProfileEndContact.js';
 
 /**
  * 基础 DIY 几何吸附。
@@ -112,7 +113,7 @@ export default class SnapManager {
   /** 方向贴合只允许提交当前指定目标的零间隙端面候选，不重新跳向附近的槽中心。 */
   snapToTarget(mesh,targetPartId){
     mesh.updateMatrixWorld(true);
-    const candidate=this.collectCandidates(mesh,0.1).find(row=>row.snap.targetProfileId===targetPartId&&row.snap.type==='END_TO_FACE'&&!this.candidateCollision(mesh,row));
+    const candidate=this.collectCandidates(mesh,0.1).find(row=>row.snap.targetProfileId===targetPartId&&row.snap.type==='END_TO_FACE'&&!this.candidateContactError(mesh,row)&&!this.candidateCollision(mesh,row));
     if(!candidate){mesh.userData.lastSnap=null;return null;}
     this.lastSession={sourceId:mesh.userData.part.id,originPosition:mesh.position.clone(),candidates:[candidate],index:0};
     return this.applyCandidate(mesh,0);
@@ -123,7 +124,7 @@ export default class SnapManager {
     if (!session) return null;
     const candidate = session.candidates[index];
     // 切换候选或松手时重新检查；一帧以前的合法候选不能绕过新障碍。
-    const collision=this.candidateCollision(source,candidate,session.originPosition);
+    const collision=this.candidateContactError(source,candidate,session.originPosition)||this.candidateCollision(source,candidate,session.originPosition);
     if(collision){
       source.userData.lastSnap=null;
       this.editor.sceneManager.clearSnapPreview();
@@ -165,10 +166,19 @@ export default class SnapManager {
   sortedCandidates(source,maxDistance=this.distance) {
     this.blockedCandidate=null;
     return this.collectCandidates(source,maxDistance).sort(compareCandidates).filter(candidate=>{
-      const collision=this.candidateCollision(source,candidate);
+      const collision=this.candidateContactError(source,candidate)||this.candidateCollision(source,candidate);
       if(collision&&!this.blockedCandidate)this.blockedCandidate=collision;
       return !collision;
     });
+  }
+
+  /** 在拟提交的位置检查整面贴合，切换候选 / 松手同样重查，不把旧预览当作合法性证明。 */
+  candidateContactError(source,candidate,originPosition=source.position){
+    if(!['END_TO_FACE','END_TO_SLOT'].includes(candidate?.snap?.type))return null;
+    const target=this.editor.getMeshByPartId(candidate.snap.targetProfileId);
+    const delta=originPosition.clone().add(candidate.delta).sub(source.position);
+    const contact=profileEndContact(source,target,{...candidate.snap,delta});
+    return contact.ok?null:{message:contact.errors[0].message};
   }
 
   /** 候选落位用原干涉分类器预判，包含第三根障碍和整体移动随动件；只读虚拟位置。 */
@@ -218,7 +228,7 @@ export default class SnapManager {
   /** 约束求解后再次确认三维接头，不把松手前的绿色提示沿用到已经被移动的位置。 */
   isSnapSatisfied(mesh,snap){
     if(!mesh||!snap)return false;
-    return this.collectCandidates(mesh,0.1).some(candidate=>sameFeature(candidate.snap,snap)&&candidate.delta.length()<=0.1);
+    return this.collectCandidates(mesh,0.1).some(candidate=>sameFeature(candidate.snap,snap)&&candidate.delta.length()<=0.1&&!this.candidateContactError(mesh,candidate));
   }
 
   collectCandidates(source,maxDistance=this.distance) {

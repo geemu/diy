@@ -93,4 +93,4 @@ const hover=new FeatureHover(editor);hover.renderFeature(source,{type:'PROFILE_E
 assert.equal(hover.group.children[0].isPoints,true);assert.equal(hover.group.children[0].material.size,5);assert.equal(hover.group.children[0].material.sizeAttenuation,false);
 const marker=hover.group.children[0];hover.clearGraphics();assert.equal(marker.parent,null);assert.equal(hover.group.children.length,0);
 const editorSource=fs.readFileSync(path.join(js,'core/Editor.js'),'utf8');assert.ok(editorSource.includes('isSnapSatisfied(this.selected,snap)'));
-console.log(JSON.stringify({ok:true,version:'0.75.39',dropReproduced:true,fullEndFootprint:true,previewCommitSame:true,translationPreservesRotation:true,stableFeatureLock:true,releaseRadius:true,recheck:true,negativeGroundAllowed:true,screenPixels:5}));
+console.log(JSON.stringify({ok:true,version:'0.75.56',dropReproduced:true,fullEndFootprint:true,previewCommitSame:true,translationPreservesRotation:true,stableFeatureLock:true,releaseRadius:true,recheck:true,negativeGroundAllowed:true,screenPixels:5}));

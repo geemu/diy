@@ -76,4 +76,4 @@ function prepare(e){
   for(const mesh of e.meshes.filter(mesh=>mesh.userData.part.type==='PROFILE')){mesh.position.add(new THREE.Vector3(100,50,200));mesh.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2));mesh.position.sub(new THREE.Vector3(100,50,200)).applyAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2).add(new THREE.Vector3(100,50,200));e.syncPartFromMesh(mesh);mesh.updateMatrixWorld(true);}
   m.begin(id);assert.ok(m.preview({...p,width:1200}).ready);m.cancel();dispose(e);outcomes.framePanelRefitAndRigidPose=true;
 }
-console.log(JSON.stringify({ok:true,version:'0.75.39',...outcomes}));
+console.log(JSON.stringify({ok:true,version:'0.75.56',...outcomes}));

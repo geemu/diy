@@ -197,6 +197,8 @@ button{color:inherit}
 .scene-annotation-label.machining{background:#17202e;color:#e8edf3;font-weight:500;font-size:11px;line-height:1.35;padding:4px 7px;border:1px solid #43516a;border-radius:4px;box-shadow:0 2px 5px #10172220;overflow:hidden;text-overflow:ellipsis}
 .canvas-stage:has([data-machining-hover="true"]) :is(.scene-hover-label,.feature-hover-hud){display:none!important}
 .scene-annotation-label.machining-dim{background:#151515;color:#f4bc18;border:1px solid #d7a10f;font-weight:800;padding:2px 5px;box-shadow:none;font-size:10px}
+.scene-annotation-label.machining-distance{font-size:10px}
+.scene-annotation-label.machining-size{font-size:10px;line-height:1.2;font-weight:600;color:#263c50;background:#eef3f8ef;border:1px solid #98a9ba;border-radius:3px;padding:2px 5px;box-shadow:none;pointer-events:none}
 .scene-annotation-label.user{background:#171717;color:#ffc629;border:1px solid #e1a80f;font-weight:800}.scene-annotation-label.user.driven{outline:2px solid rgba(46,113,255,.35);outline-offset:1px}
 .scene-annotation-label.draggable{pointer-events:auto;cursor:move}
 .scene-annotation-label.draggable:hover{outline:2px solid rgba(46,113,255,.28)}
@@ -1100,3 +1102,43 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .workbench-confirm kbd{margin-left:5px;font-size:10px;color:#929dad;background:transparent;border:0}
 .workbench-confirm-danger{background:#b93e4b;color:#fff;border:1px solid #d85966}
 .workbench-confirm-danger:hover{background:#cc4b58;border-color:#ed7781}
+
+/* 两侧收起独立于Vue页面和浮动坐标；零轨道让出实际画布空间，边缘入口始终可达。 */
+.workspace[data-left-collapsed]{--rail-size:64px;--panel-max:520px;--right-size:min(var(--panel-max),var(--library-track,344px));grid-template-columns:var(--rail-size) var(--quick-track) minmax(0,1fr) var(--right-size)!important}
+.workspace[data-left-collapsed][data-right-mode="modify"]{--right-size:min(var(--panel-max),var(--inspector-track,344px))}
+.workspace[data-left-collapsed="true"][data-right-mode]{grid-template-columns:0px 0px minmax(0,1fr) var(--right-size)!important}
+.workspace[data-right-collapsed="true"],.workspace[data-right-collapsed="true"][data-right-mode="modify"]{--right-size:0px}
+.workspace[data-left-collapsed="true"] :is(.cad-tool-rail,.quick-operation-panel),.workspace[data-right-collapsed="true"] :is(.library-panel,.inspector-panel){display:none!important}
+.canvas-shell{position:relative}
+.workbench-collapse-toggle{position:absolute;top:50%;transform:translateY(-50%);z-index:36;width:20px;height:44px;padding:0;border:1px solid rgba(63,78,98,.25);background:rgba(235,242,249,.88);color:#53677d;font-size:24px;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(21,37,55,.10);touch-action:manipulation}
+.workbench-collapse-left{left:0;border-left:0;border-radius:0 6px 6px 0}
+.workbench-collapse-right{right:0;border-right:0;border-radius:6px 0 0 6px}
+.workbench-collapse-toggle:hover{background:#fff0df;color:#ad5b00;border-color:#dcb78a}
+.workbench-collapse-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(max-width:1100px){.workspace[data-left-collapsed]{--panel-max:280px}.workspace[data-left-collapsed="false"]{--rail-size:60px}}
+@media(max-width:700px){.workspace[data-left-collapsed]{--panel-max:220px}.workspace[data-left-collapsed="false"]{--rail-size:52px}}
+.frame-options{margin:10px 0;border:1px solid #303442;border-radius:7px;background:#0c1020;padding:0 10px 10px}
+.frame-options>summary{padding:10px 0;color:#c7ccd7;font-size:12px;cursor:pointer}
+.frame-options:not([open]){padding-bottom:0}
+.frame-options .frame-structure-note{margin:0 0 10px}
+.frame-role-row{display:grid;grid-template-columns:minmax(0,1fr)120px;gap:6px;margin:10px 0}
+.frame-role-row>label{grid-column:1/-1;color:#b6bfce}
+.frame-role-row>select,.frame-options .field-pair select{width:100%;min-width:0;height:34px;font-size:12px}
+.frame-layer-row{border-top:1px solid #303442;margin-top:10px;padding-top:10px}
+.frame-layer-row>strong{display:block;font-size:12px;font-weight:500;color:#d0d7e2;margin-bottom:8px}
+.frame-layer-row .field-pair{margin-bottom:8px}
+.frame-options .inline-check{font-size:12px;line-height:1.6;margin:0 0 8px}
+
+/* 连接件更换和板材裁角共用紧凑深色表单；只在用户进入预览后展开参数。 */
+.component-change-card,.connection-quick-change.component-change-card{display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;background:#151925;border:1px solid #303442;border-radius:8px;padding:11px}
+.component-change-card>strong{font-size:12px;color:#e2e8f0}
+.component-change-card .field-stack{margin:0}
+.component-change-card label,.component-change-card .field-pair label{font-size:11px;color:#aeb8c8}
+.component-change-card input,.component-change-card select,.connection-quick-change.component-change-card select{width:100%;min-width:0;height:34px;padding:6px 9px;border:1px solid #3b4353;border-radius:6px;background:#101420;color:#dbe3ef;font-size:12px}
+.component-change-card small,.component-change-card .muted-note{font-size:11px;line-height:1.6;color:#9ca8bc;margin:0}
+.component-change-card .button-row{display:flex;flex-wrap:wrap;gap:7px}
+.component-change-card .button-row>button{flex:1;min-width:0}
+.panel-notch-row{border-top:1px solid #303442;margin:8px 0;padding-top:9px}
+.panel-notch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
+.panel-notch-row .field-pair,.panel-notch-row .field-stack{margin-bottom:8px}
+.panel-relief-card .advanced-options{margin:0}

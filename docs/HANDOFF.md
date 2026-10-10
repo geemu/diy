@@ -1,4 +1,164 @@
-# 项目交接文档 — v0.75.39
+# 项目交接文档 — v0.75.56
+
+## v0.75.56 梁侧贴柱连接安装
+
+- 用户圈出内收梁与立柱的侧贴位置并确认修改。只读桌面未命名工程 (1).json：381221字节/2026-10-11 01:56:32/metadata0.75.55/Schema62，29 PROFILE、80连接、1组件；P-012左侧X=-305与P-001右侧同面，Z搭接[-275,-245]，并非源端轴朝向目标面的END_TO_FACE。现有C001/C021等保留，原JSON与实际草稿未直接操作。
+- 新SideMountConnection提供sideMountContacts/Contexts/Transform及参考规格，独立jointKind=SIDE_MOUNT、sideMount局部源接触面/A端站位/源槽偏移。Manager按真实侧面检查，不沿用错误端轴/full端面守卫，但系列、闭槽、逐孔0.15mm、完整腿支撑与第三方/原件包络仍检查。普通端占用和两梁内角不混入侧贴键；存储记录无世界姿态。
+- 原角码横腿沿梁长，侧贴横腿改跨梁宽；30系列通用模型原孔差1.8mm/腿超出1.8mm，不能只平移孔轴或扩大支撑门槛。ANGLE_BRACKET/CORNER_CUBE/L_BRACKET显式派生depth/sourceHoleStation/targetHoleStation和sideMountGeometryVersion=1，几何与端口共用；标签注明梁侧安装参考，原目录定义/既有实体不改。多孔、过大或空间不足仍可拒绝，非采购尺寸/螺钉加工/承载认证。
+- Placement附近/Tab/两点及右键候选传完整局部参考，Ghost/确认实际用同一派生规格。Batch新增独立侧贴扫描，按目标槽枚举真实梁长站位、每接触位置/安装侧占位；分帧、取消、快照、fresh重查、一次历史和失败回滚保持。AUTO只普通角码/隐藏件，下方角码合法优先、凸出当前承托面的角码仍拒绝，未映射槽内侧贴不伪生成。
+- 单件替换仅开放已映射的三种侧贴模型，保存/加载和variants保留sideMount，重建使用原尺寸/站位不暗改。图复制保持局部引用，镜像反转站位；AutoConnectionResolver和参数回改排除SIDE_MOUNT端占用/旧端宿主重定向。新Schema62可选字段严格验收且不迁移/覆盖旧文件，制造入口拒绝误绑旧梁端方案。
+- Schema62/126模块0.75.56，无新依赖；既有59份verify仅身份同步。未新增/运行测试、语法校验、Java编译、启动/重启、服务调用或浏览器验收，不声称已实测新增数量/实际拾取/性能。资源和待验见VALIDATION，细节见reference/beam-side-column-installation-2026-10-11-v07556.md。
+
+## v0.75.55 用户五层架的完整默认配置
+
+- 本轮用户说默认喜欢最新JSON的670/610/2000及各面横竖配置，替代上一版690/650/2000。只读桌面未命名工程.json：275861字节、2026-10-11 01:37:38、metadata0.75.53/Schema62、29型材/46关系/41组件；29实际Part均属5b66787f-d126-4a08-acf9-eda3a12c76c8，旧组件参数不作为当前样例。原文件与真实草稿/浏览器不操作。
+- 当前参数v3、统一3030、外670×610×2000/5层/1承托/1格SHARED、顶底BETWEEN/离地0/自动层高；post3060 turn0，bottom3060 turn1，side/center继承，底层center明确3030；默认INSET而顶底左右覆盖FRAME。实际立柱2000，宽梁610，顶底侧梁490，中间侧梁550，底承托490/其余550；几何和参数吻合，不需要手工架反推迁移。
+- DiyTemplateCatalog.createQuickFrameDefaults集中结构默认，四用途共享670×610×2000及样例部位/接法，各自2/0、4/1、5/1、2/1；新表单初始TURTLE_TANK_RACK。角色只预置post/bottom，app合并createRackRoleSettings的6空白项；默认选择3030及原单根选材不变。顶/底梁柱间、单格、层高自动等也由同一默认带入，不重复手写旧值。
+- 元数据角色/逐层行冻结；app初始化和明确选预设structuredClone，逐层修改不污染其他预设，选择自定义保持当前值。明确选预设指定RACK_LAYOUT_VERSION并同步行；DiyGenerator带完整默认并按有效levels建立顶/底FRAME行，输入显式结构/逐层优先。表单手改层数继续原按行保留规则，不隐式重排用户逐层覆盖，可在逐层设置改新顶/中层。
+- 不把createRackRoleSettings或旧布局的角色缺省变为3060，避免已存架漂移；v1/v2原尺寸缺省和实际保存参数保持，v3缺尺寸读新外尺寸。FrameParameterManager原自由编辑/手工/加工/制造守卫保持，实际孔槽/贴合/支撑/空腔/空间及同系列槽宽不放宽；其他系列需显式调整预置3060/底承托3030，不能静默跨系列安装。
+- v54正面稍俯视、X宽横向、例子二次取景及本机镜头/明确视角保持；默认样式仅新建/选预设/示例，不导入或重建当前用户文件。Schema62/125模块0.75.55，无新依赖，59份已有verify仅身份同步，不新增测试或测试逻辑；未测试/语法校验/Java编译/启动/重启/服务调用/浏览器验收。资源与待验见VALIDATION，详见reference/preferred-frame-defaults-2026-10-11-v07555.md。
+
+## v0.75.54 新快捷架默认尺寸与宽向正面
+
+- 用户要求新建默认外尺寸690×650×2000mm，宽应为正面左右。DiyTemplateCatalog导出只读DEFAULT_FRAME_DIMENSIONS，四用途预设共用；app新建表单读取当前STORAGE_RACK预设，loadSample不再重复写1000mm等旧值，DiyGenerator仍按显式输入优先、缺省读预设。层数/承托数仍2/0、4/1、5/2、2/1，统一型材默认3030不变。
+- LayeredRackModel的v3缺省尺寸读同一常量，v1的1000/600/1800及v2对应旧缺省保持；显式尺寸与旧保存参数不改。原v3实际槽对定位、3060平放、六部位、顶底搭接/侧梁/逐层和联排规则与FrameParameterManager自由编辑/手工/加工/制造守卫保持，没有新布局版本或历史Schema迁移。
+- 源码原因是addLayeredRack生成完成总调用斜iso的fitView，并非宽深坐标交换。新v3传(0,1,1)上前方向；fitView/fitPrimaryView接受方向参数，iso保留原向量长度补偿，向量/标准方向用真实拟合距离。仍按主体/全体包围球、较小视场角和正交缩放取景，X相机偏移为0，不旋转宿主/组件或写入视角到Project。
+- loadSample最后fitPrimaryView也明确上前，避免第二次适配回到斜iso。其他无参数适配、三维home、26视角及导入/本机镜头恢复保持；默认值不自动调整当前架或用户最后镜头。右侧只补外尺寸方向一句说明，参数预设标签改为“只填参数”，不加画布文字。
+- Schema62/125模块0.75.54，无新依赖；59份既有verify只版本身份同步，不改测试逻辑。按用户规则未新增/运行测试、语法校验、Java编译、启动/重启、服务调用或浏览器验收；旧源码提取式fitView()校验尚待授权适配可选参数签名，资源与待验见VALIDATION及reference/frame-defaults-front-view-2026-10-11-v07554.md。原JSON/实际草稿/用户浏览器没有直接操作。
+
+## v0.75.53 3060 平放梁快捷搭建
+
+- 用户确认底部3060平放及快捷搭建支持；只读桌面未命名工程.json（160260字节、2026-10-11 00:32:19本机修改时间）：0.75.51/Schema62，19根型材/19关系/32组件，实际成员归bd35c8b2-a0e3-41b2-8882-e96c7dfc2118。底宽梁610mm、侧梁530mm为3060平放，承托3030/530mm，约Y15且顶面30；保存bottom.quarterTurns=0未随手工几何更新。原文件、实际localStorage和用户浏览器不直接操作。
+- 工作期间原文件由外部再次保存：2026-10-11 01:18:19、160256字节、metadata0.75.52。只读复核19型材/19关系、同一有效组件、顶底/侧接法及P-100～104关键尺寸/姿态与上述平放证据一致，保存参数仍quarterTurns=0；这不是智能体写文件或运行浏览器验收。
+- RACK_LAYOUT_VERSION=3；LayeredRackModel仍分别解释旧v1/v2，不按新算法重新解读原参数。v3 rackLane枚举开放面实际相对槽，按X向/Z向及矩形turn映射槽偏移，中心=目标槽-源槽，优先外缘齐平；梁较柱面宽时只向框内延伸，匹配槽须在双方接触交叠范围。不补虚构中槽，旧v2完整端截面lane原样保留。
+- 层顶面及真实厚度/宽度继续计算宽梁、柱间/内收侧梁与承托净长；新布局前后梁无净深拒绝，侧梁/承托互叠及INSET完整支撑保护保持。共享/独立联排继续实际成员计数和原键；新stacked侧梁中心取前后梁内面中点，不改变旧v2保存布局。
+- DiyGenerator新生成统一v3；app的diyLayoutInput令新建表单数量/错误/自动层高与生成器一致，编辑旧架则读其原版本，diyStructureEdited显式转v3。FrameParameterManager原共用布局、成员ID/颜色、预览/签名/确认/回滚与自由编辑/加工/手工制造等守卫不改；原手改底架不能按旧参数覆盖。
+- 朝向选项按真实截面显示立放/平放及宽×高，立柱显示宽×深；侧/承托继承时显示跟随层梁。仅朝向列改120px，同系列/槽宽、3030和高级折叠不变。用户底层可3060平放并单独设3030承托，不能据此宣称所有采购规格安装认证。
+- 自动关系及一键实体仍分开；宽梁的槽对布局不跳过抽象关系完整端面或实际组件的孔槽/0.1mm贴合/足迹/空腔/第三方守卫。部分端面仅局部搭接时可能不生成抽象关系，真实角码需原目录安装重查，不假报全接头成功。
+- Schema62/125模块0.75.53，无新模块/依赖；页面/importmap/pom/样例与59份既有verify只身份同步，无新增测试或测试逻辑。按用户规则未测试/语法校验/编译/启动/重启或浏览器验收，实例数字为原文件及公式分析，不是运行证明；资源与待验见VALIDATION，详见reference/flat-rack-beam-layout-2026-10-11-v07553.md。
+
+## v0.75.52 具体目录连接件更换与板材避让
+
+- 用户两张截图指出已安装接头可换90度直角件等，板材角与连接件冲突应裁角；确认实施。没有本次截图对应的最新保存工程，不能给出其实际漏件/冲突数量或运行成功结论；没有改写桌面JSON、真实localStorage或操作用户浏览器。
+- ConnectionManager.getCatalogSwitchChoices读取ConnectionComponentOptions及connectionSpecs/component，按源型材系列与已有connectionDesignType过滤；类型与规格不再混成5种抽象方式，真实90度件/L槽条/角码/加强角码/板件/角槽件进入选择。END/ANCHOR仍独立标为设计方式，复杂未映射件不新增安装或制造承诺。
+- ConnectionReplacementManager保存工程签名，选型调用designSwitchCandidate及原evaluateCandidate，createDesignHelper的preview入口共用正式姿态/几何，只隐藏当前helper且不注册/改关系。类型/规格变化清旧预览再检查，confirm fresh检查并经switchDesignType重建/原记录回滚，成功一次历史/草稿；制造配置先解除、原局部锚点及兄弟件占位保持。
+- PanelReliefManager的原板/预览资源独立，begin拒绝锁定/安装保护或已有加工；scan取可见目录/真实派生实体与板厚的真实三角表面交线投影，边角按间隙生成矩形缺口，中央障碍不伪造裁角。已保存缺口先原样预览，只有显式“按连接件计算”才重算；手改边、定位端、宽/深/离端与间隙需要更新预览，取消/Esc不改原轮廓。
+- edgeNotches归dimensions，以LEFT/RIGHT/TOP/BOTTOM、START/END及offsetMm/widthMm/depthMm保存；不是世界位置/mesh/连接缓存。PanelShapeModel矩形网格并集提取唯一材料外轮廓，非法/分裂拒绝；Component/Primitive工厂、ProjectSchema62加载及FactoryValidator、EngineeringDrawingModel共用。板边端定位随尺寸/姿态而变，框口refit及FrameParameterManager更新shapeParameters且保留缺口，非法缩小拒绝；门组件重建不得覆盖已有裁角门芯板。
+- PanelReliefGeometry以局部XY/Z厚度三角棱柱和实际实体网格细化板材干涉；InterferenceFeedback及ConnectionPlacement宽阶段重叠后共用，未适配仍保守处理。只减少已裁空处的包络误报，仍有材料穿透不能confirm；签名变化拒绝旧预览，确认一次历史/提交且异常还原领域图/历史，原件高亮不叠预览。
+- FactoryPackage新增“板材切割轮廓.json”（局部XY、mm、厚度、材料环与缺口）和“板材缺口.csv”；SVG/DXF沿领域rings而不是Scene，材料/子装配BOM按缺口区分。没有CNC/刀路/采购公差/承载认证，正式制造门禁保持，预览不出BOM或持久数据。
+- 新增3个本地模块，Schema62/125模块0.75.52，页面/importmap/pom/样例及59份已有verify仅身份同步；无新依赖。按用户规则未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，资源与待验见VALIDATION，详情见reference/connector-replacement-panel-relief-2026-10-11-v07552.md。
+
+## v0.75.51 侧梁接法与逐层左右选配
+
+- 用户确认530mm左侧梁实例；只读桌面未命名工程.json，0.75.50/Schema62、19根型材/25关系。P-531第2层左侧3030、X=-290、530mm，由默认X=-320/470mm向内调整；两端几何接前后横梁，仅一端DRAG关系保存。原文件及实际浏览器草稿不改写或自动导入。
+- LayeredRackModel.RackSideMountOptions统一FRAME / INSET，v2 parameters.sideMount缺省FRAME、各levelSettings.leftSideMount/rightSideMount缺省空继承。新字段不加历史Schema迁移；旧v1布局不受影响，v2缺字段原位置净长保持。内收X从柱内面加侧梁半宽、Z从前后梁内面中点，净长从内面距离；层上表面齐平，完整支撑/侧梁互叠/承托重叠守卫保持。
+- 联排左右按每格定义；共享中柱FRAME按原DEPTH成员键去重，INSET中柱方向分键各格独立，外侧/独立柱成员键不变。实际成员及roleCounts决定数量，旧默认列位置/顶底自然搭接保持，不自动移动承托梁或原自由编辑结果。
+- sideJoints是只读派生布局，不进Project参数或持久连接；rackSideJointPlan映射memberIds供DiyGenerator与FrameParameterManager使用。AutoConnectionResolver仅对这些源端限于预期宿主，分别加入真实零移动候选；profileEndContact完整端面和recommendDesignFor孔槽继续检查，实际关系由Manager创建。未适配不能以参数证明可装，框架提示未连接数量，连接件简洁生成入口不变。
+- 参数回改计划携带同一接头规划，确认移除受显式改接法影响的纯自动旧宿主后更新/重查；未变编号颜色、加工/自由/手工制造/约束引用保护、预览→一次历史草稿及失败回滚保持。已手移P-531的原架仍受自由编辑守卫，不推断或暗改参数。
+- Schema62/122模块0.75.51，无新依赖，59份已有verify仅机械版本同步；未新增/运行测试、语法校验、Java编译、启动/重启或浏览器验收。资源与待验见VALIDATION，细节见reference/side-beam-mount-options-2026-10-11-v07551.md。
+
+## v0.75.50 Shift 追加拖框与构件剪贴板
+
+- SelectionGestureManager在普通选择/移动/旋转时优先捕获Shift左键，从构件或空白起拖均复用SceneManager.begin/update/endMarquee及Editor.marqueeHandler；小于6px按原点击，按下时修饰键传至松手，左→右包含/右→左相交和追加去重不变。临时禁用TransformControls/Orbit，不创建构件或历史；完成/取消/失焦/丢捕获恢复，Space释放先于鼠标时只恢复其原模式，不关闭原显式框选。轮廓编辑/绘制/放置/测量等独占工具不接管。
+- Editor剪贴板是不可随原件变化的领域快照，selectionClipboard/clipboardPasteIndex/onClipboardChanged不导出。captureSelectionGraph保留所选真实Part、完整组件与内部连接/约束；insertSelectionGraph供原拖拽/阵列和剪贴板共用，复制ID、手工孔/孔组/阵列、组件层级/生成器成员映射；新制造编号归IdentityManager。连接派生数据重建，不重复复制或带入外部宿主。剪贴板尺寸仅选域内Part/手工孔语义引用，无外部WORLD锚点；正常阵列/镜像不新增尺寸复制规则。
+- V从快照插入，世界X/Z各50mm×粘贴次数；只保留正确范围内安装引用，轮廓参数点及尺寸start/end缓存平移。复制后原件编辑/删除不重新取原数据；当前截面源变化拒绝旧快照，不偷偷加载/覆盖截面。clear(true)/loadProject成功清剪贴板，restoreProject/撤销保留；当前页面内存不支持跨应用/刷新持久粘贴。
+- X先校验完整选择：有效锁定拒绝，非派生安装Part必须连同宿主一起选或先解除安装；随后原deleteSelected的连接/约束/派生清理链执行，清已删Part/加工尺寸引用与选域完整组件。没有选择派生连接时的暗选宿主或自由件克隆。commitSelectionGraphPaste一次历史/工程提交，异常还原领域图/历史游标/选择；selectionGraphMutation在图构造和派生重建中延迟emitProjectChanged，避免本机草稿收到半批副本。
+- app键盘保留表单文字C/V/X、普通X解组、Ctrl+D直接复制；Ctrl/Meta+C/V/X不重复触发、不处理IME组合或Alt变体，模态/工程报表/独占工具和未完成手势隔离。clipboardCount驱动菜单禁用，顶部编辑/底部更多/主体与空白右键/帮助/底栏tip同步；主复制按钮改为先复制，粘贴仍显式操作。
+- Schema62/122模块0.75.50，无新依赖；59份已有verify仅机械身份同步，未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，原用户文件/实际草稿不操作。资源和待验见VALIDATION，确认规则与未覆盖边界见reference/selection-clipboard-shortcuts-2026-10-10-v07550.md。
+
+## v0.75.49 多槽搭接补件与结构部位选配
+
+- ConnectionAnchor是纯局部定位模型：normalize/key/same及由第一实际组件孔和源开放槽推导X/Y横移；只沿所选安装面横向，不能法向移动。ConnectionManager保存designAnchorOffset，recommend/matchComponentPorts/resolveDesignComponentTransform/rebuild和designComponentVariants共用；缺失=零，非法/越界/未映射方式拒绝，偏置禁止套中心正式制造方案。ProjectSchema62增可选字段检查，不迁移历史Schema，不操作原JSON/实际localStorage。
+- Placement.resolveJointContact按端轴相对的目标面法向解析接触，避免柱顶/端角最近面等距误选；anchorContexts显式逐槽，direct/两点预览、Tab、确认使用同一锚点。Batch保留Snap候选，额外读取ProfileEndContact已贴合端面作零移动候选，按源ID/end/目标ID/face分组而非整对/整端占用；SIDE_CORNER沿原物理角点去重。完整组件孔轴、槽位/站位、腿足迹、真实贴合及第三方包络仍是最终门槛。
+- Batch同接头已有手工设计实体可保留并补独立合法缺侧，不重选/修改旧件；默认最多两件，相反侧优先，其余方向须端口/足迹/包络合法。确认逐件fresh重查显式偏置和AUTO留平，不使用扫描缓存作为合法性；取消不写工程，异常原图回滚，一次历史。真正10mm偏槽的P-099等不补假件、不挪梁。界面仍类型/可选规格→生成，不恢复细节清单。
+- LayeredRackModel保留无layoutVersion的旧布局，v2共用parameters/members/roleCounts/layerHeights：profileRoles六角色catalogId/quarterTurns，topMount/bottomMount/bottomClearance，levelSettings高度/宽向型号/承托型号与根数及bayCount/bayMode。实际矩形朝向、每层顶面与立柱开放对面槽求坐标/净长；相同系列槽宽、足够支撑、层序/净长/重叠检查；柱顶/柱下同厚，柱下从地面起。SHARED为N+1组前后柱和共用侧梁，INDEPENDENT为每格四柱及独立侧梁，顶部/底部搭接在共用模式下用整排连续宽梁。
+- app三组details默认折叠，基础3030/用途预设保留，数量读真实成员；层高以梁上表面距地，首次改单层自动改成手动层高，未改层沿当前等分值填入。旧参数框架基本改尺寸保持v1，显式高级选配切v2；不能推测自由搭架角色。FrameParameterManager同型号副本预览/提交、未增删ID/颜色保留，已制造材料换型/移除及原人工/加工/约束/引用保护保持；DiyGenerator/Editor新建和回改异常回滚，成功一次历史。
+- 122本地JS模块0.75.49，新增ConnectionAnchor须由index importmap统一版本。59份已有verify只机械身份同步，无新依赖；未新增/运行测试、语法校验、编译、启动/重启或浏览器验收。资源复制及待验见VALIDATION，用户原文件证据和限制见reference/frame-role-and-slot-installation-2026-10-10-v07549.md。
+
+## v0.75.48 孔位贴字与孔口箭头关联
+
+- ProfileSurfaceNumber在原孔字材料带候选内同时规划短直线/单折线，文字边缘到原孔口半径的小箭头；当前同位置关联复合孔入口仍一份合并文字，出口沿通孔实际径。原A/B基准、整毫米站位和精确Φ/M文字、常驻型号三字段与字号不变。
+- 路线最长45mm，字/线/箭头避开同面已有印字、其他孔及已放引线；全文→短基准距离→无可用材料/路线时右侧与悬停查看。没有路线时不放无法对应的孤立文字；有限局部排布不是任意密集场景自动布线，也不保证全孔全视角可读。
+- numberPatches保存只读leaderPaths和holeLink；细笔画三角形追加到同一stamp，stampGuide区分印字/常驻线箭头/悬停孔缘，材质uniform只改变对应色，不重造纹理或放大。文字仍真实材料三角面，笔画在孔口局部平面稍退让，明确是深度受限注释而非补槽/封孔或制造实体；raycast为空，不进入业务包围盒、BOM/工程图/碰撞。
+- orient复用原相机正读与遮挡链，同时检查文字和目标孔口；缓存当前实际可见的文字四边形/孔缘投影。SceneAnnotationManager沿原画布pointer跟踪，只在当前可见投影内匹配文字或孔口，再核对指针处前方Part/helper；仅最接近一组变橙，清pointer/工具放置/拖动/隐藏/重建/删除清理。镜头/视口/遮挡/指针未变复用结果，不逐帧重建几何或反复场景射线。
+- 无新显示开关，原showMachiningSurface与完整线互斥保持；Project/Schema62/加工/驱动/导出/历史不改，原JSON/实际localStorage不操作。121模块0.75.48及既有verify身份同步，无新依赖；未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，资源复制与待验记录在VALIDATION。
+
+## v0.75.47 孔位印字与完整线按需查看
+
+- ProfileSurfaceNumber仍为编号/型号/长度单行真实印字，名义字高3→4mm，选中/悬停不放大；孔旁新增原S/基准和Φ/M表面文字，位置到整毫米，孔径/螺纹保持原精确规格。关联同位置复合孔合并入口，通孔出口独立Φ径，端孔标A/B端；路径归一只处理展示副本，不为印字改Part。
+- 孔文字在当前实体三角面上用孔口局部标架搜索完整材料足迹，不用平板/DOM/Sprite，不跨槽和孔。全部孔口、同面其他贴字及当前型号贴字保留间距；全文失败再尝试短基准距离，仍无完整材料面则不印，悬停和右侧保留。端面/弧形/斜切仅实际同平面材料支持才印，不在错误位置用中段面兜底。
+- showMachiningSurface默认true；顶部/底部显示与场景标注提供“孔位表面信息”和“完整孔位尺寸线”，互斥。完整线才显示自动和MACHINING_STATION/OFFSET驱动线与孔径引线，切换只改变显示，不删Dimension/绑定或修改驱动值/手工位置，其他永久标注仍原规则。显式新建S/偏移/基准链自动进入完整线。
+- ProjectSchema当前62加载副本若无新表面开关首次以贴面替代旧浮动线；有新字段后保存/刷新尊重选择，不升级Schema或触碰用户原JSON/实际草稿。显示偏好沿既有editorState.annotations导出/草稿链，显示几何/纹理/占位不保存。
+- 型号和孔字共用stamp纹理/世界尺寸/180度翻正/实际遮挡资源链，当前Part和连接helper遮挡，几何/内容/其他印字足迹变化才重建孔文字；关闭/隐藏/删孔/删除/卸载释放，不参与拾取/业务包围盒。Schema62/121模块0.75.47，无新依赖；未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，不以源码缓存证明帧率或全视角效果，交付与待验见VALIDATION。
+
+## v0.75.46 孔位距离按整毫米展示
+
+- 图中距A端S和横向偏移不再直接v-model原始浮点值，改为machiningMmText整毫米格式；端面X/Y偏移同规则。一个Vue本地草稿保留编辑中输入，选中孔项/字段/Part/原值守卫拒绝过期覆盖，空值和非有限数字不写入；原生change才调用原machiningChanged/Manager/历史，不把聚焦/失焦当实际修改。切换选择、删除/替换孔数组时清理草稿；用户明确输入的小数仍保留实际加工值，失焦恢复整毫米显示。
+- MachiningPlacementManager放置HUD、SceneAnnotationManager自动站位及MACHINING_STATION/OFFSET默认文本同步整毫米；只改派生文本，不改站位/偏移/基准/驱动值/几何/工程图或制造。孔径、沉头大径、深度、角度、螺纹规格、用户自定义尺寸文字和其他表面印字不强制取整，前版完整线错层/小孔径继续。
+- Schema62/121模块0.75.46，无新依赖；同步ProjectSchema.CURRENT_APP_VERSION（此前仍0.75.43）、页面缓存/资源/样例与已有verify身份，不改测试逻辑。原JSON/实际草稿不直接操作；未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，资源与待验见VALIDATION。
+
+## v0.75.45 加工距离线错层与孔径可读
+
+- SceneAnnotationManager将自动孔位及未手工移动整线的MACHINING_STATION/OFFSET显示接入machiningLaneGroups。按型材/测量方向排序，各线独立屏幕档位，实际主体包络决定外侧位置、文字宽高决定间隔；投影反算仅生成展示顶点。标签碰撞使用未占档位同时移动整条线/小箭头/引出线，数字不再单独漂到另一条线附近。
+- station/A-B基准/offset及驱动值保持原事实源；直型材站位引出线指实际孔所在面，弧形保留原路径示意。自动与已有同基准站位驱动重复只略去自动显示，实体尺寸不删除；已有手工整线位置不重排，手工文字用短引线关联。Shift拖动自动显示时从当前显示中点转换到原offsetWorld链，仍原历史/提交规则，普通相机转动不写工程。
+- 原孔小悬停继续；只在孔位尺寸显示或该孔有可见MACHINING驱动时增加10px紧凑孔径。通孔/盲孔Φ、已关联沉头/沉孔大小径合并、攻丝原M规格，未知径/螺纹不猜，源尺寸可保留三位小数；端面复合只保留当前实际面的一份关联说明，背面通孔显示其实际通孔径。
+- 短引线从孔口投影引出，文字避让并限制完整画布空间；正交/透视均检查面朝向与全部可见Part/设计helper遮挡，不受选择过滤影响。过密未放下的小孔径回退原悬停，不修改型材常驻表面信息或实际孔几何，也不宣称全视角永不遮挡。
+- 新固定线缓冲随顶点Float32变化才上传；相机/投影/视口/实体矩阵、几何版本/可见性快照变化才清孔口遮挡缓存，静止不逐孔重复全场射线。缓存/记录/线材质/DOM由clearGraphics/dispose释放，不新增Project/Part字段或依赖。
+- Schema62/121模块0.75.45；原用户JSON和实际草稿不直接操作，已有verify仅身份同步，未新增/运行测试、语法校验、编译、启动/重启或浏览器验收，资源交付与待验见VALIDATION。既有真孔口/端孔定位、选择、连接/制造、印字和本机续作规则保持。
+
+## v0.75.44 端面原有圆孔可定位攻丝
+
+- machiningEndBores读取当前实际截面holes，按全轮廓近圆拟合/完整同向周向检查返回只读孔心与孔口多边形；拒绝矩形、T槽、局部圆弧及不完整近圆轮廓。以截面对象WeakMap缓存，不用目录单元中心猜已有孔，不把缓存/孔心写入Part。
+- MachiningPlacementManager的端孔入口先取得所有可见Part/设计helper的前方网格射线，再在方切直型材朝向相机的A/B端面解析实际孔口。整个孔内可定位到该孔心，孔外仅2mm且8 CSS px内辅助；Alt原位自由偏移，其他端面铝材仍整体/单元中心辅助。深处孔壁/近端侧壁不再通过34mm热区假冒端盖，普通选取和侧面加工不变。
+- 指针不能穿过前方板材/连接件去选背后端孔，选择过滤不移除遮挡物；没有新增隐形Scene网格。预览与确认共用原machiningLocalPose，写原end/offsetX/offsetY，经Manager/历史/emitProjectChanged续作；小十字、原孔提示和毫米偏移只属当前预览。既有孔/中心攻丝、螺纹规格/深度、派生加工不自动迁移或重置。
+- 新圆孔目标仅直型材方切端面；弧形、斜切、非圆/未知空腔不生成轴向圆盘目标。孔形识别是显示截面近似，不是螺纹制造适配或实体B-Rep证明，原虚拟攻丝牙形及制造规则不改变。
+- Schema62/121模块0.75.44，无新依赖；原用户文件/实际localStorage不直接操作，已有verify仅身份同步，不新增/运行测试、语法校验、编译、启动/重启或浏览器验收。资源与待验见VALIDATION，原因/边界见reference/end-bore-targeting-2026-10-10-v07544.md；v0.75.43世界轴绘制/端面贴合/孔边/相机等保持。
+
+## v0.75.43 基础搭建与加工观感修正
+
+- ThroughHoleGeometry不再从裁后三角网格猜边界。cutEdgeGeometry裁剪原EdgesGeometry轮廓，并添加原材料面与有限孔体的真实交线；重叠孔裁掉已处于其他孔体内部的边线。孔壁、原几何uuid缓存/释放、改孔/删孔恢复保持，不改B-Rep或包络碰撞。
+- machiningCenterOffsets从目录显式单元槽位置加整体0生成辅助参考，不视为开放槽合法性。MachiningPlacementManager仅8px/2mm内提示，Alt绕过；3060长边-15/0/+15（从边15/30/45），端面Cartesian参考及自由X/Y共用machiningLocalPose。仅当前中心显示小十字，圆孔长度位置仍点击决定、SLOT不锁，已有/显式/派生加工不重置；API未指定偏移仍原默认。
+- ProfileDrawTool.requiresOrthogonal控制FREE默认世界轴、数字输入和特征接受；直接命中/近点不能绕过轴线，仅1e-6mm浮点误差可接受。候选复制保留axis/Alt/Shift，Tab与显式轴锁保持，明确Alt/关闭正交可斜向。draftContactError只读临时Object3D检查端面，未贴平是中性定位而不是绿色成功；允许保留自由绘制目标，自动连接仍拒绝不合法几何。
+- 新ProfileEndContact从实际截面outer、端斜切和世界矩阵计算法向、所有端面点的最大间隙及目标范围。Snap候选排序、显式贴合、松手/切换和约束后isContactValid共用；ConnectionManager设计推荐/重建也要求0.1mm真实贴平。组件端口合法后仍由完整两腿footprint保证SIDE_CORNER支撑，其他孔槽/第三方空间门槛不改，正式制造配置原规则保留。
+- 用户原鱼缸架P-091端差Y约11.7836mm/Z约1.6162mm，角误差约1.12°；旧中心间隙/6°抽象容差误报C003/C004为DESIGN_VALID。现在重建标失效但保留原关系/编号与主体位置，不直接编辑用户原JSON/实际草稿；其他真实贴平30角码仍走原目录端口/足迹检查，不将3060整体判成不支持。
+- SceneManager每帧只读已有实体包围盒，按相机深度带余量收紧裁剪，排除无限地面/反馈/印字；不逐帧扫描顶点。perspective近看0.05mm、minDistance1、zoomToCursor等保持，正交范围也跟实体；ProfileGeometryFactory金属面polygonOffset(1,1)，Orbit不带松手惯性。仍有实际渲染/多孔CPU预算/密集框架观感未验收，不冒充性能优化实测结果。
+- Schema62/121模块0.75.43；身份/样例/旧verify仅机械版本同步，无新依赖/测试或测试逻辑改写。按用户规则未运行语法校验、Java编译、服务启动/重启或浏览器验收，资源交付与授权后待验见VALIDATION。原表面信息、两侧收起、选择、连接单件、AUTO留平、草稿与镜头续作保持。
+
+以下v0.75.42点击强制居中和从裁后网格重算CAD边线为历史，已由本版覆盖；显示通孔和API默认边界保持。
+
+## v0.75.42 新孔横向居中，直型材通孔切开显示
+
+- centeredHoleOffset复用getSlotDefinitionsForFace（真实型号/封槽判定），无槽取0、多槽取指针最近偏移。MachiningPlacementManager用侧面解析而非端点优先解析，保留stationS点击站位，圆孔预览使用machiningLocalPose居中后的位置；端孔预览尊重实际A/B中心。SLOT不改自由位置。
+- Manager.add只为无显式offset、非连接派生的新圆孔填中心默认；普通API默认offset不再提前硬写0，使多槽可取真实槽。明确给定0或其他偏移/引用不改，加载与刷新已有加工不再居中。默认保留原A端长度基准、不新增永久槽约束；右侧标“横向偏移”，仍可人工输入，已有SLOT_CENTER的显式基准守卫不改变。
+- ThroughHoleGeometry在原直型材未加工网格上逐三角面减去有限凸40面孔体，位置/轴/半径来自原加工和machiningLocalPose；端面外延仅显示裁剪余量0.02mm，原径/尺寸不回写。有效同心通孔+沉头分锥段/孔段，沉孔分宽段/窄段与台阶，同组不重复盖虚拟孔口。
+- 实际孔壁面先裁入截面outer/holes的材料三角棱柱，再按端斜切范围及其他孔体裁剪；不把整根圆管塞进既有T槽/中心空腔。孔壁归__machining__派生显示，保留真实网格深度、阴影、正常宿主拾取，没有新增Part或BOM；原主体渲染法线、UV和颜色沿裁剪插值，CAD边线重算。
+- originalGeometries按uuid兼容Vue代理和原Three对象，生成网格dispose清缓存并释放其未加工副本；刷新从副本重算而不是重复扩大孔，移除最后一孔恢复原网格。源几何不写userData/Project，其他域的制造/约束/保守包络碰撞不改；选中/齐平/印字自动取裁后实际材料面。
+- 当前仅直型材、有效同心复合孔。弧形和未适配/非法复合参数继续原孔位示意，openMachiningHoleIds是临时显示状态，悬停明确“孔位示意”；攻丝/盲孔/独立沉头仍原虚拟凹腔，不假装全类实体加工或精确B-Rep/孔内碰撞支持。
+- Schema62/120模块0.75.42，无新依赖；旧59份verify只同步版本，未新增/运行测试、语法校验、编译、启动/重启或浏览器验收。用户原JSON/实际草稿不操作；三角裁剪/孔壁/重建/代理释放/性能等授权后待验见VALIDATION。
+
+以下v0.75.41通孔虚拟腔描述对已适配直型材由本版可视开口覆盖；其他外观与两侧收起继续保持。
+
+## v0.75.41 加工孔型外观与左右收起
+
+- 新MachiningHoleAppearance只读提取孔型/直径/深度/孔组和螺纹规格。MachiningManager入口仍复用machiningLocalPose的stationS/face/offset、端面及弯曲标架，出口继续单独画通孔，关联沉头/沉孔接管入口，不叠两张圆片。
+- Shader在孔口圆面内按局部相机视线描绘负Z虚拟腔，64步有限深度查找和5次细化，锥面/直壁/沉孔台阶/盲孔底面各异；攻丝同时按圆周角和深度生成右旋牙形，不用多层平环。深暗空腔与金属光照随视角变化，正交使用平行射线。未知螺距/不适配底孔不画已配置牙；单独沉头不发明关联小孔。
+- 这是展示近似，不改宿主网格、孔内真实GPU深度、阴影、碰撞、截面空腔、加工参数或制造模型，不能从黑孔/牙形判定通孔真正透视或精确公差。已知M2至M16粗牙子集来源为官方公开参考，优先已有显式pitch/threadPitch或MxP；展示估算不写回Part。
+- 孔口Shader采用本地r155色彩/色调映射，renderOrder1600在透明反馈/印字后画，depthTest仍开启；raycast为空，原machiningGroup释放材质/几何。中文小tip只在原悬停范围出现，端攻丝明确A/B端及深度，无新增大标签。
+- WorkbenchLayoutManager沿用aluminum-cad-workbench-layout-v1，仅增加collapsed.left/right；两个原生按钮在canvas-shell边缘，CSS实际收缩轨道，左右独立。表单保留挂载/当前模式，隐藏侧inert，用户再次展开继续原输入，布局重置恢复两侧；不取消绘制、放置或审阅，不写工程/历史/草稿。
+- 显式资源/快捷面板/对齐/整架编辑/端点输入等命令展开必要侧；普通点选仍保留用户收起偏好。浮动隐藏面板不被零尺寸clamp改坐标，窗口resize和本管理器合成resize区分，避免自激循环；快捷键不越过按钮抢走箭头/确认。
+- Schema62/119模块0.75.41，无依赖升级。只源码和参考阅读/编辑、资源复制，未新增/运行测试、语法校验、编译、启动/重启或浏览器验收；旧verify仅同步版本，圆片/圆环等旧期望待授权变更。实际Shader编译、视觉、性能、遮挡及伸缩/刷新/浮动/窄屏状态待验见VALIDATION。用户原JSON/实际草稿未直接操作。
+
+## v0.75.40 内置角槽件的T形槽脚与朝向
+
+- 用户对照安装图确认修正，公开原图TPEM/TPFT存于reference/raw/hidden-corner-2026-10-09-v07540，原文件不改；PDF首整页渲染阅读用于区分窄颈宽脚角槽件与端孔内置件，不复制厂商CAD网格/专有代码，也不据此推断编辑器内部算法。
+- hiddenCornerDimensions/hiddenCornerLayout共用v2参数、两孔、凹T轮廓与三段支撑；ComponentGeometryFactory生成有孔窄颈、四片T脚翼、转角及两枚实际内六角凹口紧定螺钉。两面交线为安装原点，+Z横腿入源梁、+Y立腿沿目标槽，内沉方向分别-Y/-Z。螺钉属于原设计helper，不生成Hardware、宿主加工或BOM事实。
+- 本地30/40槽8槽腔宽13.6mm，公开对应宽脚14.5/18mm不能直接适配；当前用宽脚13.2/颈7.6mm，30系列高31/总长38/深7.2mm，40系列高32/总长38/深8mm。孔站位及过渡均从同一布局计算，尺寸明确是本地设计适配，不是采购料号/承载认证，不修改全局DesignProfileSection。
+- HiddenConnectionPlacement将实际凹T轮廓变换到各宿主截面，检查挤出两端、完整站位、材料岛与边界交叉；先要求槽向共轴，不用斜向投影冒充放得下。未知材料、封槽、斜切、缩放、非共轴槽、悬空仍拒绝，宿主排除第三方包络只发生在完整空腔检查通过之后。
+- 手动有实体INTERNAL_CONNECTOR像角码一样枚举真实安装侧，候选仍共用resolveJointContact/ConnectionManager，Ghost与落位一致。目录、自动批量、切换型号、helper及随动都使用同一几何/孔槽布局；不移动宿主、不改AUTO每层留平与已有件保护规则。
+- ProjectSchema在当前Schema62副本上精确匹配v0.75.39简化HIDDEN_CORNER全参数签名并更正为v2，也更正designComponentVariants；ID/编号、颜色、局部安装侧及其他件不改，不转换未知自定义模型或历史Schema。加载仍重新检查合法性，新尺寸装不下标失效，不承诺每个旧位置都能用新模型。用户原JSON和实际localStorage未直接写入。
+- Schema62/118模块0.75.40，无新依赖。采购/真实紧固加工映射仍未完成，原端孔内置制造规则继续禁绑；简单类型/规格→生成、单件选择/编辑、一次历史/回滚、草稿/镜头保持。已有59份verify只机械同步身份，未新增/运行测试、语法校验、编译、服务启动/重启或浏览器验收；资源状态与授权后待验见VALIDATION。
+
+以下v0.75.39的宽6薄板/立腿-Y形状为历史，v0.75.40已覆盖；AUTO选型策略仍保留。
 
 ## v0.75.39 每层承托面选型与槽内角槽件
 

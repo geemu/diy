@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {getLocalFrameAtStation, normalizeProfilePath, isLinearProfile} from '../model/ProfilePath.js';
 import {machiningLocalPose} from '../machining/MachiningManager.js';
-import ProfileSurfaceNumber from './ProfileSurfaceNumber.js';
+import ProfileSurfaceNumber, {machiningSizeInfo} from './ProfileSurfaceNumber.js';
 
 /**
  * CAD scene annotations.
@@ -17,6 +17,7 @@ export default class SceneAnnotationManager {
       showPartDimensions:false,
       showPartNumbers:true,
       showMachiningLabels:true,
+      showMachiningSurface:true,
       showMachiningDimensions:false,
       showUserDimensions:true
     };
@@ -28,17 +29,19 @@ export default class SceneAnnotationManager {
     this.layer.className = 'scene-annotation-layer';
     this.sceneManager.container.appendChild(this.layer);
     this.labels = [];
+    this.machiningMeasurements = [];
+    this.machiningLaneGroups = new Map();
     this.refreshQueued = false;
     this.dragState = null;
     this.pointer = null;
     this.hoverRay = new THREE.Raycaster();
     this.pointerSurface = this.sceneManager.renderer?.domElement || this.sceneManager.container;
     this.trackPointer = event => {
-      if(event.buttons || event.pointerType==='touch'){this.pointer=null;return;}
+      if(event.buttons || event.pointerType==='touch'){this.pointer=null;this.surfaceNumbers.clearHover();return;}
       const rect=this.sceneManager.container.getBoundingClientRect();
       this.pointer={x:event.clientX-rect.left,y:event.clientY-rect.top};
     };
-    this.clearPointer = () => {this.pointer=null;};
+    this.clearPointer = () => {this.pointer=null;this.surfaceNumbers.clearHover();};
     this.pointerSurface.addEventListener('pointermove',this.trackPointer,{passive:true});
     for(const type of ['pointerleave','pointerdown','contextmenu'])this.pointerSurface.addEventListener(type,this.clearPointer,{passive:true});
     this.sceneManager.addFrameHandler(() => this.render());
@@ -46,6 +49,7 @@ export default class SceneAnnotationManager {
 
   setOptions(options = {}) {
     this.options = {...this.options,...options};
+    if(this.options.showMachiningDimensions)this.options.showMachiningSurface=false;
     this.requestRefresh();
     return {...this.options};
   }
@@ -61,11 +65,14 @@ export default class SceneAnnotationManager {
 
   refresh() {
     this.clearGraphics();
-    this.surfaceNumbers.refresh(this.editor.meshes,this.options.showPartNumbers);
+    this.surfaceNumbers.refresh(this.editor.meshes,this.options.showPartNumbers,{
+      showMachiningSurface:this.options.showMachiningSurface&&!this.options.showMachiningDimensions,
+      occludingRoots:[...(this.editor.connectionManager?.helperMeshes?.values()||[])]
+    });
     if (this.options.showOverall) this.addOverallDimensions();
     this.addProfileDimensions();
     if (this.options.showMachiningDimensions) this.addMachiningDimensions();
-    if (this.options.showMachiningLabels) this.addMachiningLabels();
+    if (this.options.showMachiningLabels||this.options.showMachiningDimensions) this.addMachiningLabels();
     if (this.options.showUserDimensions) this.addUserDimensions();
   }
 
@@ -79,6 +86,10 @@ export default class SceneAnnotationManager {
     }
     this.layer.replaceChildren();
     this.labels = [];
+    this.machiningMeasurements = [];
+    this.machiningLaneGroups.clear();
+    this.machiningVisibilityState=null;
+    this.machiningOccluders=[];
   }
 
   addOverallDimensions() {
@@ -139,23 +150,23 @@ export default class SceneAnnotationManager {
       normalizeProfilePath(part);
       const length = Number(part.dimensions?.length || 0);
       if (!(length > 0)) continue;
-      const stations = [...new Set((part.machiningItems || [])
-        .filter(item => item.type !== 'END_TAP')
-        .map(item => Number(item.stationS ?? item.distanceFromStart ?? 0))
-        .filter(value => Number.isFinite(value) && value > 0.01 && value < length - 0.01)
-        .map(value => Number(value.toFixed(3))))]
-        .sort((a,b) => a-b)
-        .slice(0,16);
-      if (!stations.length) continue;
-      const [sectionWidth] = part.dimensions?.sectionSize || [30,30];
-      const baseOffset = Number(sectionWidth)/2 + 27;
+      const stations = new Map();
+      for(const item of part.machiningItems || []) {
+        if(String(item.type).startsWith('END_'))continue;
+        const station=Number(item.stationS??item.distanceFromStart??0);
+        if(!Number.isFinite(station)||station<=.01||station>=length-.01)continue;
+        const driven=this.options.showUserDimensions&&(this.editor.userDimensions||[]).some(dimension=>{
+          const binding=dimension.binding;
+          if(binding?.type!=='MACHINING_STATION'||binding.partId!==part.id||binding.datumEnd==='END')return false;
+          const source=(part.machiningItems||[]).find(value=>value.id===binding.machiningId);
+          return source&&Math.abs(Number(source.stationS??source.distanceFromStart)-station)<.001;
+        });
+        if(!driven&&!stations.has(station.toFixed(3)))stations.set(station.toFixed(3),{station,item});
+      }
       const start = localFrameWorldPoint(mesh,part,0);
-      for (let index=0; index<stations.length; index++) {
-        const station = stations[index];
+      for (const {station,item} of [...stations.values()].sort((a,b)=>a.station-b.station).slice(0,16)) {
         const end = localFrameWorldPoint(mesh,part,station);
-        const lane = baseOffset + (index % 3) * 10;
-        const offset = localVectorToWorld(mesh,new THREE.Vector3(-lane,0,0));
-        this.addDimension(start,end,offset,formatNumber(station),'machining-dim');
+        this.addDimension(start,end,new THREE.Vector3(),formatMachiningMm(station),'machining-dim',null,{mesh,item,type:'STATION',value:station});
       }
     }
   }
@@ -166,15 +177,27 @@ export default class SceneAnnotationManager {
       const part = mesh.userData.part;
       normalizeProfilePath(part);
       for (const item of part.machiningItems || []) {
-        const compound=(part.machiningItems||[]).some(other=>other.linkedHoleId===item.id&&['COUNTERSINK','COUNTERBORE'].includes(other.type));
+        const compound=(part.machiningItems||[]).some(other=>other.linkedHoleId===item.id&&['COUNTERSINK','COUNTERBORE','END_COUNTERSINK','END_COUNTERBORE'].includes(other.type));
         const linked=(part.machiningItems||[]).find(other=>other.id===item.linkedHoleId);
-        const text=(linked?machiningLabel(linked)+' · ':'')+machiningLabel(item);
+        const through=item.type==='THROUGH_HOLE'?item:linked?.type==='THROUGH_HOLE'?linked:null;
+        const illustrated=through&&!mesh.userData.openMachiningHoleIds?.has(through.id);
+        const text=(linked?machiningLabel(linked)+' · ':'')+machiningLabel(item)+(illustrated?' · 孔位示意':'');
         const faces=compound?[]:[item.face];
         if(item.type==='THROUGH_HOLE')faces.push({FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'}[item.face]);
         for(const face of faces) {
           const pose=machiningLocalPose(part,item,face);
-          const label=this.addLabel(`machining:${part.id}:${item.id}:${face||item.end}`,text,mesh.localToWorld(pose.point.clone()),'machining');
-          label.mesh=mesh;label.localNormal=pose.normal;
+          const worldPoint=mesh.localToWorld(pose.point.clone());
+          if(this.options.showMachiningLabels) {
+            const label=this.addLabel(`machining:${part.id}:${item.id}:${face||item.end}`,text,worldPoint,'machining');
+            label.mesh=mesh;label.localNormal=pose.normal;label.localPoint=pose.point;
+          }
+          const dimensioned=this.options.showMachiningDimensions;
+          const size=machiningSizeInfo(item,linked);
+          if(dimensioned&&size) {
+            const callout=this.addLabel(`machining-size:${part.id}:${item.id}:${face||item.end}`,size.text,worldPoint,'machining-size');
+            callout.mesh=mesh;callout.localPoint=pose.point;callout.localNormal=pose.normal;callout.radius=size.radius;
+            callout.element.title=text;callout.leader=this.addDynamicSegments(2,0x526b80,.9);
+          }
         }
       }
     }
@@ -182,6 +205,8 @@ export default class SceneAnnotationManager {
 
   addUserDimensions() {
     for (const dimension of this.editor.userDimensions || []) {
+      // 仅改变孔位驱动的显示，不删除绑定或禁用其驱动能力；其他永久尺寸不受影响。
+      if(!this.options.showMachiningDimensions&&['MACHINING_STATION','MACHINING_OFFSET'].includes(dimension.binding?.type))continue;
       if (dimension.binding?.type === 'PROFILE_ARC_ANGLE') {
         this.addArcAngleUserDimension(dimension);
         continue;
@@ -204,7 +229,8 @@ export default class SceneAnnotationManager {
       dimension.start = toPlain(start);
       dimension.end = toPlain(end);
       const offset3d = point3(dimension.offsetWorld) || new THREE.Vector3();
-      const autoOffset = this.getDrivenDimensionAutoOffset(dimension);
+      const machiningLayout=this.machiningDimensionContext(dimension);
+      const autoOffset = machiningLayout?null:this.getDrivenDimensionAutoOffset(dimension);
       if (autoOffset) offset3d.add(autoOffset);
       const startDim = start.clone().add(offset3d);
       const endDim = end.clone().add(offset3d);
@@ -212,7 +238,7 @@ export default class SceneAnnotationManager {
       const value = Number.isFinite(drivenValue) ? drivenValue : start.distanceTo(end);
       dimension.measuredValue = Number(value.toFixed(3));
       const label = dimension.text || formatDrivenValue(dimension,value);
-      this.addDimension(start,end,offset3d,label,'user',dimension);
+      this.addDimension(start,end,offset3d,label,'user',dimension,machiningLayout);
       dimension._worldMidpoint = toPlain(startDim.clone().lerp(endDim,0.5));
     }
   }
@@ -239,6 +265,15 @@ export default class SceneAnnotationManager {
     if (axis === 'X') return new THREE.Vector3(0,side * distance,8 + lane * 2);
     if (axis === 'Y') return new THREE.Vector3(side * distance,0,8 + lane * 2);
     return new THREE.Vector3(side * distance,side * distance * 0.18,0);
+  }
+
+  machiningDimensionContext(dimension) {
+    if(!['MACHINING_STATION','MACHINING_OFFSET'].includes(dimension?.binding?.type))return null;
+    // 已手工调整整条线的位置继续尊重原世界偏移，不把它重新自动排布。
+    if(dimension.layout?.auto===false||(point3(dimension.offsetWorld)?.lengthSq()||0)>1e-8)return null;
+    const mesh=this.editor.getMeshByPartId(dimension.binding.partId),item=mesh?.userData?.part?.machiningItems?.find(value=>value.id===dimension.binding.machiningId);
+    if(!mesh||!item||String(item.type).startsWith('END_'))return null;
+    return {mesh,item,type:dimension.binding.type==='MACHINING_STATION'?'STATION':'OFFSET',value:Number(this.editor.getUserDimensionValue?.(dimension))};
   }
 
   addAngularUserDimension(dimension) {
@@ -329,7 +364,26 @@ export default class SceneAnnotationManager {
     return null;
   }
 
-  addDimension(start,end,offset,label,kind,dimension = null) {
+  addDimension(start,end,offset,label,kind,dimension = null,machiningLayout = null) {
+    if(machiningLayout) {
+      const {mesh,item,type,value}=machiningLayout;
+      const a=start.clone(),b=end.clone();
+      if(type==='STATION'&&mesh.userData.part.profilePath?.type!=='ARC') {
+        // 站位值仍来自原轴向语义；引出线指向实际孔位所在的面，而非杆中心。
+        const hole=mesh.localToWorld(machiningLocalPose(mesh.userData.part,item).point),shift=hole.clone().sub(b);
+        a.add(shift);b.copy(hole);
+      }
+      const element=this.addLabel(`dimension:${dimension?.id||crypto.randomUUID()}`,label,a.clone().lerp(b,.5),kind,{},dimension);
+      element.element.classList.add('machining-distance');
+      element.element.style.display='none';
+      const record={label:element,mesh,item,type,start:a,end:b,localStart:mesh.worldToLocal(a.clone()),localEnd:mesh.worldToLocal(b.clone()),value:Number.isFinite(value)?Math.abs(value):a.distanceTo(b),lines:this.addDynamicSegments(8,0xe0aa16,.9)};
+      element.measurement=record;this.machiningMeasurements.push(record);
+      const key=`${mesh.uuid}:${type}:${type==='OFFSET'?item.face:''}`;
+      let group=this.machiningLaneGroups.get(key);
+      if(!group){group={mesh,type,item,records:[]};this.machiningLaneGroups.set(key,group);}
+      group.records.push(record);record.laneGroup=group;
+      return;
+    }
     const a = start.clone();
     const b = end.clone();
     const oa = a.clone().add(offset);
@@ -342,6 +396,115 @@ export default class SceneAnnotationManager {
     const cssKind = kind === 'overall' ? 'overall' : kind === 'user' ? 'user' : kind === 'machining-dim' ? 'machining-dim' : 'part';
     const screenOffset = dimension?.labelOffsetPx || {x:0,y:-2};
     this.addLabel(`dimension:${dimension?.id || crypto.randomUUID()}`,label,midpoint,cssKind,screenOffset,dimension);
+  }
+
+  addDynamicSegments(count,color,opacity) {
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(count*6),3));
+    const lines=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color,transparent:true,opacity,depthTest:false,depthWrite:false}));
+    lines.renderOrder=1700;lines.frustumCulled=false;lines.raycast=()=>{};lines.visible=false;
+    this.group.add(lines);return lines;
+  }
+
+  /** 固定缓冲复用；只改展示顶点，不重建几何或回写世界偏移/尺寸锚点。 */
+  updateDynamicSegments(lines,segments) {
+    const position=lines.geometry.attributes.position;
+    let changed=false;
+    for(let i=0;i<position.count;i++) {
+      const point=segments[Math.floor(i/2)]?.[i%2],x=Math.fround(point?.x??0),y=Math.fround(point?.y??0),z=Math.fround(point?.z??0);
+      if(position.getX(i)!==x||position.getY(i)!==y||position.getZ(i)!==z) {
+        position.setXYZ(i,x,y,z);changed=true;
+      }
+    }
+    if(changed)position.needsUpdate=true;
+    lines.visible=true;
+  }
+
+  screenPoint(point,width,height,camera) {
+    const p=point.clone().project(camera);
+    return {x:(p.x+1)*width/2,y:(1-p.y)*height/2,z:p.z};
+  }
+
+  worldScreenPoint(point,width,height,camera) {
+    return new THREE.Vector3(point.x/width*2-1,1-point.y/height*2,point.z).unproject(camera);
+  }
+
+  machiningScreenNormal(mesh,type,item,width,height,camera,previous=null) {
+    const length=Number(mesh.userData.part.dimensions?.length||1);
+    const direction=type==='STATION'?new THREE.Vector3(0,0,length):['FRONT','BACK'].includes(item.face)?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
+    const a=this.screenPoint(mesh.localToWorld(new THREE.Vector3()),width,height,camera),b=this.screenPoint(mesh.localToWorld(direction),width,height,camera);
+    const span=Math.hypot(b.x-a.x,b.y-a.y);
+    let normal=span>1e-5&&Number.isFinite(span)?{x:-(b.y-a.y)/span,y:(b.x-a.x)/span}:{x:0,y:-1};
+    if(previous?normal.x*previous.x+normal.y*previous.y<0:Math.abs(normal.y)>.1?normal.y>0:normal.x>0)normal={x:-normal.x,y:-normal.y};
+    return normal;
+  }
+
+  layoutMachiningMeasurements(width,height,camera) {
+    const footprints=new Map();
+    for(const group of this.machiningLaneGroups.values()) {
+      group.mesh.updateMatrixWorld(true);
+      group.normal=this.machiningScreenNormal(group.mesh,group.type,group.item,width,height,camera,group.normal);
+      const normal=group.normal;
+      if(!footprints.has(group.mesh)) {
+        const points=[];
+        for(const body of [group.mesh,...group.mesh.children].filter(object=>object.isMesh&&object.geometry)) {
+          if(!body.geometry.boundingBox)body.geometry.computeBoundingBox();
+          const box=body.geometry.boundingBox;if(!box||box.isEmpty())continue;
+          for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]) {
+            const p=this.screenPoint(new THREE.Vector3(x,y,z).applyMatrix4(body.matrixWorld),width,height,camera);
+            if(screenPointVisible(p))points.push(p);
+          }
+        }
+        footprints.set(group.mesh,points);
+      }
+      const records=[...group.records].sort((a,b)=>a.value-b.value);
+      const boxes=records.map(record=>annotationBoxSize(record.label));
+      group.spacing=Math.max(24,Math.abs(normal.x)*(Math.max(...boxes.map(box=>box.width))+10)+Math.abs(normal.y)*(Math.max(...boxes.map(box=>box.height))+8));
+      const outline=footprints.get(group.mesh);
+      group.edge=outline.length?Math.max(...outline.map(point=>point.x*normal.x+point.y*normal.y)):null;
+      group.nextLane=records.length;
+      for(let i=0;i<records.length;i++) {
+        const record=records[i];record.start.copy(record.localStart).applyMatrix4(record.mesh.matrixWorld);record.end.copy(record.localEnd).applyMatrix4(record.mesh.matrixWorld);
+        record.screenStart=this.screenPoint(record.start,width,height,camera);record.screenEnd=this.screenPoint(record.end,width,height,camera);
+        record.visible=annotationObjectVisible(record.mesh)&&screenPointVisible(record.screenStart)&&screenPointVisible(record.screenEnd);
+        record.lane=i;record.lines.visible=record.visible;
+      }
+    }
+  }
+
+  renderMachiningMeasurement(record,occupied,width,height,camera) {
+    const label=record.label;
+    if(!record.visible){label.element.style.display='none';record.lines.visible=false;return;}
+    const group=record.laneGroup,n=group.normal,a=record.screenStart,b=record.screenEnd,box=annotationBoxSize(label);
+    const edge=group.edge??Math.max(a.x*n.x+a.y*n.y,b.x*n.x+b.y*n.y);
+    const positions=lane=>{
+      const dot=edge+16+lane*group.spacing,move=point=>({x:point.x+n.x*(dot-point.x*n.x-point.y*n.y),y:point.y+n.y*(dot-point.x*n.x-point.y*n.y),z:point.z});
+      const start=move(a),end=move(b),midpoint={x:(start.x+end.x)/2,y:(start.y+end.y)/2,z:(start.z+end.z)/2};
+      return {start,end,midpoint};
+    };
+    let placement=positions(record.lane),textPoint={...placement.midpoint};
+    if(label.dimension?.manualLabelOffset) {
+      textPoint.x+=Number(label.dimension.labelOffsetPx?.x||0);textPoint.y+=Number(label.dimension.labelOffsetPx?.y||0);
+    }else {
+      for(let attempt=0;attempt<64&&occupied.some(rect=>rectanglesOverlap(rectAround(textPoint.x,textPoint.y,box.width+4,box.height+4),rect));attempt++) {
+        placement=positions(group.nextLane++);textPoint={...placement.midpoint};
+      }
+    }
+    occupied.push(rectAround(textPoint.x,textPoint.y,box.width+4,box.height+4));
+    const fromScreen=point=>this.worldScreenPoint(point,width,height,camera),segments=[[record.start,fromScreen(placement.start)],[record.end,fromScreen(placement.end)],[fromScreen(placement.start),fromScreen(placement.end)]];
+    const dx=placement.end.x-placement.start.x,dy=placement.end.y-placement.start.y,length=Math.hypot(dx,dy);
+    if(length>.01) {
+      const ux=dx/length,uy=dy/length,arrow=Math.min(6,length/4),spread=arrow*.4;
+      for(const [point,sign] of [[placement.start,1],[placement.end,-1]])for(const side of [-1,1])segments.push([fromScreen(point),fromScreen({x:point.x+ux*arrow*sign-uy*spread*side,y:point.y+uy*arrow*sign+ux*spread*side,z:point.z})]);
+    }
+    if(label.dimension?.manualLabelOffset&&(Math.abs(textPoint.x-placement.midpoint.x)>2||Math.abs(textPoint.y-placement.midpoint.y)>2)) {
+      const bounds=rectAround(textPoint.x,textPoint.y,box.width,box.height);
+      const end={x:Math.max(bounds.left,Math.min(bounds.right,placement.midpoint.x)),y:Math.max(bounds.top,Math.min(bounds.bottom,placement.midpoint.y)),z:textPoint.z};
+      segments.push([fromScreen(placement.midpoint),fromScreen(end)]);
+    }
+    this.updateDynamicSegments(record.lines,segments);
+    label.worldPoint.copy(fromScreen(placement.midpoint));label.element.style.display='';
+    label.element.style.transform=`translate(-50%,-50%) translate(${Math.round(textPoint.x)}px,${Math.round(textPoint.y)}px)`;
   }
 
   addSegments(segments,color,opacity = 1) {
@@ -379,7 +542,7 @@ export default class SceneAnnotationManager {
     element.className = `scene-annotation-label ${kind}`;
     element.textContent = text;
     element.dataset.annotationId = id;
-    if(kind==='machining')element.style.display='none';
+    if(kind==='machining'||kind==='machining-size')element.style.display='none';
     if (dimension) {
       element.classList.add('draggable');
       if (dimension.binding) element.classList.add('driven');
@@ -404,12 +567,20 @@ export default class SceneAnnotationManager {
     event.preventDefault();
     event.stopPropagation();
     const moveLine = event.shiftKey === true;
-    const sourceLabel = dimension.labelOffsetPx || {x:0,y:0};
-    const sourceWorld = point3(dimension.offsetWorld) || new THREE.Vector3();
+    const currentLabel=this.labels.find(label=>label.dimension?.id===dimension.id);
+    const sourceLabel = currentLabel?.measurement&&!dimension.manualLabelOffset?{x:0,y:0}:dimension.labelOffsetPx || {x:0,y:0};
+    let sourceWorld = point3(dimension.offsetWorld) || new THREE.Vector3();
+    if(moveLine&&currentLabel?.measurement) {
+      // 将正在显示的自动档位交给原手工世界偏移链，拖动第一帧不跳回旧默认档位。
+      const position=currentLabel.measurement.lines.geometry.attributes.position;
+      const visibleMidpoint=new THREE.Vector3().fromBufferAttribute(position,4).lerp(new THREE.Vector3().fromBufferAttribute(position,5),.5);
+      const start=point3(dimension.start),end=point3(dimension.end);
+      if(start&&end)sourceWorld=visibleMidpoint.sub(start.lerp(end,.5)).sub(this.getDrivenDimensionAutoOffset(dimension)||new THREE.Vector3());
+    }
     this.dragState = {
       dimension,
       moveLine,
-      worldPoint:worldPoint.clone(),
+      worldPoint:(currentLabel?.worldPoint||worldPoint).clone(),
       startX:event.clientX,
       startY:event.clientY,
       sourceX:Number(sourceLabel.x || 0),
@@ -463,6 +634,16 @@ export default class SceneAnnotationManager {
     const width = Math.max(1,this.sceneManager.container.clientWidth);
     const height = Math.max(1,this.sceneManager.container.clientHeight);
     const camera = this.sceneManager.camera;
+    camera.updateMatrixWorld(true);
+    const busy=this.dragState||this.sceneManager.transformControls?.dragging||this.editor.isBuilderReviewActive?.()||this.editor.profileDrawTool?.isActive()||
+      this.editor.profilePlacementManager?.isActive()||this.editor.wholeStretchManager?.isActive()||
+      this.editor.machiningPlacementManager?.isActive()||this.editor.connectionPlacementManager?.isActive()||this.editor.accessoryPlacementManager?.isActive();
+    this.surfaceNumbers.updateHover(busy?null:this.pointer,camera,width,height);
+    for(const label of this.labels)if(label.localPoint&&label.mesh) {
+      label.mesh.updateMatrixWorld(true);label.worldPoint.copy(label.localPoint).applyMatrix4(label.mesh.matrixWorld);
+    }
+    this.layoutMachiningMeasurements(width,height,camera);
+    this.updateMachiningVisibilityState(width,height,camera);
     const machiningHover=this.labels.length?this.nearestMachiningLabel(width,height,camera):null;
     const hoverState=machiningHover?'true':'false';
     if(this.sceneManager.container.dataset.machiningHover!==hoverState)this.sceneManager.container.dataset.machiningHover=hoverState;
@@ -470,6 +651,8 @@ export default class SceneAnnotationManager {
     const occupied = [];
     const labels = [...this.labels].sort((a,b) => labelPriority(a) - labelPriority(b));
     for (const label of labels) {
+      if(label.measurement){this.renderMachiningMeasurement(label.measurement,occupied,width,height,camera);continue;}
+      if(label.kind==='machining-size'){this.renderMachiningSize(label,occupied,width,height,camera);continue;}
       if(label.kind==='machining') {
         label.element.style.display=label===machiningHover?'':'none';
         if(label===machiningHover) {
@@ -517,6 +700,73 @@ export default class SceneAnnotationManager {
     }
   }
 
+  renderMachiningSize(label,occupied,width,height,camera) {
+    const hide=()=>{label.element.style.display='none';label.leader.visible=false;};
+    if(!annotationObjectVisible(label.mesh)){hide();return;}
+    const normal=label.localNormal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(label.mesh.matrixWorld)).normalize();
+    const facing=camera.isPerspectiveCamera?camera.getWorldPosition(new THREE.Vector3()).sub(label.worldPoint):new THREE.Vector3(0,0,1).applyQuaternion(camera.quaternion);
+    const center=this.screenPoint(label.worldPoint,width,height,camera);
+    if(normal.dot(facing)<=0||!screenPointVisible(center)||center.x<0||center.y<0||center.x>width||center.y>height){hide();return;}
+    if(label.surfaceVisible==null) {
+      this.hoverRay.setFromCamera(new THREE.Vector2(center.x/width*2-1,1-center.y/height*2),camera);
+      const hit=this.hoverRay.intersectObjects(this.machiningOccluders,true).find(value=>value.object.isMesh&&annotationObjectVisible(value.object));
+      label.surfaceVisible=!hit||hit.distance>=this.hoverRay.ray.origin.distanceTo(label.worldPoint)-.05;
+    }
+    if(!label.surfaceVisible){hide();return;}
+    const localU=label.localNormal.clone().cross(new THREE.Vector3(0,0,1));
+    if(localU.lengthSq()<1e-8)localU.copy(label.localNormal).cross(new THREE.Vector3(0,1,0));
+    localU.normalize();const localV=label.localNormal.clone().cross(localU).normalize();
+    const rim=[];
+    for(let i=0;i<16;i++) {
+      const angle=i*Math.PI/8,point=label.localPoint.clone().addScaledVector(localU,Math.cos(angle)*label.radius).addScaledVector(localV,Math.sin(angle)*label.radius);
+      const p=this.screenPoint(label.mesh.localToWorld(point),width,height,camera);if(screenPointVisible(p))rim.push(p);
+    }
+    if(!rim.length){hide();return;}
+    const n=this.machiningLaneGroups.get(`${label.mesh.uuid}:STATION:`)?.normal||this.machiningScreenNormal(label.mesh,'STATION',{},width,height,camera,label.calloutNormal),t={x:-n.y,y:n.x};
+    label.calloutNormal=n;
+    const directions=[{x:-n.x,y:-n.y},{x:-n.x+t.x*.8,y:-n.y+t.y*.8},{x:-n.x-t.x*.8,y:-n.y-t.y*.8},{x:n.x+t.x*.8,y:n.y+t.y*.8},{x:n.x-t.x*.8,y:n.y-t.y*.8},{x:t.x,y:t.y},{x:-t.x,y:-t.y}];
+    const box=annotationBoxSize(label);
+    let placement=null;
+    for(const extra of [0,18,36,54,72]) {
+      for(const raw of directions) {
+        const span=Math.hypot(raw.x,raw.y),direction={x:raw.x/span,y:raw.y/span};
+        const start=rim.reduce((best,point)=>(point.x-center.x)*direction.x+(point.y-center.y)*direction.y>(best.x-center.x)*direction.x+(best.y-center.y)*direction.y?point:best);
+        const extent=Math.max(0,(start.x-center.x)*direction.x+(start.y-center.y)*direction.y);
+        const radius=extent+12+extra+(Math.abs(direction.x)*box.width+Math.abs(direction.y)*box.height)/2;
+        const text={x:center.x+direction.x*radius,y:center.y+direction.y*radius,z:center.z},bounds=rectAround(text.x,text.y,box.width+4,box.height+4);
+        if(bounds.left<4||bounds.right>width-4||bounds.top<4||bounds.bottom>height-4||occupied.some(rect=>rectanglesOverlap(bounds,rect)))continue;
+        const elbow={x:center.x+direction.x*(extent+8+extra),y:center.y+direction.y*(extent+8+extra),z:center.z};
+        const end={x:Math.max(bounds.left,Math.min(bounds.right,elbow.x)),y:Math.max(bounds.top,Math.min(bounds.bottom,elbow.y)),z:center.z};
+        placement={text,bounds,start,elbow,end};break;
+      }
+      if(placement)break;
+    }
+    // 过密或没有完整可见空间时保留原悬停提示，不把小标注压成另一堆重叠文字。
+    if(!placement){hide();return;}
+    const fromScreen=point=>this.worldScreenPoint(point,width,height,camera);
+    this.updateDynamicSegments(label.leader,[[fromScreen(placement.start),fromScreen(placement.elbow)],[fromScreen(placement.elbow),fromScreen(placement.end)]]);
+    occupied.push(placement.bounds);label.element.style.display='';
+    label.element.style.transform=`translate(-50%,-50%) translate(${Math.round(placement.text.x)}px,${Math.round(placement.text.y)}px)`;
+  }
+
+  /** 静止画面复用孔口遮挡结果，视角/实体几何或可见性变化后才重新射线检查。 */
+  updateMachiningVisibilityState(width,height,camera) {
+    const labels=this.labels.filter(label=>label.kind==='machining-size');
+    if(!labels.length)return;
+    this.machiningOccluders=[...this.editor.meshes.filter(mesh=>mesh.visible!==false),...(this.editor.connectionManager?.selectableHelpers?.()||[])];
+    const state=[width,height,...camera.matrixWorld.elements,...camera.projectionMatrix.elements];
+    for(const root of this.machiningOccluders) {
+      root.updateMatrixWorld(true);state.push(root.uuid,annotationObjectVisible(root));
+      root.traverse(object=>{
+        if(!object.isMesh)return;
+        state.push(object.uuid,annotationObjectVisible(object),...object.matrixWorld.elements,object.geometry?.uuid,object.geometry?.attributes?.position?.version,object.geometry?.index?.version);
+      });
+    }
+    if(!this.machiningVisibilityState||state.length!==this.machiningVisibilityState.length||state.some((value,index)=>value!==this.machiningVisibilityState[index])) {
+      this.machiningVisibilityState=state;for(const label of labels)label.surfaceVisible=null;
+    }
+  }
+
   /** 一次只显示最近的可见孔位；反面、被遮挡或拖动中的孔不能隔着模型弹提示。 */
   nearestMachiningLabel(width,height,camera) {
     if(!this.pointer || this.sceneManager.transformControls?.dragging || this.editor.isBuilderReviewActive?.() || this.editor.machiningPlacementManager?.isActive() || this.editor.profileDrawTool?.isActive())return null;
@@ -561,15 +811,19 @@ function localVectorToWorld(mesh,vector) {
   return point.sub(origin);
 }
 
+function annotationObjectVisible(object){for(let current=object;current;current=current.parent)if(current.visible===false)return false;return true;}
+function screenPointVisible(point){return Number.isFinite(point.x)&&Number.isFinite(point.y)&&Number.isFinite(point.z)&&point.z>=-1&&point.z<=1;}
+function annotationBoxSize(label){return {width:label.element.offsetWidth||Math.max(28,String(label.text||'').length*6+12),height:label.element.offsetHeight||18};}
+
 function machiningLabel(item) {
-  if (item.type === 'END_TAP') return `${item.tappingSize || 'M8'} ${item.end === 'END' ? 'B' : 'A'}孔`;
-  if (item.type === 'TAPPED_HOLE') return `${item.tappingSize || 'M8'} 螺纹孔`;
-  if (item.type === 'COUNTERSINK') return `CSK Ø${formatNumber(item.majorDiameter || item.diameter || 0)} ${formatNumber(item.angleDeg || 90)}°`;
-  if (item.type === 'COUNTERBORE') return `CBORE Ø${formatNumber(item.diameter || 0)}×${formatNumber(item.depth || 0)}`;
+  if (item.type === 'END_TAP') return `${item.tappingSize || 'M8'} ${item.end === 'END' ? 'B' : 'A'}端攻丝 · 深${formatNumber(item.depth || 0)}`;
+  if (item.type === 'TAPPED_HOLE') return `${item.tappingSize || 'M8'} 攻丝 · 深${formatNumber(item.depth || 0)}`;
+  if (item.type === 'COUNTERSINK') return `沉头 Ø${formatNumber(item.majorDiameter || item.diameter || 0)} ${formatNumber(item.angleDeg || 90)}°`;
+  if (item.type === 'COUNTERBORE') return `沉孔 Ø${formatNumber(item.diameter || 0)} 深${formatNumber(item.depth || 0)}`;
   if (item.type === 'BLIND_HOLE') return `盲孔 Ø${formatNumber(item.diameter || 0)} 深${formatNumber(item.depth || 0)}`;
-  if (item.type === 'END_HOLE') return `${item.end==='END'?'B':'A'}端孔 Ø${formatNumber(item.diameter||0)}`;
-  if (item.type === 'END_COUNTERBORE') return `${item.end==='END'?'B':'A'}端沉孔 Ø${formatNumber(item.diameter||0)}`;
-  if (item.type === 'END_COUNTERSINK') return `${item.end==='END'?'B':'A'}端沉头 Ø${formatNumber(item.majorDiameter||0)}`;
+  if (item.type === 'END_HOLE') return `${item.end==='END'?'B':'A'}端孔 Ø${formatNumber(item.diameter||0)} 深${formatNumber(item.depth||0)}`;
+  if (item.type === 'END_COUNTERBORE') return `${item.end==='END'?'B':'A'}端沉孔 Ø${formatNumber(item.diameter||0)} 深${formatNumber(item.depth||0)}`;
+  if (item.type === 'END_COUNTERSINK') return `${item.end==='END'?'B':'A'}端沉头 Ø${formatNumber(item.majorDiameter||0)} ${formatNumber(item.angleDeg||90)}°`;
   if (['SLOT','OBROUND_SLOT','MILLING_REGION'].includes(item.type)) return `${item.type==='MILLING_REGION'?'铣削':item.type==='OBROUND_SLOT'?'腰孔':'槽'} ${formatNumber(item.length||0)}×${formatNumber(item.width||0)}`;
   return `Ø${formatNumber(item.diameter || 0)} 通孔`;
 }
@@ -581,9 +835,10 @@ function projectDirectionOnPlane(direction,normal) {
 
 function formatDrivenValue(dimension,value) {
   const type = dimension?.binding?.type;
+  if (type === 'MACHINING_STATION') return formatMachiningMm(value);
   if (type === 'MACHINING_OFFSET') {
-    const number = Number(value || 0);
-    return `${number > 0 ? '+' : ''}${formatNumber(number)}`;
+    const number = Math.round(Number(value || 0));
+    return `${number > 0 ? '+' : ''}${formatMachiningMm(number)}`;
   }
   if (type === 'PROFILE_RADIUS' || dimension?.type === 'RADIAL') return `R${formatNumber(value)}`;
   if (type === 'PART_AXIS_COORDINATE' || dimension?.type === 'ORDINATE') return `${String(dimension?.binding?.axis || dimension?.chain?.axis || 'X').toUpperCase()}=${formatNumber(value)}`;
@@ -595,6 +850,7 @@ function labelPriority(label) {
   if (label.dimension?.manualLabelOffset) return 0;
   if (label.kind === 'overall') return 1;
   if (label.dimension?.chain?.locked) return 2;
+  if (label.kind === 'machining-size') return 3;
   if (label.kind === 'user' || String(label.kind || '').includes('angular')) return 3;
   if (label.kind === 'machining-dim') return 4;
   if (label.kind === 'part') return 5;
@@ -631,6 +887,7 @@ function point3(value) {
 
 function toPlain(point) { return {x:Number(point.x),y:Number(point.y),z:Number(point.z)}; }
 function round0(value) { return Math.round(Number(value || 0)); }
+function formatMachiningMm(value) { return String(Math.round(Number(value || 0))); }
 function formatNumber(value) {
   const number = Number(value || 0);
   return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(/\.0$/,'');

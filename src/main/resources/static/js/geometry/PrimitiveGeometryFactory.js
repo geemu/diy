@@ -3,7 +3,7 @@ import ComponentGeometryFactory from './ComponentGeometryFactory.js';
 
 export default class PrimitiveGeometryFactory {
   static create(part) {
-    if(part.dimensions?.geometryKind||part.dimensions?.panelShape)return ComponentGeometryFactory.create(part);
+    if(part.dimensions?.geometryKind||part.dimensions?.panelShape||part.dimensions?.edgeNotches?.length)return ComponentGeometryFactory.create(part);
     if (part.type === 'SHAFT') return this.createShaft(part);
     if (part.type === 'PANEL') return this.createPanel(part);
     if (part.type === 'ACCESSORY') return this.createAccessory(part);
@@ -45,6 +45,7 @@ export default class PrimitiveGeometryFactory {
     mesh.receiveShadow = true;
     const group = new THREE.Group();
     group.userData.part = part;
+    group.userData.panelDimensionSnapshot=structuredClone(part.dimensions);
     group.add(mesh);
     this.bind(group);
     return group;

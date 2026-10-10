@@ -6,7 +6,7 @@ const STORAGE_KEY = 'aluminum-cad-workbench-layout-v1';
  * 设计目标：
  * 1. 左/右面板默认停靠，不遮挡三维画布；拖动标题条后自动变成浮动面板。
  * 2. 浮动面板和画布浮动工具不会被拖出可视区域。
- * 3. 面板宽度和视角导航位置保存到浏览器本地；主工具条固定在工作台底部。
+ * 3. 面板宽度、两侧展开状态和视角导航位置保存到浏览器本地；主工具条固定在工作台底部。
  * 4. 布局变化后统一触发 resize，让 Three.js 立即匹配新的画布尺寸。
  */
 export default class WorkbenchLayoutManager {
@@ -26,11 +26,12 @@ export default class WorkbenchLayoutManager {
     if (!this.workspace || !this.canvas) return this;
     this.bindPanel('library','.library-panel','right',344);
     this.bindPanel('inspector','.inspector-panel','right',344);
+    this.bindSideToggles();
     // 底部工具条已停靠：旧的 toolbar 浮动坐标不得再覆盖正常文档布局。
     if(this.state.floaters)delete this.state.floaters.toolbar;
     this.bindFloater('viewCube','.view-cube');
     this.applyStoredLayout();
-    const onResize = () => this.clampAll();
+    const onResize = event => {if(!event.workbenchLayoutResize)this.clampAll();};
     window.addEventListener('resize',onResize);
     this.cleanup.push(() => window.removeEventListener('resize',onResize));
     return this;
@@ -54,9 +55,59 @@ export default class WorkbenchLayoutManager {
     try { localStorage.setItem(this.storageKey,JSON.stringify(this.state)); } catch (_) {}
   }
 
+  /** 收起只隐藏布局，不卸载Vue表单、取消工具或写工程；左右互不影响。 */
+  isSideCollapsed(side) { return this.state.collapsed?.[side] === true; }
+
+  setSideCollapsed(side,collapsed) {
+    if (!['left','right'].includes(side)) return;
+    if (!this.state.collapsed || typeof this.state.collapsed !== 'object') this.state.collapsed = {};
+    if (this.isSideCollapsed(side) === !!collapsed) return;
+    this.state.collapsed[side] = !!collapsed;
+    this.applySideVisibility();
+    this.persist();
+  }
+
+  expandSide(side) { this.setSideCollapsed(side,false); }
+
+  bindSideToggles() {
+    for (const button of this.workspace.querySelectorAll('[data-layout-toggle-side]')) {
+      const side=button.dataset.layoutToggleSide;
+      const down=event=>event.stopPropagation();
+      const key=event=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))event.stopPropagation();};
+      const click=event=>{event.preventDefault();event.stopPropagation();this.setSideCollapsed(side,!this.isSideCollapsed(side));};
+      button.addEventListener('pointerdown',down);
+      button.addEventListener('keydown',key);
+      button.addEventListener('keyup',key);
+      button.addEventListener('click',click);
+      this.cleanup.push(()=>{button.removeEventListener('pointerdown',down);button.removeEventListener('keydown',key);button.removeEventListener('keyup',key);button.removeEventListener('click',click);});
+    }
+  }
+
+  applySideVisibility() {
+    for (const side of ['left','right']) {
+      const collapsed=this.isSideCollapsed(side),label=side==='left'?'左侧菜单':'右侧面板';
+      this.workspace.dataset[side+'Collapsed']=String(collapsed);
+      const button=this.workspace.querySelector(`[data-layout-toggle-side="${side}"]`);
+      if (button) {
+        button.title=(collapsed?'展开':'收起')+label;
+        button.setAttribute('aria-label',button.title);
+        button.setAttribute('aria-expanded',String(!collapsed));
+        button.querySelector('span').textContent=side==='left'?(collapsed?'›':'‹'):(collapsed?'‹':'›');
+      }
+      const selectors=side==='left'?'.cad-tool-rail,.quick-operation-panel':'.library-panel,.inspector-panel';
+      for (const element of this.workspace.querySelectorAll(selectors)) {
+        element.inert=collapsed;
+        if (collapsed) element.setAttribute('aria-hidden','true');else element.removeAttribute('aria-hidden');
+      }
+    }
+    this.notifyResize();
+    requestAnimationFrame(()=>this.clampAll());
+  }
+
   notifyResize() {
     clearTimeout(this.resizeTimer);
-    this.resizeTimer = setTimeout(() => window.dispatchEvent(new Event('resize')),20);
+    // 本管理器发出的画布resize不应再进入布局clamp→resize循环，其他渲染监听仍正常接收。
+    this.resizeTimer = setTimeout(() => {const event=new Event('resize');event.workbenchLayoutResize=true;window.dispatchEvent(event);},20);
   }
 
   panelState(name,defaultWidth) {
@@ -135,6 +186,7 @@ export default class WorkbenchLayoutManager {
     this.workspace.style.setProperty('--inspector-track',inspector.mode === 'floating' ? '0px' : `${inspector.width}px`);
     this.workspace.dataset.libraryMode = library.mode;
     this.workspace.dataset.inspectorMode = inspector.mode;
+    this.applySideVisibility();
     this.notifyResize();
   }
 
@@ -329,7 +381,7 @@ export default class WorkbenchLayoutManager {
 
   clampPanel(item) {
     const state = this.panelState(item.name,item.defaultWidth);
-    if (state.mode !== 'floating') return;
+    if (state.mode !== 'floating' || this.isSideCollapsed(item.side) || !item.element.getClientRects().length) return;
     const width = item.element.offsetWidth;
     const height = item.element.offsetHeight;
     state.x = this.clamp(Number(state.x || 4),4,Math.max(4,window.innerWidth - width - 4));

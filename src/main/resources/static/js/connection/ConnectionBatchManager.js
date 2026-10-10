@@ -8,6 +8,9 @@ import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
 import {profileObb} from '../validation/PartCollisionDetector.js';
 import {connectorGhost,connectorEnvelope,envelopesOverlap} from './ConnectionPlacementManager.js';
 import {connectionSupportPlanes,automaticConnectionChoice} from './ConnectionAutoPolicy.js';
+import {profileEndContact} from '../model/ProfileEndContact.js';
+import {designAnchorKey} from '../model/ConnectionAnchor.js';
+import {sideMountContacts,sideMountContexts,sideMountKey} from './SideMountConnection.js';
 
 // 目录与已有安装映射共用，不用 UI 再维护一个只有三项的清单。
 export const BatchConnectionComponentOptions=ConnectionComponentOptions.filter(option=>connectionSpecs(option.value).some(spec=>!spec.disabled&&connectionDesignType(connectionComponent({type:option.value,spec:spec.value}))));
@@ -37,9 +40,9 @@ export default class ConnectionBatchManager {
     if(profiles.length<2)throw new Error('扫描范围内至少需要两根可见直线型材');
     this.signature=JSON.stringify(e.exportProject());this.profileCount=profiles.length;this.rows=[];
     // 移动工具会排除所选对象；扫描使用独立只读作用域，不移动任何型材。
-    const snap=new SnapManager({meshes:profiles}),byPair=new Map(),cache=new Map(),touchingEnds=new Set(),byId=new Map(profiles.map(mesh=>[mesh.userData.part.id,mesh])),bounds=new Map(),oldPairs=new Map();
-    for(const old of e.connectionManager.connections)if(old.jointKind!=='SIDE_CORNER'){
-      const key=[old.sourceProfileId,old.targetProfileId].sort().join('|');if(!oldPairs.has(key))oldPairs.set(key,old);
+    const snap=new SnapManager({meshes:profiles}),byJoint=new Map(),cache=new Map(),touchingEnds=new Set(),byId=new Map(profiles.map(mesh=>[mesh.userData.part.id,mesh])),bounds=new Map(),oldJoints=new Map();
+    for(const old of e.connectionManager.connections)if(!['SIDE_CORNER','SIDE_MOUNT'].includes(old.jointKind)){
+      const key=jointKey(old.sourceProfileId,old.targetProfileId,old.sourceEnd,old.targetFace);if(!oldJoints.has(key))oldJoints.set(key,old);
     }
     for(let index=0;index<e.meshes.length;index++){
       const mesh=e.meshes[index];this.progressStep('正在准备扫描',5*index/e.meshes.length,index,e.meshes.length);
@@ -59,36 +62,47 @@ export default class ConnectionBatchManager {
       const reach=snap.distance+(size[0]+size[1])/2*source.matrixWorld.getMaxScaleOnAxis();
       snap.editor.meshes=profiles.filter(target=>target===source||ends.some(point=>bounds.get(target).distanceToPoint(point)<=reach));
       this.progressStep('正在识别端面接头',10+35*index/profiles.length,index,profiles.length);yield;
-      for(const candidate of snap.collectCandidates(source)){
+      const candidates=snap.collectCandidates(source);
+      // 扫描是补件而不是移动吸附：实际端面已经接触时，不因吸附候选还想横移到整体中心而漏掉多槽搭接。
+      for(const end of ['START','END'])for(const target of snap.editor.meshes){
+        if(source===target)continue;
+        const feature={type:'PROFILE_END',end},point=profileFeatureWorldPoint(source,feature);
+        const context=e.connectionPlacementManager.resolveJointContact({mesh:source,feature,point},target);
+        if(!context)continue;
+        const contact=profileEndContact(source,target,{sourceEnd:end,targetFace:context.target.feature.face,requireFootprint:false});
+        if(contact.ok)candidates.push({delta:new THREE.Vector3(),targetPoint:context.target.point,score:0,snap:{type:'END_TO_FACE',sourceEnd:end,targetFace:context.target.feature.face,targetProfileId:target.userData.part.id}});
+        yield;
+      }
+      for(const candidate of candidates){
         if(!candidate.snap.targetFace)continue;
         const target=byId.get(candidate.snap.targetProfileId);if(!target)continue;
         const touch=candidate.delta.length()<=.10001;
         // 先排除越界的邻域候选，再生成目录几何，避免密集框架为无关位置重复造预览。
         if(!touch&&!insideTargetFace(source,target,candidate.snap))continue;
-        const directKey=[source.userData.part.id,candidate.snap.sourceEnd,target.userData.part.id,candidate.snap.targetFace].join('|');
-        const old=oldPairs.get(pairKey(source,target));
-        if(!cache.has(directKey))cache.set(directKey,touch&&!preserveConnection(old)?(yield* this.solutionSteps(source,target,candidate.snap)):[]);
-        const solutions=cache.get(directKey),checked=solutions.find(solution=>solution.checked?.valid)?.checked||solutions[0]?.checked;
+        const directKey=jointKey(source.userData.part.id,target.userData.part.id,candidate.snap.sourceEnd,candidate.snap.targetFace);
+        const old=oldJoints.get(directKey);
+        if(touch&&!cache.has(directKey))cache.set(directKey,!old?.manufacturingRuleId&&old?.status!=='INVALID'&&old?.validation?.ok!==false?(yield* this.solutionSteps(source,target,candidate.snap)):[]);
+        const solutions=cache.get(directKey)||[],checked=solutions.find(solution=>solution.checked?.valid)?.checked||solutions[0]?.checked;
         if(touch)touchingEnds.add(source.userData.part.id+'|'+candidate.snap.sourceEnd);
         const proposal={source,target,candidate,solutions,checked,old,touch,gap:Number(checked?.item?.geometry?.contactGapMm??candidate.delta.length()),
-          key:[source.userData.part.id,target.userData.part.id].sort().join('|'),
+          key:directKey,
           matchesOld:!!old&&old.sourceProfileId===source.userData.part.id&&old.sourceEnd===candidate.snap.sourceEnd&&old.targetFace===candidate.snap.targetFace,
           interior:e.autoConnectionResolver.targetInteriorDistance(target,candidate.targetPoint)};
-        const previous=byPair.get(proposal.key);if(!previous||compare(proposal,previous)<0)byPair.set(proposal.key,proposal);
+        const previous=byJoint.get(proposal.key);if(!previous||compare(proposal,previous)<0)byJoint.set(proposal.key,proposal);
         yield;
       }
     }
-    const corners=yield* this.sideCornerSteps(profiles),cornerPairs=new Set(corners.map(row=>pairKey(row.source,row.target)));
+    const corners=yield* this.sideCornerSteps(profiles),sides=yield* this.sideMountSteps(profiles),cornerPairs=new Set(corners.map(row=>pairKey(row.source,row.target)));
     this.freeEndCount=profiles.length*2-touchingEnds.size;
     // 侧面内角真实贴合时，不再同时给同一对梁报端中心的虚假间距；已有普通关系仍保留审阅。
-    const proposals=[...byPair.values()].filter(row=>row.touch||row.old||!cornerPairs.has(row.key));
-    this.rows=[...proposals,...corners].sort(compare).map(proposal=>({...proposal,id:proposal.key,sourceLabel:label(proposal.source),targetLabel:label(proposal.target),end:proposal.candidate.snap.sourceEnd,face:proposal.candidate.snap.targetFace}));
+    const proposals=[...byJoint.values()].filter(row=>!(row.checked?.item?.geometry?.jointKind==='SIDE_CORNER'&&cornerPairs.has(pairKey(row.source,row.target)))&&(row.touch||row.old||!cornerPairs.has(pairKey(row.source,row.target))));
+    this.rows=[...proposals,...corners,...sides].sort(compare).map(proposal=>({...proposal,id:proposal.key,sourceLabel:label(proposal.source),targetLabel:label(proposal.target),end:proposal.candidate.snap.sourceEnd,face:proposal.candidate.snap.targetFace}));
     // 失效旧关系和本次所选类型未覆盖的已有内角仍报告，不能从审阅中消失或被误当缺件。
     for(const old of e.connectionManager.connections) {
-      if((old.status!=='INVALID'&&old.jointKind!=='SIDE_CORNER')||this.rows.some(row=>row.old?.id===old.id))continue;
+      if((old.status!=='INVALID'&&!['SIDE_CORNER','SIDE_MOUNT'].includes(old.jointKind))||this.rows.some(row=>row.old?.id===old.id))continue;
       const source=byId.get(old.sourceProfileId),target=byId.get(old.targetProfileId);if(!source||!target)continue;
       const gap=Number(old.validation?.contactGapMm??Infinity),touch=old.status!=='INVALID'&&old.validation?.ok===true&&gap<=.1;
-      const candidate={delta:new THREE.Vector3(Number.isFinite(gap)?gap:0,0,0),snap:{sourceEnd:old.sourceEnd,targetFace:old.targetFace,jointKind:old.jointKind}};
+      const candidate={delta:new THREE.Vector3(Number.isFinite(gap)?gap:0,0,0),snap:{sourceEnd:old.sourceEnd,targetFace:old.targetFace,jointKind:old.jointKind,sideMount:old.sideMount}};
       this.rows.push({id:old.id,source,target,old,touch,gap,candidate,jointKind:old.jointKind,matchesOld:true,solutions:[],sourceLabel:label(source),targetLabel:label(target),end:old.sourceEnd,face:old.targetFace});
       yield;
     }
@@ -105,7 +119,7 @@ export default class ConnectionBatchManager {
       const source=byId.get(old.sourceProfileId),target=byId.get(old.targetProfileId);if(!source||!target)continue;
       const point=profileFeatureWorldPoint(source,{type:'PROFILE_END',end:old.sourceEnd});
       for(const face of old.designComponentMountFaces?.length?old.designComponentMountFaces:[old.designComponentMountFace||old.sourceMountFace]){
-        const contact=placement.resolveJointContact({mesh:source,point},target,face);
+        const contact=placement.resolveJointContact({mesh:source,point,feature:{type:'PROFILE_END',end:old.sourceEnd}},target,face);
         if(contact)existingCorners.set(sideCornerKey(source,target,contact.contactPoint),old);
       }
     }
@@ -127,8 +141,8 @@ export default class ConnectionBatchManager {
             const snap={type:'PROFILE_FACE',sourceEnd:end,targetProfileId:target.userData.part.id,targetFace:context.target.feature.face,sourceMountFace:mountFace,jointKind:'SIDE_CORNER'};
             const key=sideCornerKey(source,target,context.contactPoint);
             const old=e.connectionManager.connections.find(row=>sameDirection(row,source,target,snap))||existingCorners.get(key);
-            const retained=preserveConnection(old)?e.connectionManager.recommendDesignFor(source,target,{sourceEnd:end,targetFace:snap.targetFace,sourceMountFace:mountFace,componentDefinition:old.designComponent}).find(item=>item.geometry?.jointKind==='SIDE_CORNER'):null;
-            const solutions=preserveConnection(old)?(retained?[{checked:{item:retained,valid:retained.valid}}]:[]):(yield* this.solutionSteps(source,target,snap,definitions)).filter(item=>item.checked?.item.geometry?.jointKind==='SIDE_CORNER');if(!solutions.length)continue;
+            const retained=preserveConnection(old)?e.connectionManager.recommendDesignFor(source,target,{sourceEnd:end,targetFace:snap.targetFace,sourceMountFace:mountFace,designAnchorOffset:old.designAnchorOffset,componentDefinition:old.designComponent}).find(item=>item.geometry?.jointKind==='SIDE_CORNER'):null;
+            const solutions=old?.manufacturingRuleId||old?.status==='INVALID'||old?.validation?.ok===false?(retained?[{checked:{item:retained,valid:retained.valid}}]:[]):(yield* this.solutionSteps(source,target,snap,definitions)).filter(item=>item.checked?.item.geometry?.jointKind==='SIDE_CORNER');if(!solutions.length)continue;
             const checked=solutions.find(item=>item.checked.valid)?.checked||solutions[0].checked;
             const gap=Number(checked.item.geometry.contactGapMm);
             const proposal={source,target,candidate:{snap,delta:new THREE.Vector3(gap,0,0),targetPoint:context.target.point,score:0},solutions,checked,old,
@@ -140,6 +154,29 @@ export default class ConnectionBatchManager {
       }
     }
     return [...byCorner.values()];
+  }
+  /** 沿柱面的水平梁独立扫描侧贴面；一处物理接触按安装侧占位，不抢占原梁端 / 两梁内角。 */
+  *sideMountSteps(profiles){
+    const result=[],manager=this.editor.connectionManager;
+    for(let index=0;index<profiles.length;index++){
+      const source=profiles[index];this.progressStep('正在识别梁侧贴柱',65+10*index/profiles.length,index,profiles.length);yield;
+      const definitions=this.componentDefinitions(source).filter(definition=>['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(definition.dimensions.geometryKind));
+      if(!definitions.length)continue;
+      for(const target of profiles){
+        yield;
+        for(const contact of sideMountContacts(source,target)){
+          const sideMount={sourceContactFace:contact.sourceContactFace,sourceStationS:contact.sourceStationS,sourceSlotOffset:0};
+          const snap={type:'PROFILE_FACE',sourceEnd:contact.sourceStationS<source.userData.part.dimensions.length/2?'START':'END',targetProfileId:target.userData.part.id,targetFace:contact.targetFace,jointKind:'SIDE_MOUNT',sideMount};
+          const old=manager.connectionsAtJoint(source.userData.part.id,target.userData.part.id,snap.sourceEnd,snap.targetFace,undefined,snap)[0];
+          const solutions=old?.manufacturingRuleId||old?.status==='INVALID'||old?.validation?.ok===false?[]:(yield* this.solutionSteps(source,target,snap,definitions));
+          const checked=solutions.find(solution=>solution.checked?.valid)?.checked||solutions[0]?.checked;
+          result.push({source,target,candidate:{snap,delta:new THREE.Vector3(),score:0},solutions,checked,old,touch:true,gap:0,
+            key:sideMountKey(source.userData.part.id,target.userData.part.id,contact.targetFace,sideMount),jointKind:'SIDE_MOUNT',matchesOld:!!old,interior:contact.maximum-contact.minimum});
+          yield;
+        }
+      }
+    }
+    return result;
   }
   componentDefinitions(source){
     const series=Number(profileSeries(source.userData.part)),height=Number(source.userData.part.dimensions.sectionSize[1]);
@@ -158,33 +195,45 @@ export default class ConnectionBatchManager {
     return drain(this.solutionSteps(source,target,snap,definitions));
   }
   *solutionSteps(source,target,snap,definitions=this.componentDefinitions(source),requestedFaces=null){
+    if(snap.jointKind==='SIDE_MOUNT'){
+      const result=[];
+      for(const definition of definitions)for(const context of sideMountContexts(source,target,definition,{targetFace:snap.targetFace})){
+        if(context.sideMount.sourceContactFace!==snap.sideMount.sourceContactFace||(requestedFaces&&!requestedFaces.includes(context.sourceMountFace)))continue;
+        const checked=this.editor.connectionPlacementManager.evaluateCandidate(context,{mode:connectionDesignType(definition),componentDefinition:context.componentDefinition,preserveExisting:false,evaluationCache:this.evaluationCache});
+        result.push({definition:context.componentDefinition,checked,mountFace:context.sourceMountFace,sideMount:context.sideMount,designAnchorOffset:context.designAnchorOffset,envelope:checked?.valid?checked.envelope:null});yield;
+      }
+      return result;
+    }
     const result=[],base=this.context(source,target,snap),defaultFace=base?.designCandidates?.find(item=>item.geometry)?.geometry?.sourceMountFace;
     const faces=(requestedFaces||(snap.jointKind==='SIDE_CORNER'?[snap.sourceMountFace]:[...new Set([defaultFace,'FRONT','BACK','LEFT','RIGHT'])])).filter(face=>face&&!isProfileFaceClosed(source.userData.part,face));
     const contexts=new Map(faces.map(face=>[face,this.context(source,target,snap,face,false)]));
     for(const definition of definitions)for(const mountFace of faces){
-      const checked=this.editor.connectionPlacementManager.evaluateCandidate(contexts.get(mountFace),{mode:connectionDesignType(definition),componentDefinition:definition,preserveExisting:false,evaluationCache:this.evaluationCache});
-      result.push({definition,checked,mountFace,envelope:checked?.valid?checked.envelope:null});yield;
+      const context=contexts.get(mountFace);if(!context)continue;
+      for(const anchored of this.editor.connectionPlacementManager.anchorContexts(context,definition)){
+        const checked=this.editor.connectionPlacementManager.evaluateCandidate(anchored,{mode:connectionDesignType(definition),componentDefinition:definition,preserveExisting:false,evaluationCache:this.evaluationCache});
+        result.push({definition,checked,mountFace,designAnchorOffset:anchored.designAnchorOffset,envelope:checked?.valid?checked.envelope:null});yield;
+      }
     }
     return result;
   }
-  context(source,target,snap,sourceMountFace=null,recommend=true){
+  context(source,target,snap,sourceMountFace=null,recommend=true,designAnchorOffset=undefined){
     const a={mesh:source,feature:{type:'PROFILE_END',end:snap.sourceEnd},point:profileFeatureWorldPoint(source,{type:'PROFILE_END',end:snap.sourceEnd})};
     if(snap.jointKind==='SIDE_CORNER'){
       const context=this.editor.connectionPlacementManager.resolveJointContact(a,target,sourceMountFace||snap.sourceMountFace);
-      return context?.target.feature.face===snap.targetFace?context:null;
+      return context?.target.feature.face===snap.targetFace?{...context,designAnchorOffset}:null;
     }
     const feature={...(resolveProfileSurfaceFeature(target,a.point)||{}),type:'PROFILE_FACE',face:snap.targetFace};
     const b={mesh:target,feature,point:profileFeatureWorldPoint(target,feature)||a.point.clone()};
-    if(!recommend)return {source:a,target:b,sourceMountFace};
-    const list=[];this.editor.connectionPlacementManager.pushJointCandidate(list,a,b,a.point,{sourceMountFace});return list[0];
+    if(!recommend)return {source:a,target:b,sourceMountFace,designAnchorOffset};
+    const list=[];this.editor.connectionPlacementManager.pushJointCandidate(list,a,b,a.point,{sourceMountFace,designAnchorOffset});return list[0];
   }
   /** 自动模式逐安装侧选型；指定目录类型仍只按原安装守卫，不私自换成推荐型号。 */
   legalChoices(row,solutions){
     const planes=row.supportPlanes??(row.supportPlanes=connectionSupportPlanes(row.source,row.target));
-    const joint=this.editor.connectionManager.connectionsAtJoint(row.source.userData.part.id,row.target.userData.part.id,row.end,row.face);
     const legal=[];
     for(const solution of solutions){
       if(!solution.checked?.valid||Number(solution.checked.item.geometry?.contactGapMm)>.1)continue;
+      const joint=this.editor.connectionManager.connectionsAtJoint(row.source.userData.part.id,row.target.userData.part.id,row.end,row.face,solution.designAnchorOffset,{jointKind:row.jointKind,sideMount:solution.sideMount});
       if(joint.some(connection=>connection.designComponent&&this.editor.connectionManager.mountFaces(connection).includes(solution.mountFace)))continue;
       const policy=this.options.type==='AUTO'?automaticConnectionChoice(solution,row.source,planes):{valid:true,score:0};
       solution.policy=policy;if(policy.valid)legal.push(solution);
@@ -205,7 +254,7 @@ export default class ConnectionBatchManager {
   plan(){return this.active&&!this.busy?this.run(this.planSteps(),'正在更新预览'):null;}
   *planSteps(){
     if(this.signature!==JSON.stringify(this.editor.exportProject()))throw new Error('工程已变化，请重新扫描连接件');
-    const e=this.editor,usedEnds=new Set(),reserved=[...(this.existingEnvelopes||this.reservedEnvelopes())],tolerance=Number(e.projectSettings.collisionToleranceMm??.5);
+    const e=this.editor,reserved=[...(this.existingEnvelopes||this.reservedEnvelopes())],tolerance=Number(e.projectSettings.collisionToleranceMm??.5);
     for(let index=0;index<this.rows.length;index++){
       const row=this.rows[index];this.progressStep('正在检查安装空间',75+15*index/this.rows.length,index,this.rows.length);yield;
       const {source,target,old}=row;row.status='SKIPPED';row.preserved=false;row.placements=[];row.enabled=false;
@@ -214,20 +263,15 @@ export default class ConnectionBatchManager {
       else if(!row.touch){row.status='NEEDS_ALIGNMENT';row.message='附近但尚未贴合：间距 '+round(row.candidate.delta.length())+' mm，请先吸附型材';}
       else if(old?.designComponent&&!old.manufacturingRuleId){
         row.preserved=true;row.message='已有有效设计连接件，保持不变';
-        const faces=old.designComponentMountFaces?.length?old.designComponentMountFaces:[old.designComponentMountFace||old.sourceMountFace];
-        const selectedDefinition=this.options.type!=='AUTO'&&this.options.spec!=='AUTO'?connectionComponent({type:this.options.type,spec:this.options.spec}):null;
-        if(this.options.supplement!==false&&this.options.sides!=='SINGLE'&&faces.length===1&&(old.designType==='ANGLE_BRACKET'||(this.options.type==='AUTO'&&old.designComponent.dimensions.geometryKind==='HIDDEN_CORNER'))&&(this.options.type==='AUTO'||old.designComponent.dimensions.geometryKind===this.options.type)&&(!selectedDefinition||selectedDefinition.id===old.designComponent.id)&&!old.manufacturingRuleId&&old.autoGenerated&&!old.userOverridden&&row.matchesOld&&e.isMeshTransformable(source)&&e.isMeshTransformable(target)) {
-          const face=oppositeFace[faces[0]],joint=e.connectionManager.connectionsAtJoint(source.userData.part.id,target.userData.part.id,row.end,row.face);
-          if(!joint.some(connection=>connection.designComponent&&e.connectionManager.mountFaces(connection).includes(face))){
-            const definitions=this.options.type==='AUTO'?this.componentDefinitions(source):[old.designComponent];
-            const solutions=yield* this.solutionSteps(source,target,row.candidate.snap,definitions,[face]);
-            const choice=this.legalChoices(row,solutions).find(item=>!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance)));
-            if(choice){
-              const id=row.id+'|'+face,enabled=!this.excludedIds.has(id);
-              row.status='READY';row.supplement=true;row.placements=[{...choice,id,enabled}];row.enabled=enabled;
-              if(enabled)reserved.push({envelope:choice.envelope,label:row.sourceLabel+' → '+row.targetLabel+' 补侧'});
-            }else{row.blockedSideCount=1;row.message+='；另一侧没有兼容且不影响承托面的安装位置，未补件';}
-          }
+        const existing=e.connectionManager.connectionsAtJoint(source.userData.part.id,target.userData.part.id,row.end,row.face,undefined,row.candidate.snap).filter(connection=>connection.designComponent);
+        // 保留手工件也能补独立的空闲侧；不修改原件的型号、编号、安装面或人工状态。
+        if(this.options.supplement!==false&&this.options.sides!=='SINGLE'&&existing.length<2&&row.matchesOld&&e.isMeshTransformable(source)&&e.isMeshTransformable(target)){
+          const choice=this.legalChoices(row,row.solutions).find(item=>!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance)));
+          if(choice){
+            const id=row.id+'|'+choice.mountFace+'|'+designAnchorKey(choice.designAnchorOffset),enabled=!this.excludedIds.has(id);
+            row.status='READY';row.supplement=true;row.placements=[{...choice,id,enabled}];row.enabled=enabled;
+            if(enabled)reserved.push({envelope:choice.envelope,label:row.sourceLabel+' → '+row.targetLabel+' 补侧'});
+          }else{row.blockedSideCount=1;row.message+='；其余侧没有合法安装位置，未补件';}
         }
       }
       else if(old?.manufacturingRuleId){row.preserved=true;row.message='已配置制造方案，保持原五金与加工';}
@@ -236,7 +280,6 @@ export default class ConnectionBatchManager {
       else if(old&&!row.matchesOld)row.message='原连接位置与当前接头不符，请先在连接页处理';
       else if(!row.solutions.length)row.message='所选类型 / 规格没有适配当前系列的自动安装规则，请换规格或手动添加';
       else if(!e.isMeshTransformable(source)||!e.isMeshTransformable(target))row.message='接头包含锁定构件，先解锁再生成';
-      else if(row.jointKind!=='SIDE_CORNER'&&usedEnds.has(source.userData.part.id+'|'+row.end))row.message='同一端部已有优先接头，请手工选择剩余位置';
       else{
         const legal=this.legalChoices(row,row.solutions);
         const first=legal.find(item=>!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance)));
@@ -247,16 +290,16 @@ export default class ConnectionBatchManager {
         }else{
           // 自动模式允许梁下角码 + 另一侧隐藏件；明确指定类型仍保持同型号相反侧。
           const paired=this.options.sides!=='SINGLE'&&(this.options.type==='AUTO'||first.checked.item.type==='ANGLE_BRACKET');
-          const second=paired?legal.find(item=>(this.options.type==='AUTO'||item.definition.id===first.definition.id)&&item.mountFace===oppositeFace[first.mountFace]&&!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance))&&!envelopesOverlap(item.envelope,first.envelope,tolerance)):null;
+          const alternatives=paired?legal.filter(item=>(this.options.type==='AUTO'||item.definition.id===first.definition.id)&&item.mountFace!==first.mountFace&&!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance))&&!envelopesOverlap(item.envelope,first.envelope,tolerance)):[];
+          const second=alternatives.find(item=>item.mountFace===oppositeFace[first.mountFace])||alternatives[0]||null;
           if(paired&&!second)row.blockedSideCount=1;
           row.status='READY';row.definition=first.definition;row.checked=first.checked;
           for(const solution of [first,second].filter(Boolean)){
-            const id=row.id+'|'+solution.mountFace,enabled=!this.excludedIds.has(id);
+            const id=row.id+'|'+solution.mountFace+'|'+designAnchorKey(solution.designAnchorOffset),enabled=!this.excludedIds.has(id);
             row.placements.push({...solution,id,enabled});
             if(enabled)reserved.push({envelope:solution.envelope,label:row.sourceLabel+' → '+row.targetLabel+' '+faceLabel(solution.mountFace)});
           }
           row.enabled=row.placements.some(item=>item.enabled);
-          if(row.enabled&&row.jointKind!=='SIDE_CORNER')usedEnds.add(source.userData.part.id+'|'+row.end);
         }
       }
     }
@@ -276,8 +319,9 @@ export default class ConnectionBatchManager {
     const reserved=this.reservedEnvelopes();
     // 重验每一个实际安装面，再一次提交；不能刷新后把两侧都挤回默认面。
     for(const row of chosen)for(const placement of row.placements.filter(item=>item.enabled)){
-      const fresh=e.connectionPlacementManager.evaluateCandidate(this.context(row.source,row.target,row.candidate.snap,placement.mountFace,false),{mode:placement.checked.item.type,componentDefinition:placement.definition,preserveExisting:true});
-      if(!fresh?.valid||Number(fresh.item.geometry.contactGapMm)>.1||(row.jointKind==='SIDE_CORNER'&&fresh.item.geometry.jointKind!=='SIDE_CORNER'))throw new Error(row.sourceLabel+' → '+row.targetLabel+' 已变化，请重新扫描');
+      const context=row.jointKind==='SIDE_MOUNT'?sideMountContexts(row.source,row.target,placement.definition,{targetFace:row.face,sourceMountFace:placement.mountFace,sideMount:placement.sideMount})[0]:this.context(row.source,row.target,row.candidate.snap,placement.mountFace,false,placement.designAnchorOffset);
+      const fresh=e.connectionPlacementManager.evaluateCandidate(context,{mode:placement.checked.item.type,componentDefinition:placement.definition,preserveExisting:true});
+      if(!fresh?.valid||Number(fresh.item.geometry.contactGapMm)>.1||(['SIDE_CORNER','SIDE_MOUNT'].includes(row.jointKind)&&fresh.item.geometry.jointKind!==row.jointKind))throw new Error(row.sourceLabel+' → '+row.targetLabel+' 已变化，请重新扫描');
       const envelope=fresh.envelope;
       if(this.options.type==='AUTO'&&!automaticConnectionChoice({...placement,checked:fresh,envelope},row.source,connectionSupportPlanes(row.source,row.target)).valid)throw new Error('当前层承托面已变化，请重新扫描');
       if(reserved.some(other=>envelopesOverlap(envelope,other.envelope,Number(e.projectSettings.collisionToleranceMm??.5))))throw new Error('所选连接件的安装空间冲突，请重新扫描');
@@ -288,7 +332,7 @@ export default class ConnectionBatchManager {
     try{
       for(const row of chosen){
         for(const placement of row.placements.filter(item=>item.enabled)){
-          const connection=e.connectionManager.installDesignComponent(row.source,row.target,{sourceEnd:row.end,targetFace:row.face,sourceMountFace:placement.mountFace,sourceMountFaces:[placement.mountFace],designType:placement.checked.item.type,componentDefinition:placement.definition,preserveExisting:true});
+          const connection=e.connectionManager.installDesignComponent(row.source,row.target,{sourceEnd:placement.checked.source.feature.end,targetFace:row.face,sourceMountFace:placement.mountFace,sourceMountFaces:[placement.mountFace],designAnchorOffset:placement.designAnchorOffset,jointKind:row.jointKind,sideMount:placement.sideMount,designType:placement.checked.item.type,componentDefinition:placement.definition,preserveExisting:true});
           if(connection.status==='INVALID')throw new Error('接头重建失败，请重新扫描');
           e.autoConnectionResolver.markAutomatic(connection,'COMPONENT_SCAN',row.candidate.snap,placement.checked.item);connection.userOverridden=false;
           created.push(connection);createdCount++;
@@ -378,6 +422,7 @@ function insideTargetFace(source,target,snap){
   return Math.abs(point.z)<=length/2+.1&&(['FRONT','BACK'].includes(snap.targetFace)?Math.abs(point.x)<=width/2+.1:Math.abs(point.y)<=height/2+.1);
 }
 function pairKey(source,target){return [source.userData.part.id,target.userData.part.id].sort().join('|');}
+function jointKey(sourceId,targetId,end,face){return [sourceId,end,targetId,face].join('|');}
 function sameDirection(connection,source,target,snap){return connection.sourceProfileId===source.userData.part.id&&connection.targetProfileId===target.userData.part.id&&connection.sourceEnd===snap.sourceEnd&&connection.targetFace===snap.targetFace;}
 // 用两梁材料面交点而非含厚度偏移的角码中心去重，换规格或反向识别仍是同一物理内角。
 function sideCornerKey(source,target,point){return 'SIDE_CORNER|'+pairKey(source,target)+'|'+point.toArray().map(value=>(Math.round(value*1000)/1000).toFixed(3)).join('|');}

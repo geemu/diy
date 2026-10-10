@@ -55,6 +55,74 @@ export function panelContours(shape,p) {
   return {outer,holes};
 }
 
+/** 板材缺口以自身边为基准，宽/深及离端距离为毫米；不保存世界坐标或渲染网格。 */
+export function panelNotchRectangles(part,notches=part.dimensions?.edgeNotches||[]) {
+  const d=part.dimensions||{},w=Number(d.width),h=Number(d.height);
+  if(!Array.isArray(notches)||notches.length>32)throw new Error('板材缺口应为最多32项的列表');
+  if(notches.length&&((d.panelShape||'rectangle')!=='rectangle'||![w,h,Number(d.thickness)].every(x=>Number.isFinite(x)&&x>0)))throw new Error('局部缺口目前支持尺寸有效的矩形薄板');
+  return notches.map(notch=>{
+    const edge=notch.edge,anchor=notch.anchor||'START';
+    if(!['LEFT','RIGHT','TOP','BOTTOM'].includes(edge)||!['START','END'].includes(anchor))throw new Error('板材缺口边或定位端无效');
+    const length=['LEFT','RIGHT'].includes(edge)?h:w,cross=['LEFT','RIGHT'].includes(edge)?w:h;
+    const offset=Number(notch.offsetMm),width=Number(notch.widthMm),depth=Number(notch.depthMm);
+    if(![offset,width,depth].every(Number.isFinite)||offset<0||width<=0||depth<=0||offset+width>length+.00001||depth>=cross-.5)throw new Error('缺口尺寸超出板边，或已切穿整块板材');
+    const start=anchor==='START'?-length/2+offset:length/2-offset-width;
+    if(edge==='LEFT')return {minX:-w/2,maxX:-w/2+depth,minY:start,maxY:start+width};
+    if(edge==='RIGHT')return {minX:w/2-depth,maxX:w/2,minY:start,maxY:start+width};
+    if(edge==='BOTTOM')return {minX:start,maxX:start+width,minY:-h/2,maxY:-h/2+depth};
+    return {minX:start,maxX:start+width,minY:h/2-depth,maxY:h/2};
+  });
+}
+
+/** 展示、碰撞和工程图共用材料轮廓。仅对矩形板作边缘矩形缺口并集，不做任意实体布尔。 */
+export function panelMaterialContours(part) {
+  const d=part.dimensions||{},shape=d.panelShape||'rectangle';
+  const parameters=shape==='rectangle'?{...d.shapeParameters,width:d.width,height:d.height}:d.shapeParameters||d;
+  const base=panelContours(shape,parameters),rectangles=panelNotchRectangles(part);
+  if(!rectangles.length)return base;
+  const w=Number(d.width)/2,h=Number(d.height)/2;
+  const xs=[...new Set([-w,w,...rectangles.flatMap(r=>[r.minX,r.maxX])])].sort((a,b)=>a-b);
+  const ys=[...new Set([-h,h,...rectangles.flatMap(r=>[r.minY,r.maxY])])].sort((a,b)=>a-b);
+  const cells=ys.slice(0,-1).map((y,j)=>xs.slice(0,-1).map((x,i)=>{
+    const cx=(x+xs[i+1])/2,cy=(y+ys[j+1])/2;
+    return !rectangles.some(r=>cx>r.minX&&cx<r.maxX&&cy>r.minY&&cy<r.maxY);
+  }));
+  const edges=new Map(),key=(x,y)=>x+','+y,filled=(i,j)=>cells[j]?.[i]===true;
+  const add=(a,b)=>{
+    const id=key(...a);
+    if(edges.has(id))throw new Error('缺口相接形成零宽材料，请调整缺口尺寸');
+    edges.set(id,{a,b});
+  };
+  for(let j=0;j<ys.length-1;j++)for(let i=0;i<xs.length-1;i++)if(filled(i,j)){
+    if(!filled(i,j-1))add([i,j],[i+1,j]);
+    if(!filled(i+1,j))add([i+1,j],[i+1,j+1]);
+    if(!filled(i,j+1))add([i+1,j+1],[i,j+1]);
+    if(!filled(i-1,j))add([i,j+1],[i,j]);
+  }
+  const rings=[];
+  while(edges.size){
+    const first=edges.values().next().value,start=key(...first.a),ring=[];
+    let current=first;
+    do{
+      ring.push({x:xs[current.a[0]],y:ys[current.a[1]]});
+      edges.delete(key(...current.a));
+      const next=key(...current.b);
+      if(next===start)break;
+      current=edges.get(next);
+      if(!current)throw new Error('板材缺口轮廓未闭合');
+    }while(true);
+    const clean=ring.filter((p,i)=>{
+      const a=ring[(i+ring.length-1)%ring.length],b=ring[(i+1)%ring.length];
+      return Math.abs((p.x-a.x)*(b.y-p.y)-(p.y-a.y)*(b.x-p.x))>1e-9;
+    });
+    rings.push(clean);
+  }
+  const area=ring=>ring.reduce((sum,p,i)=>{const q=ring[(i+1)%ring.length];return sum+p.x*q.y-q.x*p.y;},0)/2;
+  const outer=rings.filter(r=>area(r)>0);
+  if(outer.length!==1||area(outer[0])<1)throw new Error('裁剪会把板材分成多块或切空，请减小缺口');
+  return {outer:outer[0],holes:rings.filter(r=>area(r)<0)};
+}
+
 /** 工程图使用参数曲面采样点，禁止把球、圆锥或圆环体降格为盒子轮廓。 */
 export function solidPanelPoints(shape,p) {
   const points=[];

@@ -5,7 +5,7 @@
  * The output is renderer-agnostic and is intentionally reusable by SVG/DXF exporters.
  */
 export const ENGINEERING_DRAWING_MODEL_VERSION = 1;
-import {panelContours,SolidPanelShapes,solidPanelPoints} from '../model/PanelShapeModel.js';
+import {panelMaterialContours,SolidPanelShapes,solidPanelPoints} from '../model/PanelShapeModel.js';
 
 export const DRAWING_VIEWS = Object.freeze({
   FRONT:'FRONT', BACK:'BACK', TOP:'TOP', BOTTOM:'BOTTOM', LEFT:'LEFT', RIGHT:'RIGHT', ISO:'ISO'
@@ -99,8 +99,8 @@ export function partWorldPoints(part) {
 
 function panelDrawingRings(part,type) {
   const d=part.dimensions||{},shape=d.panelShape;
-  if(part.type!=='PANEL'||!shape||SolidPanelShapes.includes(shape))return null;
-  const contours=panelContours(shape,d.shapeParameters),rings=[contours.outer,...contours.holes];
+  if(part.type!=='PANEL'||(!shape&&!d.edgeNotches?.length)||SolidPanelShapes.includes(shape))return null;
+  const contours=panelMaterialContours(part),rings=[contours.outer,...contours.holes];
   const p=part.position||{},r=part.rotation||{};
   return rings.map(ring=>ring.map(point=>{
     const rotated=rotateXYZ({x:point.x,y:point.y,z:d.thickness/2},Number(r.x||0),Number(r.y||0),Number(r.z||0));
@@ -134,7 +134,7 @@ function partLocalPoints(part) {
   }
   if (part.type === 'PANEL') {
     const d=part.dimensions||{},shape=d.panelShape;
-    if(shape&&!SolidPanelShapes.includes(shape))return panelContours(shape,d.shapeParameters).outer.flatMap(p=>[{...p,z:-d.thickness/2},{...p,z:d.thickness/2}]);
+    if((shape||d.edgeNotches?.length)&&!SolidPanelShapes.includes(shape))return panelMaterialContours(part).outer.flatMap(p=>[{...p,z:-d.thickness/2},{...p,z:d.thickness/2}]);
     if(shape)return solidPanelPoints(shape,d.shapeParameters);
     return boxPoints(Number(d.width||400)/2,Number(d.height||400)/2,Number(d.thickness||18)/2);
   }

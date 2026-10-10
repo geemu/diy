@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import {layeredRackLayout} from './LayeredRackModel.js';
+import {layeredRackLayout,rackSideJointPlan} from './LayeredRackModel.js';
 import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
 import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import FrameOpeningResolver from '../configurator/FrameOpeningResolver.js';
 import {profileObb} from '../validation/PartCollisionDetector.js';
+import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
+import {panelMaterialContours} from '../model/PanelShapeModel.js';
 
 /** 整架改尺寸：规划 -> 只读预览 -> 一次事务。已自由编辑或受保护的结构不会按旧参数重置。 */
 export default class FrameParameterManager {
@@ -21,7 +23,6 @@ export default class FrameParameterManager {
     const e=this.editor,a=e.assemblyManager.get(this.assemblyId);
     if(!this.active||a?.configurator!=='LAYERED_RACK')throw new Error('请先选择参数框架');
     const old=layeredRackLayout(a.parameters),next=layeredRackLayout(input),map=a.parameters.memberIds;
-    if(next.parameters.catalogId!==old.parameters.catalogId)throw new Error('整架改尺寸保留当前型号；换型号请使用批量替换，再自由编辑');
     const ids=new Set(Object.values(map)),parts=[...ids].map(id=>e.parts.find(part=>part.id===id));
     if(parts.some(part=>!part||part.type!=='PROFILE'||part.profilePath?.type==='ARC'||part.assemblyId!==a.id)||new Set(Object.values(map)).size!==old.members.length||e.parts.filter(part=>part.assemblyId===a.id&&part.type==='PROFILE').length!==ids.size)throw new Error('框架成员已增删或解除组合，不能按旧参数重新生成');
     if(parts.some(part=>!e.isMeshTransformable(e.getMeshByPartId(part.id))))throw new Error('框架包含锁定构件，请先解锁');
@@ -45,7 +46,9 @@ export default class FrameParameterManager {
       if(!mesh||(part.designProfile?.profileId||part.catalogId)!==member.catalogId||Math.abs(part.dimensions.length-member.length)>.01||mesh.position.distanceTo(new THREE.Vector3(expected.position.x,expected.position.y,expected.position.z))>.01||mesh.quaternion.angleTo(new THREE.Quaternion().setFromEuler(new THREE.Euler(expected.rotation.x,expected.rotation.y,expected.rotation.z)))>1e-5)throw new Error('框架已单独移动、拉伸或换型材；保留自由编辑结果，不用旧参数覆盖');
     }
     const memberIds={},rows=next.members.map(member=>{const id=map[member.key]||crypto.randomUUID();memberIds[member.key]=id;return {...pose(member),id};});
+    if(rows.some(row=>{const part=e.parts.find(part=>part.id===row.id);return part?.manufacturingProfile&&(part.designProfile.profileId!==row.catalogId);}))throw new Error('待换型材已配置制造材料，请先解除制造配置；不会自动清掉原材料');
     const removed=[...ids].filter(id=>!Object.values(memberIds).includes(id));
+    if(parts.some(part=>removed.includes(part.id)&&part.manufacturingProfile))throw new Error('待移除型材已配置制造材料，请先处理制造配置；不会自动丢弃原材料');
     const panels=e.parts.filter(part=>part.panelSpec?.configurator==='FRAME_OPENING_PANEL'&&part.panelSpec.sourcePartIds.some(id=>ids.has(id)));
     const panelIds=new Set(panels.map(part=>part.id));
     if((e.constraintManager.constraints||[]).some(c=>panelIds.has(c.sourcePartId)||panelIds.has(c.targetPartId))||(e.userDimensions||[]).some(d=>JSON.stringify(d).split('"').some(value=>panelIds.has(value))))throw new Error('框口板已有约束或尺寸标注引用，请先处理，不能自动改板');
@@ -53,17 +56,23 @@ export default class FrameParameterManager {
     if(panels.some(part=>part.panelSpec.sourcePartIds.some(id=>removed.includes(id))||(part.machiningItems||[]).length||!e.isMeshTransformable(e.getMeshByPartId(part.id))))throw new Error('被移除的框架层仍被板材引用，或板材已有加工/锁定；请先处理板材');
     const virtual=new Map(),ghosts=[];
     try {
-      for(const row of rows){const part=structuredClone(e.parts.find(part=>part.id===row.id)||parts[0]);part.id=row.id;part.position=row.position;part.rotation=row.rotation;part.dimensions.length=row.length;part.profilePath={type:'LINE',length:row.length};const mesh=ProfileGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);mesh.updateMatrixWorld(true);virtual.set(row.id,mesh);ghosts.push(mesh);}
+      for(const row of rows){const part=memberPart(e.parts.find(part=>part.id===row.id)||parts[0],row);const mesh=ProfileGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);mesh.updateMatrixWorld(true);virtual.set(row.id,mesh);ghosts.push(mesh);}
       const resolver=new FrameOpeningResolver({getMeshByPartId:id=>virtual.get(id)||e.getMeshByPartId(id)});
       const panelPlans=panels.map(part=>{const opening=resolver.resolve(part.panelSpec.sourcePartIds),clearance=Number(part.panelSpec.clearanceMm??2),width=opening.width-clearance*2,height=opening.height-clearance*2;if(width<=1||height<=1)throw new Error('尺寸修改后板材净尺寸无效');const position=new THREE.Vector3(opening.center.x,opening.center.y,opening.center.z).addScaledVector(new THREE.Vector3(opening.basis.normal.x,opening.basis.normal.y,opening.basis.normal.z),Number(part.panelSpec.normalOffsetMm||0));return {id:part.id,width,height,position:{x:position.x,y:position.y,z:position.z},rotation:opening.rotation};});
-      return {rows,removed,panelPlans,parameters:{...next.parameters,memberIds,position:{x:origin.x,y:origin.y,z:origin.z}},signature:JSON.stringify(e.exportProject()),changed:JSON.stringify(old.parameters)!==JSON.stringify(next.parameters)};
+      for(const row of panelPlans){
+        const draft=structuredClone(panels.find(part=>part.id===row.id));
+        draft.dimensions.width=row.width;draft.dimensions.height=row.height;
+        if(draft.dimensions.shapeParameters)Object.assign(draft.dimensions.shapeParameters,{width:row.width,height:row.height});
+        panelMaterialContours(draft);
+      }
+      return {rows,removed,panelPlans,sideJoints:rackSideJointPlan(next,memberIds),parameters:{...next.parameters,memberIds,position:{x:origin.x,y:origin.y,z:origin.z}},signature:JSON.stringify(e.exportProject()),changed:JSON.stringify(old.parameters)!==JSON.stringify(next.parameters)};
     } finally {for(const ghost of ghosts)ProfileGeometryFactory.disposeObject(ghost);}
   }
   preview(input){
     this.clearPreview();const plan=this.plan(input),group=new THREE.Group();this.previewGroup=group;
     try {
-      for(const row of plan.rows){const part=structuredClone(this.editor.parts.find(part=>part.id===row.id)||this.editor.parts.find(part=>part.id===Object.values(plan.parameters.memberIds)[0]));part.id=row.id;part.position=row.position;part.rotation=row.rotation;part.dimensions.length=row.length;part.profilePath={type:'LINE',length:row.length};const mesh=ProfileGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);tint(mesh);group.add(mesh);}
-      for(const row of plan.panelPlans){const part=structuredClone(this.editor.parts.find(part=>part.id===row.id));part.position=row.position;part.rotation=row.rotation;part.dimensions.width=row.width;part.dimensions.height=row.height;const mesh=PrimitiveGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);tint(mesh);group.add(mesh);}
+      for(const row of plan.rows){const part=memberPart(this.editor.parts.find(part=>part.id===row.id)||this.editor.parts.find(part=>part.id===Object.values(plan.parameters.memberIds)[0]),row);const mesh=ProfileGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);tint(mesh);group.add(mesh);}
+      for(const row of plan.panelPlans){const part=structuredClone(this.editor.parts.find(part=>part.id===row.id));part.position=row.position;part.rotation=row.rotation;setPanelSize(part,row);const mesh=PrimitiveGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);tint(mesh);group.add(mesh);}
       const item=mesh=>({mesh,part:mesh.userData.part,box:new THREE.Box3().setFromObject(mesh),obb:profileObb(mesh.userData.part)}),items=group.children.map(item),moving=new Set([...plan.rows,...plan.panelPlans].map(row=>row.id)),targets=this.editor.meshes.filter(mesh=>!moving.has(mesh.userData.part.id)&&!plan.removed.includes(mesh.userData.part.id)&&mesh.visible!==false&&!mesh.userData.part.hidden).map(item),red=new Set();
       let collisionCount=0;
       for(let i=0;i<items.length;i++)for(const target of [...targets,...items.slice(i+1)])if(this.editor.interferenceFeedbackManager.classify?.(items[i],target).kind==='INTERFERENCE'){collisionCount++;red.add(items[i].part.id);red.add(target.part.id);}
@@ -78,18 +87,36 @@ export default class FrameParameterManager {
     if(plan.signature!==JSON.stringify(e.exportProject()))throw new Error('工程已变化，请重新预览');
     const before=e.exportProject(),selection=e.selectedMeshes.map(mesh=>mesh.userData.part.id),a=e.assemblyManager.get(this.assemblyId);
     try {
-      for(const c of [...e.connectionManager.connections])if(plan.removed.includes(c.sourceProfileId)||plan.removed.includes(c.targetProfileId))e.connectionManager.removeConnection(c.id);
+      const sideTargets=new Map(plan.sideJoints.map(joint=>[joint.sourceProfileId+'|'+joint.sourceEnd,joint]));
+      for(const c of [...e.connectionManager.connections]){
+        const joint=!['SIDE_CORNER','SIDE_MOUNT'].includes(c.jointKind)?sideTargets.get(c.sourceProfileId+'|'+c.sourceEnd):null;
+        // 显式改接法时只解除受本次规划影响的纯自动旧宿主；手工/制造关系在 plan 中已被保护。
+        const retarget=joint&&(joint.targetProfileId!==c.targetProfileId||joint.targetFace!==c.targetFace);
+        if(plan.removed.includes(c.sourceProfileId)||plan.removed.includes(c.targetProfileId)||retarget&&c.autoGenerated&&!c.userOverridden&&!c.manufacturingRuleId)e.connectionManager.removeConnection(c.id);
+      }
       for(const id of plan.removed)e.removePartByIdSilently(id);
-      for(const row of plan.rows){const mesh=e.getMeshByPartId(row.id);if(mesh){mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);e.syncPartFromMesh(mesh);mesh.userData.part.dimensions.length=row.length;mesh.userData.part.profilePath={type:'LINE',length:row.length};e.rebuildLinearProfileVisual(mesh);mesh.updateMatrixWorld(true);}else{const mesh=e.addProfile(row.catalogId,row.length,{id:row.id,name:row.name,position:row.position,rotation:row.rotation,assemblyId:a.id,select:false,captureHistory:false});if(mesh.userData.part.id!==row.id)throw new Error('新增框架成员身份不一致');}}
-      for(const row of plan.panelPlans){const part=e.parts.find(part=>part.id===row.id),mesh=e.getMeshByPartId(row.id);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);e.syncPartFromMesh(mesh);part.dimensions.width=row.width;part.dimensions.height=row.height;e.rebuildPartMesh(part.id);}
+      for(const row of plan.rows){const mesh=e.getMeshByPartId(row.id);if(mesh){const next=memberPart(mesh.userData.part,row);Object.assign(mesh.userData.part,{dimensions:next.dimensions,designProfile:next.designProfile,profilePath:next.profilePath});mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);e.syncPartFromMesh(mesh);e.rebuildLinearProfileVisual(mesh);mesh.updateMatrixWorld(true);}else{const mesh=e.addProfile(row.catalogId,row.length,{id:row.id,name:row.name,position:row.position,rotation:row.rotation,assemblyId:a.id,select:false,captureHistory:false});if(mesh.userData.part.id!==row.id)throw new Error('新增框架成员身份不一致');}}
+      for(const row of plan.panelPlans){const part=e.parts.find(part=>part.id===row.id),mesh=e.getMeshByPartId(row.id);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);e.syncPartFromMesh(mesh);setPanelSize(part,row);e.rebuildPartMesh(part.id);}
       a.parameters=structuredClone(plan.parameters);
       const ids=plan.rows.map(row=>row.id);e.connectionManager.updateConnectionsForProfiles(ids);e.accessoryMountManager.refreshForTargets([...ids,...plan.panelPlans.map(row=>row.id)]);
-      if(plan.parameters.autoConnect)e.autoConnectionResolver.connectProfileSet(ids,{source:'FRAME_PARAMETERS'});
+      const autoConnection=plan.parameters.autoConnect?e.autoConnectionResolver.connectProfileSet(ids,{source:'FRAME_PARAMETERS',sideJoints:plan.sideJoints}):null;
       e.selectMany(ids.map(id=>e.getMeshByPartId(id)));this.cancel();e.updateDimensions();e.emitStats();e.interferenceFeedbackManager.refresh({live:false});e.historyManager.capture();e.emitProjectChanged();e.onSelectionChanged?.(e.selected,[...e.selectedMeshes]);
-      return {memberCount:ids.length,panelCount:plan.panelPlans.length};
+      return {memberCount:ids.length,panelCount:plan.panelPlans.length,connectionFailureCount:autoConnection?.failureCount||0};
     }catch(error){e.restoreProject(before);e.selectMany(selection.map(id=>e.getMeshByPartId(id)).filter(Boolean));this.cancel();throw error;}
   }
   clearPreview(){if(this.previewGroup){this.previewGroup.removeFromParent();ProfileGeometryFactory.disposeObject(this.previewGroup);this.previewGroup=null;}this.pending=null;}
   cancel(){this.clearPreview();if(!this.active)return;this.active=false;this.onChanged?.({active:false,assemblyId:null,ready:false,error:''});const e=this.editor;e.sceneManager.transformControls.enabled=true;if(e.isMeshTransformable(e.selected))e.sceneManager.transformControls.attach(e.selected);e.profileGripEditor.refresh(true);}
 }
 function tint(mesh,color=0xffba4a){mesh.traverse(child=>{if(!child.isMesh)return;for(const material of [].concat(child.material||[])){material.color.set(color);material.transparent=true;material.opacity=.4;material.depthWrite=false;}child.userData.__framePreview=true;});}
+function setPanelSize(part,row){part.dimensions.width=row.width;part.dimensions.height=row.height;if(part.dimensions.shapeParameters)Object.assign(part.dimensions.shapeParameters,{width:row.width,height:row.height});}
+
+/** 规划副本和正式提交读同一型号；只在用户明确换型号时换截面，不更改编号、颜色或旧加工。 */
+function memberPart(original,row){
+  const part=structuredClone(original),definition=getDesignProfileDefinition(row.catalogId);
+  if(!definition)throw new Error('框架成员型号不存在');
+  const changed=part.designProfile?.profileId!==definition.id;
+  part.id=row.id;part.position=row.position;part.rotation=row.rotation;
+  part.dimensions={...part.dimensions,length:row.length,size:definition.sectionSize[0],sectionSize:[...definition.sectionSize]};
+  part.designProfile={profileId:definition.id,nominal:definition.nominal,series:definition.series,slotWidth:Number(definition.slotWidth||0),faceClosures:changed?[...(definition.defaultFaceClosures||[])]:[...(part.designProfile?.faceClosures||[])]};
+  part.profilePath={type:'LINE',length:row.length};return part;
+}
