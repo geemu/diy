@@ -12,6 +12,8 @@ import FrameParameterManager from '../diy/FrameParameterManager.js';
 import ConnectionReplacementManager from '../connection/ConnectionReplacementManager.js';
 import PanelReliefManager from '../configurator/PanelReliefManager.js';
 import PanelFillManager from '../configurator/PanelFillManager.js';
+import SelectedProfileDistanceManager from '../interaction/SelectedProfileDistanceManager.js';
+import {profileDistanceRelation,axisVector} from '../model/ProfileNeighbourDistances.js';
 import {layeredRackLayout,RACK_LAYOUT_VERSION} from '../diy/LayeredRackModel.js';
 import SnapManager from '../snap/SnapManager.js';
 import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
@@ -157,6 +159,7 @@ export default class Editor {
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
     this.axisClearanceManager = new AxisClearanceManager(this);
+    this.selectedProfileDistanceManager = new SelectedProfileDistanceManager(this);
     this.wholeStretchManager = new WholeStretchManager(this);
     this.accessoryPlacementManager = new AccessoryPlacementManager(this);
     this.manufacturingIdentityManager = new ManufacturingIdentityManager(this);
@@ -301,7 +304,7 @@ export default class Editor {
       const primary = this.selected;
       primary.updateMatrixWorld(true);
       this.snapManager.clearLock();
-      const followers = this.selectedMeshes.length > 1
+      const followers = this.singleProfileDistanceContext?[]:this.selectedMeshes.length > 1
         ? this.selectedMeshes.filter(mesh => mesh !== primary)
         : this.transformFollowersForScope(primary);
       this.transformSelectionSnapshot = {
@@ -309,7 +312,7 @@ export default class Editor {
         primaryQuaternion:primary.quaternion.clone(),
         primaryEuler:primary.rotation.clone(),
         constrainedSingle:this.selectedMeshes.length <= 1,
-        scope:this.selectedMeshes.length > 1 ? 'SELECTION' : this.transformMoveScope,
+        scope:this.singleProfileDistanceContext?'SINGLE':this.selectedMeshes.length > 1 ? 'SELECTION' : this.transformMoveScope,
         profileTransforms:this.connectionManager.captureProfileTransforms(),
         items:followers.map(mesh => ({
           mesh,
@@ -434,6 +437,8 @@ export default class Editor {
         this.snapManager.clearLock();this.sceneManager.clearSnapPreview();this.onSnapChanged?.(null);
         this.sceneManager.showSnapFeedback?.({status:'blocked',label:'位置已调整 · 未贴合',details:['约束调整后接头不再贴合，请重新选择目标']});
       }
+      // 邻距输入只移动主选；约束若改了参照或其他型材，必须在连接/历史提交前拒绝。
+      this.singleProfileDistanceContext?.validate();
       const profileIds=[...refreshIds].filter(partId=>this.getMeshByPartId(partId)?.userData.part?.type==='PROFILE');
       const profileRolls=this.connectionManager.profileRolls(snapshot?.profileTransforms,profileIds);
       this.connectionManager.updateConnectionsForProfiles(profileIds,{profileRolls});
@@ -487,6 +492,7 @@ export default class Editor {
         throw new Error('当前约束不允许沿这个方向移动到目标面');
       }
       controls.dragging=false;
+      this.singleProfileDistanceContext?.validate();
       controls.dispatchEvent({type:'mouseUp'});
       return true;
     }finally{this.axisClearanceCommit=null;this.sceneManager.transformPointerActive=false;}
@@ -499,6 +505,46 @@ export default class Editor {
     const direction=new THREE.Vector3(axis==='X'?1:0,axis==='Y'?1:0,axis==='Z'?1:0);
     if(this.transformSpace==='local')direction.applyQuaternion(this.selected.getWorldQuaternion(new THREE.Quaternion()));
     return this.moveSelectionToSurface(direction.multiplyScalar(distance),null,true);
+  }
+
+  /** 输入最终包络净距；只平移主选，参照/其他型材固定，仍走原 Gizmo 连接/告警/历史事务。 */
+  setSelectedNeighbourDistance(targetPartId,axis,sign,value){
+    const source=this.selected,target=this.getMeshByPartId(targetPartId),distance=Number(value);
+    if(this.selectedMeshes.length!==1||source?.userData.part?.type!=='PROFILE'||!this.isMeshTransformable(source))throw new Error('请选择单根可移动的型材；锁定或安装状态不能绕过');
+    if(this.isBuilderReviewActive()||this.transformSelectionSnapshot||this.profileGripEditor.drag||this.singleProfileDistanceContext)throw new Error('请先结束当前拖动或预览，再修改净距');
+    if(!Number.isFinite(distance)||distance<0)throw new Error('目标净距应为有效的非负毫米数');
+    if(source.parent!==this.sceneManager.scene)throw new Error('暂不支持父级显示变换下的邻距编辑');
+    const relation=profileDistanceRelation(source,target,axis,sign);
+    if(!relation)throw new Error('参照已不在该方向的同框面，请重新选择距离');
+    const delta=axisVector(axis).multiplyScalar(sign*(relation.signedGap-distance));
+    if(delta.lengthSq()<1e-14)return false;
+    const before=this.exportProject(),states=[...this.historyManager.states],index=this.historyManager.index;
+    const sourceId=source.userData.part.id,controls=this.sceneManager.transformControls,oldMode=controls.mode;
+    const mutating=this.selectionGraphMutation;
+    const profiles=this.meshes.filter(m=>m.userData.part?.type==='PROFILE').map(mesh=>({id:mesh.userData.part.id,
+      position:mesh.getWorldPosition(new THREE.Vector3()),quaternion:mesh.getWorldQuaternion(new THREE.Quaternion())}));
+    this.singleProfileDistanceContext={validate:()=>{
+      for(const snapshot of profiles){
+        const mesh=this.getMeshByPartId(snapshot.id);
+        if(!mesh||mesh.getWorldQuaternion(new THREE.Quaternion()).angleTo(snapshot.quaternion)>1e-6
+          ||snapshot.id!==sourceId&&mesh.getWorldPosition(new THREE.Vector3()).distanceTo(snapshot.position)>1e-4)throw new Error('当前约束会改变其他型材或朝向；本次净距修改已取消');
+      }
+      const actual=profileDistanceRelation(this.getMeshByPartId(sourceId),this.getMeshByPartId(targetPartId),axis,sign);
+      if(!actual||Math.abs(actual.signedGap-distance)>1e-4)throw new Error('当前约束无法保持目标净距；本次修改已取消');
+    }};
+    // 此命令固定为单根世界方向平移，不改用户保存的移动作用域/世界或局部轴设置。
+    this.selectionGraphMutation=true;
+    try{
+      controls.setMode('translate');this.moveSelectionToSurface(delta,null,false);
+      this.selectionGraphMutation=mutating;this.emitProjectChanged();return true;
+    }catch(error){
+      this.transformSelectionSnapshot=null;controls.dragging=false;
+      this.historyManager.states=states;this.historyManager.index=index;this.restoreProject(before);
+      this.select(this.getMeshByPartId(sourceId));throw error;
+    }finally{
+      this.singleProfileDistanceContext=null;this.selectionGraphMutation=mutating;controls.setMode(oldMode);
+      this.axisClearanceManager.hide();this.selectedProfileDistanceManager?.requestRefresh();
+    }
   }
 
   cancelPrecisionMove(){
@@ -1268,6 +1314,7 @@ export default class Editor {
     this.connectionReplacementManager?.cancel();
     this.panelReliefManager?.cancel();
     this.panelFillManager?.cancel();
+    this.selectedProfileDistanceManager?.clear();
     this.frameParameterManager?.cancel();
     this.quickAlignmentManager?.cancel();
     this.connectionBatchManager?.cancel();
@@ -1334,6 +1381,7 @@ export default class Editor {
     this.interferenceFeedbackManager?.requestRefresh();
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
+    this.selectedProfileDistanceManager?.requestRefresh();
   }
 
   selectMany(meshes = []) {
@@ -1351,6 +1399,7 @@ export default class Editor {
     this.interferenceFeedbackManager?.requestRefresh();
     this.profileGripEditor?.refresh(true);
     if (this.onSelectionChanged) this.onSelectionChanged(this.selected,[...this.selectedMeshes]);
+    this.selectedProfileDistanceManager?.requestRefresh();
   }
 
   /** 全选沿用画布可见性和类型过滤；不把接头展示网格、地面或印字作为构件。 */
@@ -3307,6 +3356,7 @@ export default class Editor {
 
   emitProjectChanged() {
     if(this.selectionGraphMutation)return;
+    this.selectedProfileDistanceManager?.requestRefresh();
     this.connectionManager?.clearDesignSwitchCache?.();
     this.manufacturingIdentityManager?.reconcile();
     this.refreshConnectionSelection();
