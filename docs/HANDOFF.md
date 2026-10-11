@@ -1,4 +1,41 @@
-# 项目交接文档 — v0.75.65
+# 项目交接文档 — v0.75.69
+
+## v0.75.69 已贴合接头的参考金黄色带
+
+- 用户确认参考所附乐玩对齐后的黄色条。截图中心四点RGB均#D7A13C，只作为最终视觉方向，不当作对方源代码材料值。InterferenceFeedbackManager集中CONTACT_BAND_STYLE={color:0xd7a13c,opacity:.9,forceSinglePass:true}，仅options.live为false且原合法贴合通过时使用；live绿色仍0x25c778/.36。
+- SurfaceFeedback新增可选forceSinglePass，仅明确true才用本地Three0.155已有单次双面绘制，其他反馈false与原默认一致。继续MeshBasicMaterial/toneMapped:false/DoubleSide/透明/不写深度/深度测试/原polygonOffset，只改变提示色及叠加方式，不把哑光效果说成实体PBR或发光。
+- 真实三角面和原clipObb/margin4mm、贴合gap判据、孔槽、遮挡、raycast空函数、随动/资源释放不变；红色干涉、绿色候选、紫色齐平、橙色选中、尺寸孔字及板材/其他预览保持。Project/历史/BOM/制造不增加字段，不操作用户原JSON或真实浏览器存储。
+- 0.75.69/132模块/Schema62无新模块/依赖/持久字段，页面/importmap/pom/样例及59份verify仅身份同步。按默认未新增/运行测试、语法检查、Java编译、服务启动/重启、HTTP或浏览器；离线资源与GPU/贴合色差、多角点叠色/其他状态待验见VALIDATION、ROADMAP和reference/contact-band-gold-2026-10-12-v07569.md。
+
+## v0.75.68 分格插槽与创建前裁角预览
+
+- 用户确认单格四边即便共用连续长梁也要按角码/连接实体裁角，选整层外四边或连同中间梁应适配图中的三块板。最新T_SLOT分格规则覆盖v64一整块及v65只拒绝穿梁的限制；原桌面JSON、用户Chrome/localStorage未直接操作，本轮只读截图/源码，没有该截图工程的运行证明。
+- FrameOpeningResolver.resolvePanel仍用于已保存单板/整块非插槽语义，新增resolvePanelCells供新T_SLOT：先所选外边限定净口，找范围内与当前板厚平面相交的可见直杆（包含未选中梁），递归选完整跨且真实闭合的分隔梁。连续长梁不拆不移，各格使用其本格区间；有限64候选/64块，半截/斜杆/错层/闭槽/未知材料不外推成虚构矩形。resolvePanelSlots运行时slotPlaneMm限定本批共同槽面，不持久化世界槽坐标。
+- 每格只有自己的四边sourcePartIds及原slotFit局部ID/面/槽/插入量；共用中梁两侧槽，各板各自尺寸/中心/缺口。参数架回改通过原单板resolver即可重算局部框口，原完整复制重映射/单板解除、Schema62及工程图/清单统一轮廓保持。旧保存板加载不分裂；INSET/ON_FRAME仍整块，门resolve严格四边不改。
+- PanelDoorConfigurator把板材计划与插入分开，planPanelsFromSelection在正式插入前得到全部领域副本。PanelFillManager统一生成前预览，右侧逐格宽高/缺口数/四边编号/错误，点击突出相应黄色或红色幽灵板；无可用槽的矩形只是红色框口示意。修改厚度/余量/材质/放法/避让间隙同步废弃待确认计划，更新后再确认，不再使用添加后才打开的previewRelief。
+- scanPanelConnectorRelief共用真实板厚外轮廓；槽内板扩大的插入边可使五金轮廓变成内部孤岛，只有离最近边不超过本边实际插入量+避让间隙才沿轮廓向板边补入口带，不改内侧斜边/圆弧或以包围矩形替代。新计划按对象采集失败/中部障碍原因，保留其余可读预览；旧板扫描仍严格失败，不掩盖实际相交或绕过有限轮廓、四边插槽料检查。
+- PanelReliefGeometry.sectionContours的真正平面顶点采用1e-9mm，不再复用板内切面1e-6mm偏移判据，以免同时加入平面外贴面顶点与真交点、跳过三点三角导致丢段；不改变1e-5mm环焊点/轮廓有限门槛或0.001mm实际相交判据。没有该截图的精确几何复现或闭合实测。
+- 预览仅Scene临时组，不进Editor.meshes/Project/历史/草稿/选择拾取；共享isBuilderReviewActive屏蔽抓手、框选、放置和选择，Gizmo按原状态恢复。Esc/短右键/切工具/改选择/工程变化/清空/卸载取消；允许转动镜头与正常按钮键盘导航。签名变化拒绝，fresh计划须与预览的尺寸/姿态/槽位/裁剪相等。
+- commitPanelPlans复用selectionGraphMutation静默提交守卫，原addPanel分配独立ID/编号，全部新板再按实际实体（含相互之间）和四边检查；最终一次历史/提交，失败整批还原工程/选择/历史，不留下半批或半成品草稿。直接Editor创建API也使用同一分格计划，UI入口必经预览。
+- Schema62/132模块0.75.68，新增1本地PanelFillManager无依赖/新持久字段，59份既有verify仅版本身份机械同步。未新增/运行测试、语法检查、Java编译、启动/重启、HTTP/浏览器，离线资源交付见VALIDATION；本轮没有截图三块的实际几何/GPU/鼠标或安装顺序、制造验收，详细规则与待验见reference/panel-cell-slot-preview-2026-10-12-v07568.md和ROADMAP。
+
+## v0.75.67 系列原孔与一体截面
+
+- 用户要求补四角原孔、纠正3060像两个3030拼接，提供嘉立创3030/3060/4040/4080图并确认其他型号类比。只读附图、当前Section/几何/原孔拾取链与此前留存的官方20/30/40图页；本轮未采集专有网格/代码、未读改工程JSON、用户Chrome或实际草稿。20PDF可网络读取，30/40网络工具受限，采用既有本地渲染图，尺寸仍声明参考。
+- DesignProfileSection的19个常规T_SLOT默认一次生成外轮廓：canonical槽面/ID/宽度/偏置与封闭面保持，参考槽腔用斜向壁/外角弧，20无角孔、30外围圆孔、40方角腔。中心原孔有四瓣释放轮廓；加长截面的外围节点腔和筋间腔独立派生，不重复每格四角，也不保存单元间封板。45/60/80及非整数分格是参数类比，不代表特定制造型号。候选孔腔须实际在材料内且不交叠/相切，不通过就不缩孔或移动凑数。
+- Registry仍custom→database→builtin-reference。只有明确列出的内置型号进入新参考，未知变体/CUSTOM/DATABASE无原图兜底、R/U保持既有路径；实际数据库Section本身绝不改写。EU30-3060B按TXCK图映射局部LEFT/FRONT缺角孔，不能全部强制四孔。accuracy/referenceOnly不变，外尺寸/槽事实不变化，但真实参考材料域已变，不得描述成纯着色。
+- 临时Section.referenceBores仅新内置参考输出孔环索引/中心/名义半径，不写Project/profileSections，不作为制造参数；正常圆孔继续实际拟合。MachiningFeatureCatalog仅对BUILT_IN_REFERENCE且referenceOnly接受四瓣提示，仍用实际孔口outline交射线，原前方遮挡/端面姿态/2mm且8px/Alt自由保持。方腔、槽和未知非圆DXF不扩展猜测；旧加工偏移/直径/深度不重置。
+- ProfileGeometryFactory显示geometry.userData.profileOutline保存实际环/长度/切角（仅Three几何），两端环与>=24°硬折母线直接生成CAD线，平面三角化桥接线/圆壁面片线不加入。斜切端点与原切角同式；没有Section的其他几何仍旧EdgesGeometry。ThroughHoleGeometry用原轮廓裁孔，source.clone保留标记，删孔恢复仍原链；新增孔口取实际材料交线，不从裁后网格猜轮廓。
+- 131模块/Schema62/0.75.67，无新模块/依赖/Project字段；59份已有verify仅机械身份同步，现有importmap工具只输出补丁，不执行应用。默认未新增/运行测试、语法检查、Java编译、服务启动/重启、本地HTTP或浏览器。资源复制与新孔实际数量/闭合材料/截面预览和实物/攻丝鼠标/槽配件与旧插槽板/导出/GPU性能待验分开，见VALIDATION、ROADMAP和reference/integral-profile-sections-2026-10-11-v07567.md。
+
+## v0.75.66 型材金属质感与孔壁
+
+- 用户的两张乐玩端面/侧面图片是视觉参照，不是尺寸或供应商截面事实。修改ProfileSurfaceAppearance、ProfileGeometryFactory、ThroughHoleGeometry及MachiningHoleAppearance显示链，不修改实际Part配色、截面Registry、孔径/加工/位置/安装/制造，不操作原JSON或真实浏览器存储。
+- 工程型材MeshStandardMaterial共用局部表面标记：切面略亮/更粗，外壁哑光金属，低幅纵纹与切割纹只在可分辨时显示。现有凸棱约0.16mm的反光带从实际轮廓边派生，使用表面导数取切向，仅扰动着色法向，不增加圆角实体、缩槽/孔或隐蔽填料。保留现有RoomEnvironment/全局灯光、曝光/深度退让；原CAD轮廓opacity .32→.22，不改变边几何。
+- 以当前截面轮廓与Float32相同点键定位侧壁，材料在环左侧确定朝外/朝腔法向，相邻小于30°的圆弧分段连续、其他硬转折不合并。侧壁起止棱角描述共用WeakMap，不跨端面平均法向；斜切重算端面后恢复原圆壁法向。材质clone丢失onBeforeCompile，createSectionMesh显式补回；缺截面Box兜底也有着色属性，不扩大已有未知截面支持。
+- profileSurface(vec2)/profileRim(vec4)只在显示网格中，两个vec4 varying不存Project。ThroughHoleGeometry make/interpolate/transform/eachTriangle/geometryFrom同步携带属性，保留原实际有限孔体裁剪、材料棱柱孔壁和原始轮廓裁孔，删除加工时恢复完整外观；加工面单独标记，不因孔轴朝Z被当成端面。三角切分内部线不重新加入。
+- 虚拟盲孔/攻丝仍原64步射线凹腔、已知牙形展示边界；读取原Part配色，降低尖亮高光并增加柔和补光，工具纹按主函数的孔口屏幕导数过滤，避免在命中分支内求导。不表示已切宿主材料、精确螺纹、穿孔碰撞或制造公差。目录中原中性Lambert技术预览转换保持；共享网格有平滑圆壁，但不承诺目录与工作台光照相同。
+- Schema62/131模块0.75.66，无新模块/依赖或持久字段；59份已有verify只身份更新。按默认未新增/运行测试、语法检查、Java编译、启动/重启、HTTP或浏览器，资源阶段见VALIDATION；没有本轮Console/Network、实际图片或GPU/帧率证明。后续需先确认着色器编译/近远视角/已有孔和裁孔恢复、黑色/自定义配色、斜切/弧形/副本/影子/辅助标注与设备兼容，不能把源码当观感已达参考站。详细规则见reference/profile-aluminum-appearance-2026-10-11-v07566.md。
 
 ## v0.75.65 四边插槽尺寸与旧板预览适配
 

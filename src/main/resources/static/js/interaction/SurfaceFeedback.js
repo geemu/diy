@@ -56,7 +56,8 @@ export function createSurfaceFeedback(root, options = {}) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geometry.computeVertexNormals();
-  const material = new THREE.MeshBasicMaterial({color:options.color ?? 0x25c778,opacity:options.opacity ?? 0.34,transparent:true,side:THREE.DoubleSide,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,toneMapped:false});
+  // 仅显式请求的贴合色带采用单次双面绘制；其他选择/候选反馈仍沿原透明绘制方式。
+  const material = new THREE.MeshBasicMaterial({color:options.color ?? 0x25c778,opacity:options.opacity ?? 0.34,transparent:true,side:THREE.DoubleSide,forceSinglePass:options.forceSinglePass===true,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,toneMapped:false});
   const helper = new THREE.Mesh(geometry,material);
   helper.name = '__surface_feedback__';
   helper.userData.surfaceFeedback = true;

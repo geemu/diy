@@ -19,30 +19,53 @@ export default class PanelDoorConfigurator {
   }
 
   createPanelFromSelection(options = {}) {
-    const opening = this.openingResolver.resolvePanel(options.sourcePartIds,options);
-    const panel = this.createPanelForOpening(opening,options);
-    this.editor.historyManager.capture();
-    this.editor.emitProjectChanged();
-    return {panel,opening};
+    return this.commitPanelPlans(this.planPanelsFromSelection(options),options);
   }
 
-  createPanelForOpening(opening, options = {}) {
+  /** 先派生全部板材和错误信息；不先插入一块板再尝试裁剪，也不因某格失败丢掉其他格的预览。 */
+  planPanelsFromSelection(options={}){
+    const {cells}=this.openingResolver.resolvePanelCells(options.sourcePartIds,options);
+    return cells.map(({opening,error},index)=>this.planPanelForOpening(opening,{...options,openingError:error,index}));
+  }
+
+  planPanelForOpening(opening,options={}){
     const layout=panelOpeningLayout(opening,options),{width,height,thickness,clearance,normalOffset,position}=layout;
     const panelSpec=panelSpecForOpening(opening,{clearanceMm:clearance,normalOffsetMm:normalOffset});
-    const draft={type:'PANEL',dimensions:{width,height,thickness},position,rotation:opening.rotation,panelSpec};
+    const draft={type:'PANEL',dimensions:{width,height,thickness},position,rotation:{...opening.rotation},panelSpec};
+    const errors=options.openingError?[options.openingError]:[],objects=panelReliefObjects(this.editor);
     if(opening.panelPlacement==='T_SLOT'){
-      const objects=panelReliefObjects(this.editor),gap=Number(options.connectorGapMm??1);
-      const relief=scanPanelConnectorRelief(draft,objects,gap,{cornerPartIds:opening.cornerPartIds});
+      const gap=Number(options.connectorGapMm??1);
+      const relief=scanPanelConnectorRelief(draft,objects,gap,{cornerPartIds:opening.cornerPartIds,slotEngagement:opening.slotEngagement,allowFailures:true});
       draft.dimensions.edgeNotches=relief.notches;draft.panelSpec.connectorRelief={gapMm:gap};
-      assertPanelSlotEngagement(draft,opening);
+      errors.push(...relief.errors);
+      try{panelMaterialContours(draft);}catch(error){errors.push(error.message);delete draft.dimensions.edgeNotches;}
+      // 无有效槽位的红色矩形只是框口示意，不能作为插槽板提交。
+      if(opening.slotFit){
+        try{assertPanelSlotEngagement(draft,opening);}catch(error){errors.push(error.message);}
+      }else if(!errors.length)errors.push('本格四边没有可用的共同 T 槽');
       const blockers=panelReliefBlockers(draft,objects,.001);
-      if(blockers.length)throw new Error('四边插槽板仍与 '+blockers[0]+' 相交；请分格填板或调整承托/连接件，不能抬到梁顶或裁掉型材');
-    }else if(opening.panelPlacement)this.assertProfileClearance(draft);
+      for(const label of blockers){
+        errors.push('仍与 '+label+' 相交'+(relief.skipped.includes(label)?'，其轮廓不能形成板边局部缺口':''));
+      }
+    }else if(opening.panelPlacement){
+      try{this.assertProfileClearance(draft);}catch(error){errors.push(error.message);}
+    }
+    return {draft,opening,errors:[...new Set(errors)],index:options.index??0};
+  }
+
+  createPanelForOpening(opening,options={}){
+    const plan=this.planPanelForOpening(opening,options);
+    if(plan.errors.length)throw new Error(plan.errors[0]);
+    return this.insertPlannedPanel(plan,options);
+  }
+
+  insertPlannedPanel(plan,options={}){
+    const {draft,opening}=plan,{width,height,thickness}=draft.dimensions;
     const mesh = this.editor.addPanel(width,height,thickness,{
       select:options.select !== false,
       captureHistory:false,
-      position,
-      rotation:opening.rotation,
+      position:draft.position,
+      rotation:draft.rotation,
       material:options.material || '亚克力',
       color:options.color,
       shapeDimensions:draft.dimensions,
@@ -51,6 +74,31 @@ export default class PanelDoorConfigurator {
       name:options.name || `框口板 ${Math.round(width)}×${Math.round(height)}`
     });
     return mesh.userData.part;
+  }
+
+  /** 全部格一次提交；复用构图期间的提交屏蔽，不能把半批板材写入草稿或历史。 */
+  commitPanelPlans(plans,options={}){
+    const invalid=plans.find(p=>p.errors.length);
+    if(!plans.length||invalid)throw new Error(invalid?'第 '+(invalid.index+1)+' 块：'+invalid.errors[0]:'没有可适配的框口');
+    const e=this.editor,before=e.exportProject(),selection=e.selectedMeshes.map(m=>m.userData.part.id);
+    const states=[...e.historyManager.states],index=e.historyManager.index,mutating=e.selectionGraphMutation;
+    e.selectionGraphMutation=true;
+    try{
+      const panels=plans.map(plan=>this.insertPlannedPanel(plan,{...options,select:false}));
+      // 包括新板之间在内重新检查实际几何；绝不因预览通过而省掉正式插入后的守卫。
+      for(const part of panels.filter(p=>p.panelSpec.placement==='T_SLOT')){
+        assertPanelSlotEngagement(part,this.resolveSavedPanelOpening(part));
+        const blockers=panelReliefBlockers(part,panelReliefObjects(e,part.id),.001);
+        if(blockers.length)throw new Error('新板仍与 '+blockers[0]+' 相交，本批板材未保留');
+      }
+      if(options.select!==false)e.selectMany(panels.map(p=>e.getMeshByPartId(p.id)));
+      e.updateDimensions();e.emitStats();e.historyManager.capture();
+      e.selectionGraphMutation=mutating;e.emitProjectChanged();
+      return {panels,openings:plans.map(p=>p.opening),panel:panels[0],opening:plans[0].opening};
+    }catch(error){
+      e.historyManager.states=states;e.historyManager.index=index;e.restoreProject(before);
+      e.selectMany(selection.map(id=>e.getMeshByPartId(id)).filter(Boolean));throw error;
+    }finally{e.selectionGraphMutation=mutating;}
   }
 
   resolveSavedPanelOpening(part){
@@ -75,7 +123,7 @@ export default class PanelDoorConfigurator {
     draft.position={...layout.position};draft.rotation={...opening.rotation};
     draft.panelSpec=panelSpecForOpening(opening,{...part.panelSpec,clearanceMm:layout.clearance,normalOffsetMm:0});
     const gap=Number(part.panelSpec.connectorRelief?.gapMm??1);
-    draft.dimensions.edgeNotches=scanPanelConnectorRelief(draft,panelReliefObjects(this.editor,partId),gap,{cornerPartIds:opening.cornerPartIds}).notches;
+    draft.dimensions.edgeNotches=scanPanelConnectorRelief(draft,panelReliefObjects(this.editor,partId),gap,{cornerPartIds:opening.cornerPartIds,slotEngagement:opening.slotEngagement}).notches;
     panelMaterialContours(draft);
     return {draft,opening};
   }

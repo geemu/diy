@@ -5,6 +5,9 @@ import {addSelectionCoplanarSurfaceFeedback} from './CoplanarSurfaceFeedback.js'
 import {connectorEnvelope} from '../connection/ConnectionPlacementManager.js';
 import {panelObjectIntersection} from '../geometry/PanelReliefGeometry.js';
 
+// 用户参考图的暖金黄只用于已贴合色带；较实的单次叠色减少底材和重叠色带带来的色差。
+const CONTACT_BAND_STYLE=Object.freeze({color:0xd7a13c,opacity:.9,forceSinglePass:true});
+
 /**
  * 设计阶段实时接触 / 干涉反馈。
  *
@@ -191,8 +194,9 @@ export default class InterferenceFeedbackManager {
       if(!a?.obb||!b?.obb||a.connectionId||b.connectionId)continue;
       // 黄色只提示已实际贴合的局部材料面；近距离候选或已有设计关系不是零间隙证据。
       if(!options.live&&contact.gapMm>.1)continue;
+      const style=options.live?{color:0x25c778,opacity:.36}:CONTACT_BAND_STYLE;
       for(const [source,target] of [[a,b],[b,a]]) {
-        const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),color:options.live?0x25c778:0xffc400,opacity:options.live?0.36:0.55,renderOrder:1601});
+        const helper=createSurfaceFeedback(source.mesh,{clipObb:target.obb,marginMm:Math.max(4,contact.gapMm+2),...style,renderOrder:1601});
         if(helper){helper.userData.__contact=true;this.group.add(helper);}
       }
     }

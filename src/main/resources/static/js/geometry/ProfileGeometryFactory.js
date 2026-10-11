@@ -105,6 +105,8 @@ export default class ProfileGeometryFactory {
       steps:1
     });
     geometry.translate(0,0,-length/2);
+    // 显示轮廓来自截面环，不从端面三角剖分反推，以免将孔桥接线画成3060的拼接缝。
+    geometry.userData.profileOutline={length:Number(length),rings:[section.outer,...(section.holes||[])].map(ring=>ring.map(point=>({x:Number(point.x),y:Number(point.y)})))};
     geometry.computeVertexNormals();
     applyProfileSurfaceShading(geometry,section);
     return new THREE.Mesh(geometry,material);
@@ -131,6 +133,7 @@ export default class ProfileGeometryFactory {
     if (!geometry?.attributes?.position || !part?.endCuts) return;
     const start = normalizeCut(part.endCuts.START);
     const end = normalizeCut(part.endCuts.END);
+    if(geometry.userData.profileOutline)geometry.userData.profileOutline.endCuts={START:start,END:end};
     if (Math.abs(start.angleDeg) < 0.001 && Math.abs(end.angleDeg) < 0.001) return;
     const position = geometry.attributes.position;
     const half = Number(length) / 2;
@@ -161,7 +164,7 @@ export default class ProfileGeometryFactory {
 
   static addCadEdges(mesh, edgeGeometry=null) {
     if (!mesh?.geometry) return;
-    const geometry = edgeGeometry || new THREE.EdgesGeometry(mesh.geometry, 24);
+    const geometry = edgeGeometry || this.createCadEdgeGeometry(mesh.geometry);
     const material = new THREE.LineBasicMaterial({
       color:0x4a535d,
       transparent:true,
@@ -173,6 +176,31 @@ export default class ProfileGeometryFactory {
     edges.renderOrder = 1;
     edges.userData.helper = true;
     mesh.add(edges);
+  }
+
+  /** 外环/孔环给出两端真实边；沿长度只画硬转折，不画共面分格线或圆壁分段线。 */
+  static createCadEdgeGeometry(geometry) {
+    const outline=geometry?.userData?.profileOutline;
+    if(!outline?.rings?.length)return new THREE.EdgesGeometry(geometry,24);
+    const values=[],half=outline.length/2,crease=Math.cos(24*Math.PI/180);
+    const start=normalizeCut(outline.endCuts?.START),end=normalizeCut(outline.endCuts?.END);
+    const tanStart=Math.tan(start.angleDeg*Math.PI/180),tanEnd=Math.tan(end.angleDeg*Math.PI/180);
+    const vertex=(point,atEnd)=>[point.x,point.y,atEnd?half+tanEnd*(end.axis==='Y'?point.y:point.x):-half+tanStart*(start.axis==='Y'?point.y:point.x)];
+    const line=(a,b)=>values.push(...a,...b);
+    for(const source of outline.rings) {
+      const ring=source.filter((point,index)=>!index||Math.hypot(point.x-source[index-1].x,point.y-source[index-1].y)>1e-8);
+      if(ring.length>1&&Math.hypot(ring[0].x-ring.at(-1).x,ring[0].y-ring.at(-1).y)<1e-8)ring.pop();
+      if(ring.length<3)continue;
+      for(let i=0;i<ring.length;i++) {
+        const a=ring[(i+ring.length-1)%ring.length],b=ring[i],c=ring[(i+1)%ring.length];
+        line(vertex(b,false),vertex(c,false));line(vertex(b,true),vertex(c,true));
+        const incoming=Math.hypot(b.x-a.x,b.y-a.y),outgoing=Math.hypot(c.x-b.x,c.y-b.y);
+        const dot=((b.x-a.x)*(c.x-b.x)+(b.y-a.y)*(c.y-b.y))/(incoming*outgoing);
+        if(dot<=crease)line(vertex(b,false),vertex(b,true));
+      }
+    }
+    const result=new THREE.BufferGeometry();result.setAttribute('position',new THREE.Float32BufferAttribute(values,3));
+    return result;
   }
 
   static bind(group) {

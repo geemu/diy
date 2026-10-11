@@ -11,6 +11,7 @@ import ConnectionBatchManager from '../connection/ConnectionBatchManager.js';
 import FrameParameterManager from '../diy/FrameParameterManager.js';
 import ConnectionReplacementManager from '../connection/ConnectionReplacementManager.js';
 import PanelReliefManager from '../configurator/PanelReliefManager.js';
+import PanelFillManager from '../configurator/PanelFillManager.js';
 import {layeredRackLayout,RACK_LAYOUT_VERSION} from '../diy/LayeredRackModel.js';
 import SnapManager from '../snap/SnapManager.js';
 import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
@@ -151,6 +152,7 @@ export default class Editor {
     this.frameParameterManager = new FrameParameterManager(this);
     this.connectionReplacementManager = new ConnectionReplacementManager(this);
     this.panelReliefManager = new PanelReliefManager(this);
+    this.panelFillManager = new PanelFillManager(this);
     this.machiningPlacementManager = new MachiningPlacementManager(this);
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
@@ -172,6 +174,7 @@ export default class Editor {
 
   bind() {
     this.sceneManager.secondaryClickHandler = () => {
+      if(this.panelFillManager.isActive()){this.panelFillManager.cancel();return true;}
       if(this.frameParameterManager.isActive()){this.frameParameterManager.cancel();return true;}
       // 短右键统一退出放置；右键拖动仍由 SceneManager / OrbitControls 处理平移。
       if(this.wholeStretchManager.isActive()){this.wholeStretchManager.cancel();return true;}
@@ -968,6 +971,10 @@ export default class Editor {
     return this.panelDoorConfigurator.createPanelFromSelection(options);
   }
 
+  previewPanelsFromSelectedOpening(options={}){
+    return this.panelFillManager.begin(options);
+  }
+
   refitConfiguredPanel(partId) {
     return this.panelDoorConfigurator.refitPanel(partId);
   }
@@ -1260,6 +1267,7 @@ export default class Editor {
     if(clearHistory)this.clearSelectionClipboard();
     this.connectionReplacementManager?.cancel();
     this.panelReliefManager?.cancel();
+    this.panelFillManager?.cancel();
     this.frameParameterManager?.cancel();
     this.quickAlignmentManager?.cancel();
     this.connectionBatchManager?.cancel();
@@ -1399,7 +1407,7 @@ export default class Editor {
     this.updateDimensions();this.emitStats();this.historyManager.capture();this.emitProjectChanged();return true;
   }
 
-  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive()||this.connectionReplacementManager?.isActive()||this.panelReliefManager?.isActive();}
+  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive()||this.connectionReplacementManager?.isActive()||this.panelReliefManager?.isActive()||this.panelFillManager?.isActive();}
 
   isMeshTransformable(mesh) {
     const part = mesh?.userData?.part;

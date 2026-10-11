@@ -9,7 +9,7 @@ import {normalizeSideSlot} from '../connection/SideSlotConnection.js';
 import {validPanelSlotFit} from '../configurator/PanelSlotPlacement.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.66';
+export const CURRENT_APP_VERSION = '0.75.69';
 
 /** 梁下参考件与内收梁外侧原目录件分开验收，不把改孔规格套到外侧直角上。 */
 function sideMountRecordValid(reference,component,face){

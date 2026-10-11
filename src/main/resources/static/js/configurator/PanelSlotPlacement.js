@@ -32,6 +32,7 @@ export function resolvePanelSlots(opening,boundary,options={}){
   const fits=[];
   // 不把错层槽口“平均”成一张板。四条槽的中心平面必须真正重合。
   for(const first of candidates[0]){
+    if(options.slotPlaneMm!=null&&Math.abs(first.point[n]-Number(options.slotPlaneMm))>=1e-4)continue;
     const plane=first.point[n],chosen=[first,...candidates.slice(1).map(values=>values.find(value=>Math.abs(value.point[n]-plane)<1e-4))];
     if(chosen.some(value=>!value))continue;
     try{

@@ -209,7 +209,7 @@ function geometryFrom(vertices) {
  * 原实体轮廓只按孔体截断；新增孔口边来自原材料面与孔体的交线，不来自三角剖分。
  */
 function cutEdgeGeometry(source,cuts) {
-  const original=new THREE.EdgesGeometry(source,24),position=original.attributes.position;
+  const original=ProfileGeometryFactory.createCadEdgeGeometry(source),position=original.attributes.position;
   const values=[],seen=new Set(),epsilon=1e-6,crease=Math.cos(24*Math.PI/180);
   const append=(a,b)=>{
     if(a.distanceToSquared(b)<1e-12)return;

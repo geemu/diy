@@ -26,16 +26,26 @@ export function machiningCenterOffsets(part,face) {
   return [...new Set(values.filter(value=>Number.isFinite(value)&&Math.abs(value)<=span/2+1e-6))].sort((a,b)=>a-b);
 }
 
-/** 只读实际截面中的完整圆孔；矩形空腔、T槽和单元辅助中线不冒充原孔。 */
+/** 只读实际圆孔及内置参考中明确的四瓣原孔；矩形空腔、T槽和辅助中线不冒充原孔。 */
 export function machiningEndBores(part) {
   const section=getSectionDefinition(part?.designProfile?.profileId,part?.designProfile?.faceClosures||[]);
   if(!section)return [];
   let references=endBoreReferences.get(section);
   if(!references) {
-    references=(section.holes||[]).map(circularBoreReference).filter(Boolean);
+    references=(section.holes||[]).map((ring,index)=>circularBoreReference(ring)||relievedReferenceBore(section,ring,index)).filter(Boolean);
     endBoreReferences.set(section,references);
   }
   return references;
+}
+
+/** 四瓣孔不是任意近圆轮廓：仅采用生成参考截面的明确孔心，拾取仍使用它的实际孔口。 */
+function relievedReferenceBore(section,ring,index) {
+  if(section.sourceType!=='BUILT_IN_REFERENCE'||section.referenceOnly!==true)return null;
+  const hint=section.referenceBores?.find(item=>item.holeIndex===index);
+  if(!hint||!Number.isFinite(hint.offsetX)||!Number.isFinite(hint.offsetY)||!Number.isFinite(hint.radius)||hint.radius<=0)return null;
+  const outline=(ring||[]).map(point=>({x:Number(point.x),y:Number(point.y)}));
+  if(outline.length<8||outline.some(point=>!Number.isFinite(point.x)||!Number.isFinite(point.y)))return null;
+  return {offsetX:hint.offsetX,offsetY:hint.offsetY,radius:hint.radius,outline,centerLabel:'原有孔中心'};
 }
 
 function circularBoreReference(ring) {

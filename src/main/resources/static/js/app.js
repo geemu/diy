@@ -399,7 +399,9 @@ createApp({
     watch([()=>catalogAccessoryForm.head,()=>catalogAccessoryForm.thread],()=>{if(catalogAccessoryForm.head!=='ELASTIC_NUT'&&!fastenerLengthOptions.value.includes(catalogAccessoryForm.screwLength))catalogAccessoryForm.screwLength=fastenerLengthOptions.value[0];});
     watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value,selectedDesignProfile.value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
     const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#8491a5','钢板':'#8b959f'});
-    const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',placement:'T_SLOT',normalOffsetMm:0,previewRelief:true});
+    const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',placement:'T_SLOT',normalOffsetMm:0,connectorGapMm:1});
+    const panelFillState=reactive({active:false,ready:false,error:'',note:'',rows:[],panelCount:0,focusIndex:-1});
+    watch(panelFitForm,()=>{if(panelFillState.active)editor?.panelFillManager.invalidate();},{deep:true,flush:'sync'});
     const panelReliefState=reactive({active:false,partId:null,ready:false,error:'',note:'',notchCount:0,adaptation:false,dimensions:null});
     const panelReliefForm=reactive({gapMm:1,notches:[]});
     const connectionReplacementState=reactive({active:false,connectionId:null,ready:false,error:'',note:''});
@@ -1050,6 +1052,7 @@ createApp({
       layoutManager = new WorkbenchLayoutManager().init();
       viewCube = new ViewCube(viewCubeViewport.value,editor.sceneManager,direction=>editor.viewDirection(direction));
       editor.onSelectionChanged = (object,selection = []) => {
+        if(panelFillState.active)cancelPanelFill();
         if(panelReliefState.active&&object?.userData?.part?.id!==panelReliefState.partId)cancelPanelRelief();
         if(connectionReplacementState.active)cancelConnectionReplacement();
         selectedConnectionId.value=null;
@@ -1076,6 +1079,7 @@ createApp({
       editor.connectionBatchManager.onChanged=state=>Object.assign(connectionBatchState,state);
       editor.frameParameterManager.onChanged=state=>Object.assign(frameEdit,state);
       editor.panelReliefManager.onChanged=state=>Object.assign(panelReliefState,state);
+      editor.panelFillManager.onChanged=state=>Object.assign(panelFillState,state);
       editor.connectionReplacementManager.onChanged=state=>Object.assign(connectionReplacementState,state);
       editor.wholeStretchManager.onChanged=state=>Object.assign(wholeStretchState,state);
       editor.onInteractionError=message=>notify(message,'warning');
@@ -1121,6 +1125,7 @@ createApp({
         if(state?.notify && state?.message) notify(state.message,state.message.includes('失败')||state.message.includes('不能')||state.message.includes('干涉')?'warning':'success');
       };
       editor.onProjectChanged = () => {
+        if(panelFillState.active)cancelPanelFill();
         editor.annotationManager.requestRefresh();
         if(panelReliefState.active)cancelPanelRelief();
         if(connectionReplacementState.active)cancelConnectionReplacement();
@@ -1312,6 +1317,7 @@ createApp({
       editor?.quickAlignmentManager.cancel();editor?.connectionBatchManager.cancel();
       editor?.frameParameterManager.cancel();
       editor?.panelReliefManager.cancel();
+      editor?.panelFillManager.cancel();
       editor?.connectionReplacementManager.cancel();
     });
 
@@ -1332,10 +1338,11 @@ createApp({
       }
       // 模态窗口期间不能用背景快捷键创建、删除或变换工程构件。
       if(document.querySelector('.modal-backdrop'))return;
-      if(panelReliefState.active||connectionReplacementState.active){
-        if(event.key==='Escape'){event.preventDefault();cancelPanelRelief();cancelConnectionReplacement();return;}
+      if(panelReliefState.active||connectionReplacementState.active||panelFillState.active){
+        if(event.key==='Escape'){event.preventDefault();cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();return;}
         const input=event.target?.matches('input,select,textarea')||event.target?.isContentEditable;
-        if(!input){event.preventDefault();return;}
+        const nativeNavigation=event.key==='Tab'||event.target?.closest?.('button,summary,a')&&['Enter',' '].includes(event.key);
+        if(!input&&!nativeNavigation){event.preventDefault();return;}
       }
       if(event.key==='Escape'&&wholeStretchState.active){event.preventDefault();cancelWholeStretch();return;}
       if(event.key==='Escape'&&editor?.selectionGestureManager.cancelDrag()){event.preventDefault();return;}
@@ -1673,12 +1680,21 @@ createApp({
     }
 
     function createPanelFromOpening() {
+      cancelPlacementTools();
       try {
-        const result=editor.createPanelFromSelectedOpening(panelFitForm);
-        projectRevision.value++;
-        notify(`已按框口生成 ${Math.round(result.panel.dimensions.width)}×${Math.round(result.panel.dimensions.height)} 板材`);
-        if(panelFitForm.previewRelief)beginPanelRelief(result.panel.id);
-      } catch(error) { notify(error.message,'warning'); }
+        editor.previewPanelsFromSelectedOpening({...panelFitForm});
+        layoutManager?.expandSide('right');rightPanelMode.value='create';
+      } catch(error) {cancelPanelFill();notify(error.message,'warning');}
+    }
+
+    function previewPanelFill(){editor?.panelFillManager.preview({...panelFitForm});}
+    function focusPanelFill(index){editor?.panelFillManager.focus(index);}
+    function cancelPanelFill(){editor?.panelFillManager.cancel();}
+    function confirmPanelFill(){
+      try{
+        const result=editor.panelFillManager.confirm();
+        notify('已生成 '+result.panels.length+' 块适配板材 · 按连接件轮廓裁边，可一次撤销','success');
+      }catch(error){panelFillState.ready=false;panelFillState.error=error.message;notify(error.message,'warning');}
     }
 
     function refitSelectedPanel() {
@@ -2911,7 +2927,7 @@ createApp({
 
     function cancelPlacementTools() {
       closeFooterRotation();
-      cancelPanelRelief();cancelConnectionReplacement();
+      cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();
       cancelFrameEdit();
       closeQuickAlignment();cancelConnectionBatch();
       editor?.wholeStretchManager.cancel();
@@ -3976,6 +3992,7 @@ createApp({
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
       PanelShapeFields,updatePanelShapeParameter,
       panelProfileCount,panelReliefState,panelReliefForm,beginPanelRelief,previewPanelRelief,rescanPanelRelief,invalidatePanelRelief,removePanelReliefNotch,addPanelReliefNotch,reliefNotchLabel,cancelPanelRelief,confirmPanelRelief,
+      panelFillState,previewPanelFill,focusPanelFill,cancelPanelFill,confirmPanelFill,
       connectionReplacementState,connectionReplacementForm,replacementSpecs,beginConnectionReplacement,changeReplacementKind,previewConnectionReplacement,cancelConnectionReplacement,confirmConnectionReplacement,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,clipboardCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,

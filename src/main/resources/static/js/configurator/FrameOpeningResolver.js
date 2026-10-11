@@ -92,7 +92,7 @@ export default class FrameOpeningResolver {
   }
 
   /**
-   * 板材专用：选四根外边或连同中间承托梁一起选，仍只解析一块外框板；门框的严格四边入口不变。
+   * 解析一个外框或已保存的单块板引用；新填板的分格入口为 resolvePanelCells，门框严格四边不变。
    * 水平板按实际梁顶判断同层，而非中心同高；四角允许同一根真实立柱同时贴合两条外边。
    */
   resolvePanel(partIds=null,options={}){
@@ -100,7 +100,7 @@ export default class FrameOpeningResolver {
     if(ids.length<4||ids.length>64)throw new Error('请选择同一框面的四根外边，可一起选中间承托梁（最多64根）');
     const members=ids.map(id=>{
       const mesh=this.editor.getMeshByPartId(id);
-      if(!mesh||mesh.userData.part?.type!=='PROFILE')throw new Error('框口板仅支持直线型材');
+      if(!mesh||mesh.visible===false||mesh.userData.part?.hidden||mesh.userData.part?.type!=='PROFILE')throw new Error('框口板仅支持可见的直线型材');
       return this.describePanelMember(mesh);
     });
     const grouped=new Map();
@@ -141,7 +141,8 @@ export default class FrameOpeningResolver {
       const along=member.axis===preferred.widthAxis?widthBounds:heightBounds;
       const across=member.axis===preferred.widthAxis?heightBounds:widthBounds;
       const key=(member.axis===preferred.widthAxis?preferred.heightAxis:preferred.widthAxis).toLowerCase();
-      this.assertCovers(member,member.axis,along,tolerance);
+      if(options.resolveSlots!==false)this.assertCovers(member,member.axis,along,tolerance);
+      else if(member.box.max[member.axis.toLowerCase()]<=along.min+tolerance||member.box.min[member.axis.toLowerCase()]>=along.max-tolerance)throw new Error('所选中间梁不在当前框口内');
       if(member.box.min[key]<across.min-tolerance||member.box.max[key]>across.max+tolerance)throw new Error('中间承托梁超出所选外框，请只选择同一框内的构件');
     }
     const planeMembers=placement==='T_SLOT'?boundary:members;
@@ -158,7 +159,67 @@ export default class FrameOpeningResolver {
       widthAxis:preferred.widthAxis,heightAxis:preferred.heightAxis,normalAxis,width,height,center,rotation:{x:euler.x,y:euler.y,z:euler.z},
       basis:{width:{...basis.width},height:{...basis.height},normal:{...basis.normal}},bounds:{width:widthBounds,height:heightBounds},
       panelPlacement:placement,supportFaceMm:Math.max(...tops),assemblyId:assemblyIds.length===1?assemblyIds[0]:null};
-    return placement==='T_SLOT'?resolvePanelSlots(opening,boundary,options):opening;
+    return placement==='T_SLOT'&&options.resolveSlots!==false?resolvePanelSlots(opening,boundary,options):opening;
+  }
+
+  /**
+   * 插槽板按真实分隔梁递归分格。只截取连续长梁的本格区间，不把其实体截断；未选中的同面梁也参与。
+   * 只有覆盖当前净口、实际贴合两端的杆才能分隔；半截梁不能延长成虚拟边，仍由预览显示冲突。
+   */
+  resolvePanelCells(partIds=null,options={}){
+    if(options.placement&&options.placement!=='T_SLOT')return {cells:[{opening:this.resolvePanel(partIds,options),error:''}]};
+    const outer=this.resolvePanel(partIds,{...options,resolveSlots:false}),tolerance=Math.max(.01,Number(options.axisToleranceMm??.1));
+    const n=outer.normalAxis.toLowerCase(),half=Number(options.thickness??5)/2;
+    const boundary=outer.boundaryPartIds.map(id=>this.describePanelMember(this.editor.getMeshByPartId(id)));
+    let plane=outer.center[n],outerError='';
+    try{plane=resolvePanelSlots(outer,boundary,options).center[n];}catch(error){outerError=error.message;}
+    const columns=[],candidates=[],boundaryIds=new Set(outer.boundaryPartIds);
+    for(const mesh of this.editor.meshes||[]){
+      const part=mesh.userData?.part;
+      if(!part||part.type!=='PROFILE'||part.hidden||mesh.visible===false)continue;
+      let member;try{member=this.describePanelMember(mesh);}catch{continue;}
+      if(member.axis===outer.normalAxis){columns.push(member);continue;}
+      if(boundaryIds.has(part.id)||member.box.min[n]>=plane+half-.001||member.box.max[n]<=plane-half+.001)continue;
+      const isWidth=member.axis===outer.widthAxis,across=isWidth?outer.bounds.height:outer.bounds.width;
+      const key=(isWidth?outer.heightAxis:outer.widthAxis).toLowerCase(),along=isWidth?outer.bounds.width:outer.bounds.height;
+      if(member.box.min[key]<across.min-tolerance||member.box.max[key]>across.max+tolerance)continue;
+      if(member.box.max[member.axis.toLowerCase()]<=along.min+tolerance||member.box.min[member.axis.toLowerCase()]>=along.max-tolerance)continue;
+      candidates.push(member);
+    }
+    for(const id of outer.sourcePartIds.filter(id=>!boundaryIds.has(id))){
+      if(!candidates.some(m=>m.part.id===id))throw new Error('所选中间梁不在外框的插槽板面内；请不要混选其他层');
+    }
+    // 限制有限 DIY 框口规模；不扫描其他层、不以装配成员名或“第几根”推断板数。
+    if(candidates.length>64)throw new Error('当前框内同面构件超过64根，请分区域填板');
+    const touches=(a,b)=>AXIS_NAMES.every(axis=>a.box.min[axis.toLowerCase()]<=b.box.max[axis.toLowerCase()]+tolerance&&b.box.min[axis.toLowerCase()]<=a.box.max[axis.toLowerCase()]+tolerance);
+    const connected=(a,b)=>touches(a,b)||columns.some(column=>touches(a,column)&&touches(b,column));
+    const queue=[boundary],leaves=[];
+    while(queue.length){
+      const edges=queue.shift(),widthBounds=this.innerBounds(edges.slice(2),outer.widthAxis),heightBounds=this.innerBounds(edges.slice(0,2),outer.heightAxis);
+      const cuts=candidates.filter(member=>{
+        if(edges.some(e=>e.part.id===member.part.id))return false;
+        const isWidth=member.axis===outer.widthAxis,across=isWidth?heightBounds:widthBounds,along=isWidth?widthBounds:heightBounds;
+        const key=(isWidth?outer.heightAxis:outer.widthAxis).toLowerCase(),axis=member.axis.toLowerCase();
+        if(member.box.min[key]<across.min-tolerance||member.box.max[key]>across.max+tolerance||member.box.max[key]-member.box.min[key]>=across.max-across.min-1)return false;
+        if(member.box.min[axis]>along.min+tolerance||member.box.max[axis]<along.max-tolerance)return false;
+        return (isWidth?edges.slice(2):edges.slice(0,2)).every(edge=>connected(member,edge));
+      }).sort((a,b)=>Number(a.axis===outer.widthAxis)-Number(b.axis===outer.widthAxis)||a.center[(a.axis===outer.widthAxis?outer.heightAxis:outer.widthAxis).toLowerCase()]-b.center[(b.axis===outer.widthAxis?outer.heightAxis:outer.widthAxis).toLowerCase()]||a.part.id.localeCompare(b.part.id));
+      const cut=cuts[0];
+      if(!cut){leaves.push(edges);continue;}
+      if(leaves.length+queue.length>=63)throw new Error('分格超过64块，请分区域填板');
+      if(cut.axis===outer.heightAxis){queue.push([edges[0],edges[1],edges[2],cut],[edges[0],edges[1],cut,edges[3]]);}
+      else queue.push([edges[0],cut,edges[2],edges[3]],[cut,edges[1],edges[2],edges[3]]);
+    }
+    const cells=leaves.map(edges=>{
+      // 每块只保存自己的四边 ID；以后改尺寸、完整复制和重新适配仍可重算长梁上的局部框口。
+      const opening=this.resolvePanel(edges.map(m=>m.part.id),{...options,resolveSlots:false});
+      opening.center[n]=plane;
+      try{
+        const fitted=resolvePanelSlots(opening,edges,{...options,slotPlaneMm:plane});
+        return {opening:fitted,error:outerError};
+      }catch(error){return {opening,error:outerError||error.message};}
+    }).sort((a,b)=>a.opening.center[outer.heightAxis.toLowerCase()]-b.opening.center[outer.heightAxis.toLowerCase()]||a.opening.center[outer.widthAxis.toLowerCase()]-b.opening.center[outer.widthAxis.toLowerCase()]);
+    return {cells};
   }
 
   /** 包络来自型材尺寸和本体姿态，不把表面印字、孔标或选择辅助线算作外框尺寸。 */

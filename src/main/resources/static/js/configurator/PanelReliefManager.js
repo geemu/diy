@@ -3,7 +3,7 @@ import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import {panelMaterialContours,panelNotchRectangles} from '../model/PanelShapeModel.js';
 import {connectionDesignType} from '../model/ComponentCatalog.js';
 import {panelPose,panelObjectIntersection,panelObstacleFootprint} from '../geometry/PanelReliefGeometry.js';
-import {contourBounds,expandContour,clipContourToRectangle} from '../model/PanelContourMath.js';
+import {contourBounds,contourArea,expandContour,clipContourToRectangle,unionContours} from '../model/PanelContourMath.js';
 import {assertPanelSlotEngagement} from './PanelSlotPlacement.js';
 
 /** 玩家板材避让：只读扫描 -> 可改缺口预览 -> fresh 检查 -> 一次历史。原板在确认前不变。 */
@@ -41,7 +41,7 @@ export default class PanelReliefManager {
   scan(gapMm) {
     const part=this.baseDraft||this.part(),gap=validGap(gapMm);
     const opening=part.panelSpec?.placement==='T_SLOT'?this.editor.panelDoorConfigurator.resolveSavedPanelOpening(part):null;
-    const {notches,skipped}=scanPanelConnectorRelief(part,this.objects(),gap,{cornerPartIds:opening?.cornerPartIds});
+    const {notches,skipped}=scanPanelConnectorRelief(part,this.objects(),gap,{cornerPartIds:opening?.cornerPartIds,slotEngagement:opening?.slotEngagement});
     this.preview(notches,gap,{skipped});
     return {gapMm:gap,notches,skipped};
   }
@@ -151,16 +151,21 @@ export function panelReliefObjects(editor,excludedPartId=null){
 
 export function scanPanelConnectorRelief(part,objects,gapMm,options={}){
   const gap=validGap(gapMm),base=structuredClone(part);delete base.dimensions.edgeNotches;
-  const box=panelBox(base),notches=[],skipped=[];
+  const box=panelBox(base),notches=[],skipped=[],errors=[];
   for(const item of objects){
     const cornerPost=options.cornerPartIds?.includes(item.mesh.userData.part?.id);
     if((!item.connector&&!cornerPost)||!box.intersectsBox(new THREE.Box3().setFromObject(item.mesh)))continue;
-    if(!panelObjectIntersection(base,item.mesh,0)?.intersects)continue;
-    const footprint=panelObstacleFootprint(base,item.mesh),cuts=footprint?notchesForFootprint(base,footprint,gap):[];
-    // cornerPartIds 只含同时贴合两条外边的垂直柱；内部柱/整条承托梁永不进入自动裁角清单。
-    if(cuts.length)notches.push(...cuts);else skipped.push(item.label);
+    try{
+      if(!panelObjectIntersection(base,item.mesh,0)?.intersects)continue;
+      const footprint=panelObstacleFootprint(base,item.mesh),cuts=footprint?notchesForFootprint(base,footprint,gap,options):[];
+      // cornerPartIds 只含同时贴合两条外边的垂直柱；内部柱/整条承托梁永不进入自动裁角清单。
+      if(cuts.length)notches.push(...cuts);else skipped.push(item.label);
+    }catch(error){
+      if(!options.allowFailures)throw new Error(item.label+'：'+error.message);
+      errors.push(item.label+'：'+error.message);
+    }
   }
-  return {gapMm:gap,notches,skipped};
+  return {gapMm:gap,notches,skipped,errors};
 }
 
 export function panelReliefBlockers(part,objects,tolerance=.5){
@@ -180,14 +185,24 @@ function panelBox(part){
   for(const x of [-d.width/2,d.width/2])for(const y of [-d.height/2,d.height/2])for(const z of [-d.thickness/2,d.thickness/2])points.push(new THREE.Vector3(x,y,z).applyMatrix4(matrix));
   return new THREE.Box3().setFromPoints(points);
 }
-function notchesForFootprint(part,footprint,gap) {
+function notchesForFootprint(part,footprint,gap,options={}) {
   const w=Number(part.dimensions.width),h=Number(part.dimensions.height);
   const result=[],expanded=footprint.outlines.flatMap(ring=>expandContour(ring,gap));
-  for(const ring of expanded.flatMap(r=>clipContourToRectangle(r,w/2,h/2))){
+  for(let ring of expanded.flatMap(r=>clipContourToRectangle(r,w/2,h/2))){
     const r=contourBounds(ring);
     const sides=[['LEFT',r.minX+w/2],['RIGHT',w/2-r.maxX],['BOTTOM',r.minY+h/2],['TOP',h/2-r.maxY]].sort((a,b)=>a[1]-b[1]);
     const edge=sides[0][0],vertical=['LEFT','RIGHT'].includes(edge),span=vertical?h:w;
-    if(sides[0][1]>.00001)continue;
+    if(sides[0][1]>.00001){
+      const insertion=options.slotEngagement?.find(value=>value.edge===edge)?.insertionMm;
+      // 槽内板边比净框口多出插入带。五金轮廓止于净口时，只把这一小段入口带连到板边；
+      // 内侧斜线/圆弧仍来自真实轮廓，不以包围方框替代，也不向中央障碍开通道。
+      if(!Number.isFinite(insertion)||sides[0][1]>insertion+gap+.00001)continue;
+      const project=p=>edge==='LEFT'?{x:-w/2,y:p.y}:edge==='RIGHT'?{x:w/2,y:p.y}:edge==='BOTTOM'?{x:p.x,y:-h/2}:{x:p.x,y:h/2};
+      const bridges=ring.map((p,i)=>[p,ring[(i+1)%ring.length],project(ring[(i+1)%ring.length]),project(p)]).filter(r=>Math.abs(contourArea(r))>1e-5);
+      const joined=unionContours([ring,...bridges]).filter(r=>contourArea(r)>0);
+      if(joined.length!==1)throw new Error('连接件入口避让没有形成连续板边缺口');
+      ring=joined[0];
+    }
     const along=p=>vertical?p.y:p.x,depth=p=>({LEFT:p.x+w/2,RIGHT:w/2-p.x,BOTTOM:p.y+h/2,TOP:h/2-p.y}[edge]);
     if(!ring.some((p,i)=>depth(p)<.00001&&depth(ring[(i+1)%ring.length])<.00001&&Math.abs(along(p)-along(ring[(i+1)%ring.length]))>.00001))continue;
     const start=(vertical?r.minY:r.minX)+span/2,end=(vertical?r.maxY:r.maxX)+span/2;

@@ -157,8 +157,11 @@ function sectionContours(triangles,z){
     const points=[];
     for(let i=0;i<3;i++){
       const a=triangle[i],b=triangle[(i+1)%3],da=a.z-z,db=b.z-z;
-      if(Math.abs(da)<EPS)points.push({x:a.x,y:a.y});
-      if(da*db<0){const t=da/(da-db);points.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}
+      // 截平面已向板内偏 EPS，不能再用同一个 EPS 把平面外的实体顶点当作交点。
+      // 否则“贴面顶点 + 真交点”会让单三角出现三个不同点，被跳过后错误报告轮廓未闭合。
+      const onPlane=1e-9;
+      if(Math.abs(da)<=onPlane)points.push({x:a.x,y:a.y});
+      if(da<-onPlane&&db>onPlane||da>onPlane&&db<-onPlane){const t=da/(da-db);points.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}
     }
     const unique=[...new Map(points.map(p=>[key(p),p])).values()];
     if(unique.length!==2)continue;

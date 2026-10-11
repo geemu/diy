@@ -140,7 +140,7 @@ function fmt(value) {
 }
 
 function buildReferenceSection(profile,faceClosures=[]) {
-  // 投影到设计目录不会改变具体型号已有的参考截面；数据库/DXF 仍优先。
+  // 精确数据库/DXF 已在入口返回；此处只构建参考截面，型号选择不等于制造绑定。
   const design=getDesignProfileDefinition(profile.id);
   if(design?.sectionStyle==='CATALOG_REFERENCE')profile=getProfileDefinition(profile.id)||profile;
   const [width,height] = profile.sectionSize;
@@ -148,14 +148,18 @@ function buildReferenceSection(profile,faceClosures=[]) {
   const minSize = Math.min(width,height);
   const slotDepth = Math.max(1.6, Math.min(minSize * 0.17, 5));
   const variant = String(profile.variant || profile.nominal || profile.id || '').toUpperCase();
-  // 所有外轮廓沿用设计目录的真实槽面/槽位置；具体型号内腔仍保留原参考差异。
-  const designSection=design?buildDesignProfileSection(design,faceClosures):null;
+  // 只有明确映射的一体参考型号共用新拓扑，未知变体不能凭字母后缀套成同一种内腔。
+  const integralReference=usesIntegralReference(profile,design);
+  // TXCK 3060B 原图只有三个角孔；横图转到30×60局部截面后缺孔位在 LEFT/FRONT 角。
+  const omittedCorner=profile.id==='EU30-3060B'?'LEFT_FRONT':null;
+  const designSection=design?buildDesignProfileSection(design,faceClosures,{integralReference,omittedCorner}):null;
   const outer = designSection?.outer || buildNotchedOuter(width,height,slotWidth,slotDepth,faceClosures);
-  const referenceHoles = design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER'
+  const variantReference=!designSection?.integralReference&&design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER';
+  const referenceHoles = variantReference
     ?buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth)
     :designSection?.holes || buildVariantHoles(width,height,variant,Number(profile.defaultWallThickness || 1.8),slotWidth);
   const closedSlotHoles=designSection?.closedSlotHoles||[];
-  const holes=design?.sectionStyle==='CATALOG_REFERENCE'&&design.shape!=='ROUND_CORNER'
+  const holes=variantReference
     ?[...closedSlotHoles,...fitReferenceHoles(referenceHoles,outer,closedSlotHoles)]
     :referenceHoles;
   return normalizeSection({
@@ -169,8 +173,20 @@ function buildReferenceSection(profile,faceClosures=[]) {
     referenceOnly: true,
     outer,
     holes,
+    ...(designSection?.integralReference?{referenceBores:designSection.referenceBores}:{}),
     note: '该截面用于编辑器视觉区分与建模预览，不作为生产精确图档。生产前应绑定自定义 DXF 截面。'
   });
+}
+
+function usesIntegralReference(profile,design) {
+  if(design?.shape!=='T_SLOT')return false;
+  if(design.sectionStyle==='DESIGN_REFERENCE')return true;
+  if(profile.sourceFamily==='DATABASE'||profile.sourceFamily==='CUSTOM')return false;
+  const models=new Set(['2020','2020A','2020B','2040','2060','2080',
+    '3030','3030A','3030B','3030H','3030T','3060','3060A','3060B','3090','30120',
+    '4040','4040F','4040H','4040T','4080','4080H','40120','40160',
+    '4545','4590','6060','6090','60120','8080']);
+  return models.has(String(profile.variant||profile.nominal));
 }
 
 function buildNotchedOuter(width,height,slotWidth,slotDepth,faceClosures=[]) {
