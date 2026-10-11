@@ -1,5 +1,16 @@
 # Validation / Regression — v0.75.56
 
+## 2026-10-11 v0.75.56 初始化热修复验收
+
+- 范围：用户报告`Failed to resolve module specifier "three"`并明确要求查看Console / Network。仅页面初始化、模块资源与对应初始化监听器；没有运行已有verify、连接功能测试、Java编译或服务启动/重启，不把启动通过扩大为侧贴安装、生成数量、性能或制造验收。
+- 修复前证据：实际8080入口返回200，但importmap含`...SideMountConnection.js?v=0.75.56",{"./js/configurator...`。PowerShell/JSON.parse均定位多余`{`；隔离Chrome pageerror先为`Failed to parse import map: invalid JSON`，再为three无法解析。Network仅6项入口响应，均200、无失败请求，Three.js未发起请求；不是vendor 404或依赖缺失。
+- 第一处修复：删除多余括号，129项import映射均可解析、保留three本地vendor及SideMountConnection版本路径。源码index.html与target/classes及实际HTTP返回内容一致。
+- 复查发现并修复第二处：Vue Console记录`Cannot access 'selectedPart' before initialization`，来自app.js中连接类型监听的immediate回调；监听器移至selectedPart声明后。未改变所选型材优先、默认系列或自由摆放规则。
+- 02:38:42（本机UTC+8）最后一次离线`mvn -o process-resources -DskipTests`成功，137项静态资源/4项本地vendor复制。index.html/app.js源与运行目录SHA256相同；实际8080服务取得修正入口，没有Java编译、测试或服务重启。
+- 修复后普通刷新：启动错误提示已移除，3个可见canvas和快速搭建入口出现；135项响应，无HTTP 4xx/5xx或requestfailed，Console error/warning及pageerror为空。app.js、three.module.min.js、OrbitControls和SideMountConnection响应200。
+- 修复后另开全新Chrome上下文冷启动：同样135项响应、上述关键模块均200，3个可见canvas，观察超过8秒启动超时之后仍无错误提示、Console警告/错误、pageerror、失败请求或HTTP错误。使用临时隔离浏览器上下文，没有读取/覆盖用户当前Chrome实际localStorage、导入/保存原JSON或修改用户模型。当前用户已打开页面需刷新以加载修正入口。
+- 版本保持0.75.56、Schema62、126模块；既有ProfileEndContact相对导入仍沿用/js资源重新校验，不改依赖或业务模型。下列“未做浏览器验收”是原功能交付状态，这次仅补页面初始化证据；侧贴安装及其他功能待验范围保持。
+
 ## v0.75.56 当前状态（梁侧贴柱连接安装）
 
 - 只读最新桌面未命名工程 (1).json，02:19复核仍381221字节/01:56:32修改/metadata0.75.55/Schema62、29型材/80连接/1组件，无SIDE_MOUNT。P-001为3060柱(-320,1000,-275)、P-012为3030梁(-290,507.5,0)/550mm；两侧面X=-305、沿梁搭接30mm。C001为P-012→P-010、C021为P-010→P-001，不能当作梁侧已安装证据。未修改原文件、导入工程或操作实际localStorage/浏览器/服务。

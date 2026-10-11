@@ -1,5 +1,12 @@
 # 项目交接文档 — v0.75.56
 
+## v0.75.56 初始化热修复（2026-10-11）
+
+- importmap 插入 SideMountConnection 时遗留额外 `{`，导致整张映射解析失败及 three bare specifier 错误。已修正入口JSON，129项映射保留原路径和版本。
+- Console 复查另发现 selectedPart 尚未声明就被 immediate watch 读取；已把该监听器移到所依赖 computed 声明之后，不改变目录规格选择行为。
+- 02:38:42（UTC+8）最后一次离线资源复制成功，HTML/app.js 源文件与运行目录一致，实际HTTP入口与源HTML一致。隔离 Chrome 刷新/无缓存冷启动及8秒后检查均正常：135项响应无HTTP错误或失败请求，Console/error/warning和pageerror为空，画布与工具入口出现；three/OrbitControls/app.js/SideMountConnection均成功加载。
+- 没有操作用户当前 Chrome 草稿或原JSON，没有运行连接功能测试、Java编译或启动/重启服务。版本保持0.75.56/Schema62；以下原交付的未验声明不覆盖这次初始化检查，侧贴安装、完整回归、性能与制造依旧待验。
+
 ## v0.75.56 梁侧贴柱连接安装
 
 - 用户圈出内收梁与立柱的侧贴位置并确认修改。只读桌面未命名工程 (1).json：381221字节/2026-10-11 01:56:32/metadata0.75.55/Schema62，29 PROFILE、80连接、1组件；P-012左侧X=-305与P-001右侧同面，Z搭接[-275,-245]，并非源端轴朝向目标面的END_TO_FACE。现有C001/C021等保留，原JSON与实际草稿未直接操作。

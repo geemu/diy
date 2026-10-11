@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.75.56 初始化热修复 — 2026-10-11
+
+- 修复入口importmap新增SideMountConnection后多余`{`导致JSON非法、整张映射失效及three无法解析的启动回归；129项路径与版本保持，不增加CDN或依赖。
+- 修复实际Console中发现的`Cannot access 'selectedPart' before initialization`：连接类型的立即监听器延后到其所依赖computed声明之后，原选型逻辑不改。
+- 按用户要求检查本机8080的实际HTTP与隔离Chrome Console/Network，刷新和全新上下文冷启动均完成；超过8秒后无Console警告/错误、pageerror、失败请求或HTTP错误响应，Three.js/OrbitControls/app.js/新增模块成功加载。资源已同步，不改用户原工程/实际草稿，不重启服务；侧贴功能和完整回归仍未验收。
+
 ## v0.75.56 — 内收梁侧贴立柱的独立设计连接
 
 - 新SIDE_MOUNT识别水平梁与竖直柱实际共面搭接和开放槽，不再强制源端轴对柱面。局部sourceContactFace/sourceStationS/sourceSlotOffset独立保存；侧贴键不占普通梁端/两梁内角，原宿主位置和连接件保持。

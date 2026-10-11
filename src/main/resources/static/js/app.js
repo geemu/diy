@@ -364,11 +364,6 @@ createApp({
     const panelShapeLabel=computed(()=>PanelShapeOptions.find(x=>x.value===newPanel.shape)?.label);
     const currentPanelDimensions=computed(()=>{try{return panelDimensions(newPanel.shape,newPanel.parameters,newPanel.edgeMode);}catch{return null;}});
     const panelPreviewLabel=computed(()=>{const d=currentPanelDimensions.value;return d?`${d.width}×${d.height}×${d.thickness}mm`:panelShapeLabel.value;});
-    watch(()=>catalogConnectionForm.type,()=>{
-      const profile=selectedPart.value?.type==='PROFILE'?selectedPart.value.designProfile:getDesignProfileDefinition(newProfile.catalogId);
-      catalogConnectionForm.spec=preferredConnectionSpec(catalogConnectionForm.type,profile?.series);
-      catalogConnectionForm.free=false;
-    },{immediate:true});
     watch(()=>newShaft.type,()=>{if(!shaftDiameters.value.includes(newShaft.diameter))newShaft.diameter=shaftDiameters.value[0];newShaft.mixed=false;});
     watch(()=>newShaft.diameter,()=>{if(!secondShaftDiameters.value.length)newShaft.mixed=false;if(!secondShaftDiameters.value.includes(newShaft.secondDiameter))newShaft.secondDiameter=secondShaftDiameters.value.at(-1);});
     watch(()=>newPanel.shape,shape=>{newPanel.parameters=panelDefaults(shape);newPanel.edgeMode=false;});
@@ -441,6 +436,11 @@ createApp({
     const connectionRuleId = ref(DEFAULT_DESIGN_CONNECTION_TYPE);
 
     const selectedPart = computed(() => selected.value?.userData?.part || null);
+    watch(()=>catalogConnectionForm.type,()=>{
+      const profile=selectedPart.value?.type==='PROFILE'?selectedPart.value.designProfile:getDesignProfileDefinition(newProfile.catalogId);
+      catalogConnectionForm.spec=preferredConnectionSpec(catalogConnectionForm.type,profile?.series);
+      catalogConnectionForm.free=false;
+    },{immediate:true});
     const selectionCount = computed(() => selectedMeshes.value.length);
     const projectParts = computed(() => { projectRevision.value; return editor ? editor.parts.map(part => ({...part})) : []; });
     const hasHiddenParts = computed(() => projectParts.value.some(part=>part.hidden===true));
