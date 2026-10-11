@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import FrameOpeningResolver from './FrameOpeningResolver.js';
 import {getDesignProfileDefinition,getDefaultDesignProfileId} from '../model/DesignProfileCatalog.js';
 import {panelMaterialContours} from '../model/PanelShapeModel.js';
+import {panelPose,panelObjectIntersection} from '../geometry/PanelReliefGeometry.js';
+import {assertPanelSlotEngagement} from './PanelSlotPlacement.js';
+import {panelReliefObjects,scanPanelConnectorRelief,panelReliefBlockers} from './PanelReliefManager.js';
 
 /**
  * Beginner-facing panel and door configurator.
@@ -16,7 +19,7 @@ export default class PanelDoorConfigurator {
   }
 
   createPanelFromSelection(options = {}) {
-    const opening = this.openingResolver.resolve(options.sourcePartIds);
+    const opening = this.openingResolver.resolvePanel(options.sourcePartIds,options);
     const panel = this.createPanelForOpening(opening,options);
     this.editor.historyManager.capture();
     this.editor.emitProjectChanged();
@@ -24,13 +27,17 @@ export default class PanelDoorConfigurator {
   }
 
   createPanelForOpening(opening, options = {}) {
-    const clearance = Math.max(0,Number(options.clearanceMm ?? 2));
-    const thickness = Math.max(0.5,Number(options.thickness ?? 5));
-    const width = opening.width - clearance * 2;
-    const height = opening.height - clearance * 2;
-    if (!(width > 1) || !(height > 1)) throw new Error('扣除板材间隙后没有可用净尺寸');
-    const normalOffset = Number(options.normalOffsetMm || 0);
-    const position = addScaled(opening.center,opening.basis.normal,normalOffset);
+    const layout=panelOpeningLayout(opening,options),{width,height,thickness,clearance,normalOffset,position}=layout;
+    const panelSpec=panelSpecForOpening(opening,{clearanceMm:clearance,normalOffsetMm:normalOffset});
+    const draft={type:'PANEL',dimensions:{width,height,thickness},position,rotation:opening.rotation,panelSpec};
+    if(opening.panelPlacement==='T_SLOT'){
+      const objects=panelReliefObjects(this.editor),gap=Number(options.connectorGapMm??1);
+      const relief=scanPanelConnectorRelief(draft,objects,gap,{cornerPartIds:opening.cornerPartIds});
+      draft.dimensions.edgeNotches=relief.notches;draft.panelSpec.connectorRelief={gapMm:gap};
+      assertPanelSlotEngagement(draft,opening);
+      const blockers=panelReliefBlockers(draft,objects,.001);
+      if(blockers.length)throw new Error('四边插槽板仍与 '+blockers[0]+' 相交；请分格填板或调整承托/连接件，不能抬到梁顶或裁掉型材');
+    }else if(opening.panelPlacement)this.assertProfileClearance(draft);
     const mesh = this.editor.addPanel(width,height,thickness,{
       select:options.select !== false,
       captureHistory:false,
@@ -38,37 +45,57 @@ export default class PanelDoorConfigurator {
       rotation:opening.rotation,
       material:options.material || '亚克力',
       color:options.color,
+      shapeDimensions:draft.dimensions,
+      panelSpec:draft.panelSpec,
       assemblyId:options.assemblyId ?? opening.assemblyId,
       name:options.name || `框口板 ${Math.round(width)}×${Math.round(height)}`
     });
-    mesh.userData.part.panelSpec = {
-      ...(mesh.userData.part.panelSpec || {}),
-      configurator:'FRAME_OPENING_PANEL',
-      sourcePartIds:[...opening.sourcePartIds],
-      clearanceMm:clearance,
-      normalOffsetMm:normalOffset,
-      generated:true,
-      openingAxes:{widthAxis:opening.widthAxis,heightAxis:opening.heightAxis,normalAxis:opening.normalAxis}
-    };
     return mesh.userData.part;
+  }
+
+  resolveSavedPanelOpening(part){
+    const options={...part.panelSpec,thickness:part.dimensions.thickness};
+    return [2,3].includes(part.panelSpec.openingVersion)?this.openingResolver.resolvePanel(part.panelSpec.sourcePartIds,options):this.openingResolver.resolve(part.panelSpec.sourcePartIds);
+  }
+
+  /** 显式把已有框口板改为四边插槽；仅返回新的尺寸/姿态/裁角副本，提交归预览 Manager。 */
+  planSlotRefit(partId){
+    const part=this.editor.parts.find(value=>value.id===partId);
+    if(part?.type!=='PANEL'||part.panelSpec?.configurator!=='FRAME_OPENING_PANEL')throw new Error('当前板材没有完整的框口引用，请重新选外框填板');
+    if(!this.editor.isMeshTransformable(this.editor.getMeshByPartId(partId))||part.machiningItems?.length)throw new Error('请先处理板材的锁定、安装或已有加工，再重新适配');
+    if(this.editor.constraintManager.constraints.some(c=>c.enabled!==false&&(c.sourcePartId===partId||c.targetPartId===partId))
+      ||this.editor.userDimensions.some(d=>JSON.stringify(d).split('"').includes(partId)))throw new Error('板材已有几何约束或尺寸引用，请先处理引用，不能直接改插槽尺寸/位置');
+    if(this.editor.parts.some(value=>value.mountReference?.targetPartId===partId&&!value.generatedByConnectionId))throw new Error('板材上仍有安装配件，请先处理其安装关系，再重新适配');
+    const options={...part.panelSpec,placement:'T_SLOT',clearanceMm:Math.max(.1,Number(part.panelSpec.clearanceMm??2)),normalOffsetMm:0,thickness:part.dimensions.thickness};
+    // 点击重新适配是明确重选槽位；普通加载/整架回改仍尊重保存的局部槽引用。
+    delete options.slotFit;
+    const opening=this.openingResolver.resolvePanel(part.panelSpec.sourcePartIds,options),layout=panelOpeningLayout(opening,options),draft=structuredClone(part);
+    Object.assign(draft.dimensions,{width:layout.width,height:layout.height});
+    if(draft.dimensions.shapeParameters)Object.assign(draft.dimensions.shapeParameters,{width:layout.width,height:layout.height});
+    draft.position={...layout.position};draft.rotation={...opening.rotation};
+    draft.panelSpec=panelSpecForOpening(opening,{...part.panelSpec,clearanceMm:layout.clearance,normalOffsetMm:0});
+    const gap=Number(part.panelSpec.connectorRelief?.gapMm??1);
+    draft.dimensions.edgeNotches=scanPanelConnectorRelief(draft,panelReliefObjects(this.editor,partId),gap,{cornerPartIds:opening.cornerPartIds}).notches;
+    panelMaterialContours(draft);
+    return {draft,opening};
   }
 
   refitPanel(panelOrId) {
     const part = typeof panelOrId === 'string' ? this.editor.parts.find(item => item.id === panelOrId) : panelOrId;
     if (part?.type !== 'PANEL' || part.panelSpec?.configurator !== 'FRAME_OPENING_PANEL') throw new Error('当前板材不是框口自动填板');
-    const opening = this.openingResolver.resolve(part.panelSpec.sourcePartIds);
-    const clearance = Math.max(0,Number(part.panelSpec.clearanceMm ?? 2));
-    const width = opening.width - clearance * 2;
-    const height = opening.height - clearance * 2;
-    if (!(width > 1) || !(height > 1)) throw new Error('重新适配后板材净尺寸无效');
+    if(part.panelSpec.placement==='T_SLOT')throw new Error('插槽板请先预览重新适配，再确认尺寸和裁角');
+    const opening = this.resolveSavedPanelOpening(part);
+    const layout=panelOpeningLayout(opening,{...part.panelSpec,thickness:part.dimensions.thickness}),{width,height,position}=layout;
     const draft=structuredClone(part);
     draft.dimensions.width=width;draft.dimensions.height=height;
     if(draft.dimensions.shapeParameters)Object.assign(draft.dimensions.shapeParameters,{width,height});
+    draft.position=position;draft.rotation={...opening.rotation};
     panelMaterialContours(draft);
+    if(part.panelSpec.openingVersion===2)this.assertProfileClearance(draft);
     part.dimensions.width = width;
     part.dimensions.height = height;
     if(part.dimensions.shapeParameters)Object.assign(part.dimensions.shapeParameters,{width,height});
-    part.position = addScaled(opening.center,opening.basis.normal,Number(part.panelSpec.normalOffsetMm || 0));
+    part.position = position;
     part.rotation = {...opening.rotation};
     part.panelSpec.openingAxes = {widthAxis:opening.widthAxis,heightAxis:opening.heightAxis,normalAxis:opening.normalAxis};
     this.editor.rebuildPartMesh(part.id);
@@ -76,6 +103,16 @@ export default class PanelDoorConfigurator {
     this.editor.historyManager.capture();
     this.editor.emitProjectChanged();
     return part;
+  }
+
+  /** 承托梁不能通过裁连接件来“消失”；先拒绝板体穿梁，再由原裁角预览处理五金。 */
+  assertProfileClearance(part){
+    const box=new THREE.Box3(new THREE.Vector3(-part.dimensions.width/2,-part.dimensions.height/2,-part.dimensions.thickness/2),new THREE.Vector3(part.dimensions.width/2,part.dimensions.height/2,part.dimensions.thickness/2)).applyMatrix4(panelPose(part));
+    for(const mesh of this.editor.meshes){
+      const p=mesh.userData.part;if(p.type!=='PROFILE'||p.hidden||mesh.visible===false||!box.intersectsBox(new THREE.Box3().setFromObject(mesh)))continue;
+      const relation=panelObjectIntersection(part,mesh,Number(this.editor.projectSettings?.collisionToleranceMm??.5));
+      if(!relation||relation.intersects)throw new Error('板材会穿过 '+(p.displayId||p.name)+'，请分格填板或调整承托梁/板材位置；不会裁掉型材');
+    }
   }
 
   createDoorFromSelection(options = {}) {
@@ -204,6 +241,26 @@ export default class PanelDoorConfigurator {
     tagConfiguratorPart(mesh.userData.part,assemblyId,role);
     return mesh.userData.part;
   }
+}
+
+/** 四边插槽用已求出的实际外尺寸；旧板的净框口/梁顶规则仅在显式保存的旧放法中保留。 */
+export function panelOpeningLayout(opening,options={}){
+  const clearance=Number(options.clearanceMm??2),thickness=Number(options.thickness??5),normalOffset=Number(options.normalOffsetMm??0);
+  if(![clearance,thickness,normalOffset].every(Number.isFinite)||clearance<0||thickness<.5)throw new Error('板材间隙和偏移应为有效毫米数，厚度至少0.5mm');
+  if(opening.panelPlacement==='T_SLOT'&&normalOffset!==0)throw new Error('四边插槽不支持法向偏移');
+  const width=opening.width-(opening.panelPlacement==='T_SLOT'?0:clearance*2),height=opening.height-(opening.panelPlacement==='T_SLOT'?0:clearance*2);
+  if(width<=1||height<=1)throw new Error('扣除板材间隙后没有可用净尺寸');
+  const center={...opening.center};
+  if(opening.panelPlacement==='ON_FRAME')center.y=opening.supportFaceMm+thickness/2;
+  return {width,height,thickness,clearance,normalOffset,position:addScaled(center,opening.basis.normal,normalOffset)};
+}
+
+export function panelSpecForOpening(opening,previous={}){
+  const spec={...previous,configurator:'FRAME_OPENING_PANEL',sourcePartIds:[...opening.sourcePartIds],generated:true,
+    openingAxes:{widthAxis:opening.widthAxis,heightAxis:opening.heightAxis,normalAxis:opening.normalAxis}};
+  if(opening.panelPlacement){spec.openingVersion=opening.panelPlacement==='T_SLOT'?3:2;spec.placement=opening.panelPlacement;}
+  if(opening.slotFit)spec.slotFit=structuredClone(opening.slotFit);else delete spec.slotFit;
+  return spec;
 }
 
 function tagConfiguratorPart(part,configuratorId,role) {

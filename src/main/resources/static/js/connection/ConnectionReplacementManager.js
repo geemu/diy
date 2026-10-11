@@ -45,7 +45,7 @@ export default class ConnectionReplacementManager {
       const plan=this.selection(kind,spec),c=plan.connection,option=plan.option;
       const descriptor={...c,designType:plan.designType,type:plan.designType,designComponent:plan.componentDefinition,
         sourceMountFace:option.sourceMountFace,designComponentMountFace:option.sourceMountFace,
-        designComponentMountFaces:[option.sourceMountFace],designAnchorOffset:option.designAnchorOffset,validation:option.geometry,sideMount:option.sideMount||c.sideMount};
+        designComponentMountFaces:[option.sourceMountFace],designAnchorOffset:option.designAnchorOffset,validation:option.geometry,sideMount:option.sideMount||c.sideMount,sideSlot:option.sideSlot||c.sideSlot};
       const group=this.editor.connectionManager.createDesignHelper(descriptor,plan.source,plan.target,{preview:true});
       group.name='__connection_replacement_preview__';
       group.traverse(child=>{

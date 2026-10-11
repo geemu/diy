@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {panelContours,panelMaterialContours} from '../model/PanelShapeModel.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {buildDesignProfileSection} from '../model/DesignProfileSection.js';
-import {angleBracketLayout,hiddenCornerLayout} from '../model/ConnectionComponentPorts.js';
+import {angleBracketLayout,hiddenCornerLayout,flatConnectionPlateLayout} from '../model/ConnectionComponentPorts.js';
 
 /** 通用参数化组件几何，预览与实际构件共用。通孔使用带孔轮廓挤出，不依赖远程图片和模型。 */
 export default class ComponentGeometryFactory {
@@ -116,7 +116,8 @@ export default class ComponentGeometryFactory {
       add(new THREE.TorusGeometry(s*.20,s*.018,6,32),[0,-s*.03,-s*.2],[Math.PI/2,0,0]);
     } else if(['FLAT_PLATE','T_PLATE','L_PLATE','CROSS_PLATE'].includes(kind)) {
       const arm=s*.7,span=s*3,a=arm/2,b=span/2;let outline=rectangle(arm,span),holes=[circle(0,-s,r),circle(0,0,r),circle(0,s,r)];
-      if(kind==='FLAT_PLATE'&&d.holeCount===2){outline=rectangle(arm,s*2);holes=[circle(0,-s/2,r),circle(0,s/2,r)];}
+      const flat=flatConnectionPlateLayout(d);
+      if(flat){outline=flat.outline.map(([x,y])=>point(x,y));holes=[...flat.sourcePorts,...flat.targetPorts].map(port=>circle(port.point[0],port.point[1],flat.radius));}
       if(kind==='T_PLATE'){outline=[point(-b,b),point(b,b),point(b,b-arm),point(a,b-arm),point(a,-b),point(-a,-b),point(-a,b-arm),point(-b,b-arm)];holes=[circle(-s,s,r),circle(0,s,r),circle(s,s,r),circle(0,0,r),circle(0,-s,r)];}
       if(kind==='L_PLATE'){
         const angle=(d.angle||90)*Math.PI/180,c=Math.cos(angle),sn=Math.sin(angle),len=s*2,cot=1/Math.tan(angle/2);

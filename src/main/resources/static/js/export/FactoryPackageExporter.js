@@ -26,9 +26,9 @@ export default class FactoryPackageExporter {
       unit:'mm',width:part.dimensions.width,height:part.dimensions.height,thickness:part.dimensions.thickness,
       contours:panelMaterialContours(part),edgeNotches:part.dimensions.edgeNotches||[]}));
     zip.file('板材切割轮廓.json',JSON.stringify(panelContours,null,2));
-    const notchRows=[['板材编号','板边','定位端','离端距离(mm)','缺口宽(mm)','内切深(mm)']];
+    const notchRows=[['板材编号','板边','定位端','离端距离(mm)','缺口宽范围(mm)','内切深范围(mm)','裁剪方式','局部轮廓点(u/v mm)']];
     for(const panel of panelContours)for(const n of panel.edgeNotches)notchRows.push([panel.code,
-      {LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge],n.anchor==='END'?'右/上端':'左/下端',n.offsetMm,n.widthMm,n.depthMm]);
+      {LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge],n.anchor==='END'?'右/上端':'左/下端',n.offsetMm,n.widthMm,n.depthMm,n.outline?'沿连接件轮廓':'矩形缺口',n.outline?JSON.stringify(n.outline):'']);
     zip.file('板材缺口.csv',BomExporter.fileText(notchRows));
     const bomConsistency=this.editor.bomExporter.validateConsistency();
     zip.file('BOM一致性报告.txt',BomExporter.consistencyText(bomConsistency));

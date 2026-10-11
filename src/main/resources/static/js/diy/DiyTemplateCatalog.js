@@ -9,7 +9,7 @@ export const DEFAULT_FRAME_DIMENSIONS = Object.freeze({width:670, depth:610, hei
 // 按用户示例预置型材朝向和接法；只用于明确选取预设，不改变旧参数架的缺省角色。
 export function createQuickFrameDefaults(levels,centerBeamCount) {
   return {
-    ...DEFAULT_FRAME_DIMENSIONS, levels, centerBeamCount,
+    ...DEFAULT_FRAME_DIMENSIONS, levels, centerBeamCount,centerDirection:'DEPTH',
     bayCount:1,bayMode:'SHARED',topMount:'BETWEEN',bottomMount:'BETWEEN',bottomClearance:0,manualLevelHeights:false,
     profileRoles:Object.freeze({
       post:Object.freeze({catalogId:'DESIGN-3060',quarterTurns:0}),
@@ -17,7 +17,7 @@ export function createQuickFrameDefaults(levels,centerBeamCount) {
     }),
     sideMount:'INSET',
     levelSettings:Object.freeze(Array.from({length:levels},(_,index)=>Object.freeze({
-      heightMm:null,catalogId:'',centerCatalogId:index===0?'DESIGN-3030':'',centerBeamCount:null,
+      heightMm:null,catalogId:'',centerCatalogId:index===0?'DESIGN-3030':'',centerBeamCount:null,centerDirection:'',
       leftSideMount:index===0||index===levels-1?'FRAME':'',
       rightSideMount:index===0||index===levels-1?'FRAME':''
     })))

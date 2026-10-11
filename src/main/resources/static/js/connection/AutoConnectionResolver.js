@@ -165,17 +165,17 @@ export default class AutoConnectionResolver {
       }
     }
 
-    // 参数侧梁的两端分别连接指定宿主，不以“最近一根”抢占另一端；仍重新核对真实端面和孔槽。
+    // 参数侧梁/承托梁的两端分别连接指定宿主，不以“最近一根”抢占另一端；仍重新核对真实端面和孔槽。
     // 这里只补零移动候选，不把布局意图当作安装成功，也不创建目录实体或绕过 Manager。
     for(const joint of intended.values()){
       const source=this.editor.getMeshByPartId(joint.sourceProfileId),target=this.editor.getMeshByPartId(joint.targetProfileId);
       if(!allowed.has(joint.sourceProfileId)||!allowed.has(joint.targetProfileId)||source?.userData?.part?.type!=='PROFILE'||target?.userData?.part?.type!=='PROFILE'){
-        plannedFailures.push({...joint,message:'侧梁接头的宿主不存在'});continue;
+        plannedFailures.push({...joint,message:'梁接头的宿主不存在'});continue;
       }
       const contact=profileEndContact(source,target,joint);
-      if(!contact.ok){plannedFailures.push({...joint,message:contact.errors[0]?.message||'侧梁端面没有完整贴合'});continue;}
+      if(!contact.ok){plannedFailures.push({...joint,message:contact.errors[0]?.message||'梁端面没有完整贴合'});continue;}
       const ranked=this.editor.connectionManager.recommendDesignFor(source,target,joint),recommended=ranked.find(item=>item.valid);
-      if(!recommended){plannedFailures.push({...joint,message:ranked[0]?.error||'侧梁接头的孔槽没有可用连接方式'});continue;}
+      if(!recommended){plannedFailures.push({...joint,message:ranked[0]?.error||'梁接头的孔槽没有可用连接方式'});continue;}
       const targetPoint=this.editor.snapManager.endpoints(source)[joint.sourceEnd==='END'?'end':'start'];
       proposals.push({source,target,snap:{...joint,type:'END_TO_FACE'},candidate:{priority:0,score:0},recommended,targetInteriorMm:this.targetInteriorDistance(target,targetPoint),planned:true});
     }
@@ -194,7 +194,7 @@ export default class AutoConnectionResolver {
     const skippedItems = [];
     const usedSourceEnds = new Set();
     for (const connection of this.editor.connectionManager.connections || []) {
-      if (!['SIDE_CORNER','SIDE_MOUNT'].includes(connection.jointKind)&&allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
+      if (!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(connection.jointKind)&&allowed.has(connection.sourceProfileId)) usedSourceEnds.add(endpointKey(connection.sourceProfileId,connection.sourceEnd));
     }
     for (const proposal of ordered) {
       const sourceId = proposal.source.userData.part.id;
@@ -228,7 +228,7 @@ export default class AutoConnectionResolver {
 
   findConnectionBetween(sourceId,targetId) {
     return (this.editor.connectionManager.connections || []).find(connection => {
-      return connection.jointKind!=='SIDE_MOUNT'&&((connection.sourceProfileId === sourceId && connection.targetProfileId === targetId)
+      return !['SIDE_MOUNT','SIDE_SLOT'].includes(connection.jointKind)&&((connection.sourceProfileId === sourceId && connection.targetProfileId === targetId)
         || (connection.sourceProfileId === targetId && connection.targetProfileId === sourceId));
     }) || null;
   }
@@ -236,7 +236,7 @@ export default class AutoConnectionResolver {
   findConnectionAtSourceEnd(sourceId,sourceEnd) {
     const normalizedEnd = sourceEnd === 'END' ? 'END' : 'START';
     return (this.editor.connectionManager.connections || []).find(connection => {
-      return !['SIDE_CORNER','SIDE_MOUNT'].includes(connection.jointKind)&&connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
+      return !['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(connection.jointKind)&&connection.sourceProfileId === sourceId && connection.sourceEnd === normalizedEnd;
     }) || null;
   }
 

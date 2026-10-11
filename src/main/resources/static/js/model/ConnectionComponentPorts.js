@@ -16,6 +16,15 @@ export function angleBracketLayout(dimensions={}) {
     targetPorts:targetOffsets.map((offset,index)=>({id:`UPRIGHT-${index+1}`,point:[offset,targetStation,-t/2]}))};
 }
 
+/** 两孔一字连接板的真实轮廓 / 孔心。侧槽共面安装和自由目录几何共用，不改孔距来迁就宿主。 */
+export function flatConnectionPlateLayout(dimensions={}) {
+  const size=Number(dimensions.size),thickness=Number(dimensions.thickness),angle=Number(dimensions.angle??90);
+  if(dimensions.geometryKind!=='FLAT_PLATE'||Number(dimensions.holeCount)!==2||dimensions.sideMountGeometryVersion!=null||!Number.isFinite(angle)||Math.abs(angle-90)>.01||![size,thickness].every(value=>Number.isFinite(value)&&value>0))return null;
+  const width=size*.7,length=size*2,radius=size*.12;
+  return {size,width,length,thickness,radius,outline:[[-width/2,-size],[width/2,-size],[width/2,size],[-width/2,size]],
+    sourcePorts:[{id:'PLATE-SOURCE',point:[0,-size/2,-thickness/2]}],targetPorts:[{id:'PLATE-TARGET',point:[0,size/2,-thickness/2]}]};
+}
+
 /** 参考角槽件的窄颈、宽脚和两条腿；宽脚适配本项目槽腔，不冒充供应商采购尺寸。 */
 export function hiddenCornerDimensions(size) {
   const series=Number(size);

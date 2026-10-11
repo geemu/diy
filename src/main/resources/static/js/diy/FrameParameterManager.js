@@ -3,9 +3,12 @@ import {layeredRackLayout,rackSideJointPlan} from './LayeredRackModel.js';
 import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
 import PrimitiveGeometryFactory from '../geometry/PrimitiveGeometryFactory.js';
 import FrameOpeningResolver from '../configurator/FrameOpeningResolver.js';
+import {panelOpeningLayout,panelSpecForOpening} from '../configurator/PanelDoorConfigurator.js';
 import {profileObb} from '../validation/PartCollisionDetector.js';
 import {getDesignProfileDefinition} from '../model/DesignProfileCatalog.js';
 import {panelMaterialContours} from '../model/PanelShapeModel.js';
+import {assertPanelSlotEngagement} from '../configurator/PanelSlotPlacement.js';
+import {panelReliefBlockers,panelReliefObjects} from '../configurator/PanelReliefManager.js';
 
 /** 整架改尺寸：规划 -> 只读预览 -> 一次事务。已自由编辑或受保护的结构不会按旧参数重置。 */
 export default class FrameParameterManager {
@@ -57,13 +60,23 @@ export default class FrameParameterManager {
     const virtual=new Map(),ghosts=[];
     try {
       for(const row of rows){const part=memberPart(e.parts.find(part=>part.id===row.id)||parts[0],row);const mesh=ProfileGeometryFactory.create(part);mesh.position.set(row.position.x,row.position.y,row.position.z);mesh.rotation.set(row.rotation.x,row.rotation.y,row.rotation.z);mesh.updateMatrixWorld(true);virtual.set(row.id,mesh);ghosts.push(mesh);}
-      const resolver=new FrameOpeningResolver({getMeshByPartId:id=>virtual.get(id)||e.getMeshByPartId(id)});
-      const panelPlans=panels.map(part=>{const opening=resolver.resolve(part.panelSpec.sourcePartIds),clearance=Number(part.panelSpec.clearanceMm??2),width=opening.width-clearance*2,height=opening.height-clearance*2;if(width<=1||height<=1)throw new Error('尺寸修改后板材净尺寸无效');const position=new THREE.Vector3(opening.center.x,opening.center.y,opening.center.z).addScaledVector(new THREE.Vector3(opening.basis.normal.x,opening.basis.normal.y,opening.basis.normal.z),Number(part.panelSpec.normalOffsetMm||0));return {id:part.id,width,height,position:{x:position.x,y:position.y,z:position.z},rotation:opening.rotation};});
+      const resolver=new FrameOpeningResolver({getMeshByPartId:id=>virtual.get(id)||e.getMeshByPartId(id),meshes:[...virtual.values(),...e.meshes.filter(mesh=>!virtual.has(mesh.userData.part.id)&&!removed.includes(mesh.userData.part.id))]});
+      const panelPlans=panels.map(part=>{
+        const opening=[2,3].includes(part.panelSpec.openingVersion)?resolver.resolvePanel(part.panelSpec.sourcePartIds,{...part.panelSpec,thickness:part.dimensions.thickness}):resolver.resolve(part.panelSpec.sourcePartIds);
+        const {width,height,position}=panelOpeningLayout(opening,{...part.panelSpec,thickness:part.dimensions.thickness});
+        return {id:part.id,width,height,position,rotation:opening.rotation,panelSpec:panelSpecForOpening(opening,part.panelSpec),opening};
+      });
       for(const row of panelPlans){
         const draft=structuredClone(panels.find(part=>part.id===row.id));
         draft.dimensions.width=row.width;draft.dimensions.height=row.height;
         if(draft.dimensions.shapeParameters)Object.assign(draft.dimensions.shapeParameters,{width:row.width,height:row.height});
+        draft.position={...row.position};draft.rotation={...row.rotation};
         panelMaterialContours(draft);
+        if(row.panelSpec.placement==='T_SLOT'){
+          assertPanelSlotEngagement(draft,row.opening);
+          const blockers=panelReliefBlockers(draft,[...virtual.values(),...e.meshes.filter(mesh=>!virtual.has(mesh.userData.part.id)&&!removed.includes(mesh.userData.part.id)&&mesh.userData.part.type==='PROFILE'&&!mesh.userData.part.hidden&&mesh.visible!==false)].map(mesh=>({mesh,label:mesh.userData.part.displayId||mesh.userData.part.name})),.001);
+          if(blockers.length)throw new Error('插槽板回改后会穿过 '+blockers[0]+'，请先调整板材/承托梁；不会抬板或裁型材');
+        }
       }
       return {rows,removed,panelPlans,sideJoints:rackSideJointPlan(next,memberIds),parameters:{...next.parameters,memberIds,position:{x:origin.x,y:origin.y,z:origin.z}},signature:JSON.stringify(e.exportProject()),changed:JSON.stringify(old.parameters)!==JSON.stringify(next.parameters)};
     } finally {for(const ghost of ghosts)ProfileGeometryFactory.disposeObject(ghost);}
@@ -86,10 +99,11 @@ export default class FrameParameterManager {
     if(!this.active||!plan?.changed)throw new Error('请修改参数并预览，再确认');
     if(plan.signature!==JSON.stringify(e.exportProject()))throw new Error('工程已变化，请重新预览');
     const before=e.exportProject(),selection=e.selectedMeshes.map(mesh=>mesh.userData.part.id),a=e.assemblyManager.get(this.assemblyId);
+    const historyStates=[...e.historyManager.states],historyIndex=e.historyManager.index;
     try {
       const sideTargets=new Map(plan.sideJoints.map(joint=>[joint.sourceProfileId+'|'+joint.sourceEnd,joint]));
       for(const c of [...e.connectionManager.connections]){
-        const joint=!['SIDE_CORNER','SIDE_MOUNT'].includes(c.jointKind)?sideTargets.get(c.sourceProfileId+'|'+c.sourceEnd):null;
+        const joint=!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(c.jointKind)?sideTargets.get(c.sourceProfileId+'|'+c.sourceEnd):null;
         // 显式改接法时只解除受本次规划影响的纯自动旧宿主；手工/制造关系在 plan 中已被保护。
         const retarget=joint&&(joint.targetProfileId!==c.targetProfileId||joint.targetFace!==c.targetFace);
         if(plan.removed.includes(c.sourceProfileId)||plan.removed.includes(c.targetProfileId)||retarget&&c.autoGenerated&&!c.userOverridden&&!c.manufacturingRuleId)e.connectionManager.removeConnection(c.id);
@@ -100,15 +114,21 @@ export default class FrameParameterManager {
       a.parameters=structuredClone(plan.parameters);
       const ids=plan.rows.map(row=>row.id);e.connectionManager.updateConnectionsForProfiles(ids);e.accessoryMountManager.refreshForTargets([...ids,...plan.panelPlans.map(row=>row.id)]);
       const autoConnection=plan.parameters.autoConnect?e.autoConnectionResolver.connectProfileSet(ids,{source:'FRAME_PARAMETERS',sideJoints:plan.sideJoints}):null;
+      for(const row of plan.panelPlans.filter(value=>value.panelSpec.placement==='T_SLOT')){
+        const part=e.parts.find(value=>value.id===row.id),opening=e.panelDoorConfigurator.resolveSavedPanelOpening(part);
+        assertPanelSlotEngagement(part,opening);
+        const blockers=panelReliefBlockers(part,panelReliefObjects(e,part.id),.001);
+        if(blockers.length)throw new Error('插槽板回改后与 '+blockers[0]+' 相交，请先预览处理裁角；本次整架修改已还原');
+      }
       e.selectMany(ids.map(id=>e.getMeshByPartId(id)));this.cancel();e.updateDimensions();e.emitStats();e.interferenceFeedbackManager.refresh({live:false});e.historyManager.capture();e.emitProjectChanged();e.onSelectionChanged?.(e.selected,[...e.selectedMeshes]);
       return {memberCount:ids.length,panelCount:plan.panelPlans.length,connectionFailureCount:autoConnection?.failureCount||0};
-    }catch(error){e.restoreProject(before);e.selectMany(selection.map(id=>e.getMeshByPartId(id)).filter(Boolean));this.cancel();throw error;}
+    }catch(error){e.historyManager.states=historyStates;e.historyManager.index=historyIndex;e.restoreProject(before);e.selectMany(selection.map(id=>e.getMeshByPartId(id)).filter(Boolean));this.cancel();throw error;}
   }
   clearPreview(){if(this.previewGroup){this.previewGroup.removeFromParent();ProfileGeometryFactory.disposeObject(this.previewGroup);this.previewGroup=null;}this.pending=null;}
   cancel(){this.clearPreview();if(!this.active)return;this.active=false;this.onChanged?.({active:false,assemblyId:null,ready:false,error:''});const e=this.editor;e.sceneManager.transformControls.enabled=true;if(e.isMeshTransformable(e.selected))e.sceneManager.transformControls.attach(e.selected);e.profileGripEditor.refresh(true);}
 }
 function tint(mesh,color=0xffba4a){mesh.traverse(child=>{if(!child.isMesh)return;for(const material of [].concat(child.material||[])){material.color.set(color);material.transparent=true;material.opacity=.4;material.depthWrite=false;}child.userData.__framePreview=true;});}
-function setPanelSize(part,row){part.dimensions.width=row.width;part.dimensions.height=row.height;if(part.dimensions.shapeParameters)Object.assign(part.dimensions.shapeParameters,{width:row.width,height:row.height});}
+function setPanelSize(part,row){part.dimensions.width=row.width;part.dimensions.height=row.height;if(part.dimensions.shapeParameters)Object.assign(part.dimensions.shapeParameters,{width:row.width,height:row.height});if(row.panelSpec)part.panelSpec=structuredClone(row.panelSpec);}
 
 /** 规划副本和正式提交读同一型号；只在用户明确换型号时换截面，不更改编号、颜色或旧加工。 */
 function memberPart(original,row){

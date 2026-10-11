@@ -37,6 +37,7 @@ import {HardwareCatalogList} from './model/HardwareCatalog.js';
 import DiyGenerator from './diy/DiyGenerator.js';
 import {DiyTemplateList, getDiyTemplate} from './diy/DiyTemplateCatalog.js';
 import {layeredRackLayout,RackProfileRoles,RackSideMountOptions,createRackRoleSettings,RACK_LAYOUT_VERSION} from './diy/LayeredRackModel.js';
+import {rackLayerMeasurements,plannedRackLayerMeasurements,rackDistanceText,rackClearanceText} from './diy/RackLayerMeasurements.js';
 import {BatchConnectionComponentOptions} from './connection/ConnectionBatchManager.js';
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
 import {workbenchIcon} from './ui/WorkbenchIcons.js';
@@ -80,6 +81,9 @@ createApp({
     const footerTipElement=ref(null);
     const footerTip=reactive({visible:false,text:'',x:0,y:0});
     let footerTipAnchor=null,footerTipSequence=0;
+    const footerElement=ref(null),footerScroll=ref(null),footerTransformBar=ref(null),footerDisplayBar=ref(null),footerMeasureBar=ref(null),footerMoreMenu=ref(null),footerRotateMenu=ref(null);
+    const footerVisibleActionCount=ref(0);
+    let footerResizeObserver=null,footerLayoutFrame=0,footerLayoutDisposed=false;
     const footerContextTip=computed(()=>{
       const selection=selectedConnection.value?`已选择连接件：${selectedConnectionLabel.value}`:selectionCount.value>1?`已选择 ${selectionCount.value} 个构件`:selectedPart.value?`${selectedPart.value.displayId} · ${selectedPart.value.name}`:'未选择构件';
       const operation=drawState.active
@@ -101,9 +105,26 @@ createApp({
     function openQuickPanel(mode) { cancelPlacementTools();const reopen=layoutManager?.isSideCollapsed('left');quickPanel.value=!reopen&&quickPanel.value===mode?'':mode;if(quickPanel.value)layoutManager?.expandSide('left'); }
     function openResource(id) { cancelPlacementTools();layoutManager?.expandSide('right');rightPanelMode.value='create';activeLibrary.value=id; }
     function viewDirection(item) { editor?.viewDirection(new THREE.Vector3(item.x,item.y,item.z)); }
-    function quickRotate(axis) {
-      try { setMode('rotate');if(editor?.rotateSelectionQuarterTurn(axis))notify(`已绕 ${axis} 轴旋转 +90°`); }
+    function quickRotate(axis,keepMenuOpen=false) {
+      try {
+        // 弹层已经进入旋转工具时直接复用实体事务，不能再取消工具而收起连续操作入口。
+        if(!keepMenuOpen||!footerRotateMenu.value?.open||toolMode.value!=='rotate')setMode('rotate');
+        profileRollHasWarning=false;
+        if(editor?.rotateSelectionQuarterTurn(axis)&&!profileRollHasWarning)notify(axis==='PROFILE'?'横梁截面已旋转 +90°':`已绕 ${axis} 轴旋转 +90°`);
+      }
       catch(error){notify(error.message||'旋转失败','warning');}
+    }
+    // 原生 details 管展开/关闭；只切换工具，不在打开快捷按钮时旋转构件。
+    function activateFooterRotation(event) {
+      const opening=!footerRotateMenu.value?.open;
+      setMode('rotate');
+      if(!opening||!selectionCount.value)event.preventDefault();
+    }
+    function closeFooterRotation(restoreFocus=false) {
+      const menu=footerRotateMenu.value;
+      if(!menu?.open)return;
+      menu.open=false;
+      if(restoreFocus)menu.querySelector('summary')?.focus({preventScroll:true});
     }
     const connectionPlacementState = reactive({active:false,mode:null,step:1,message:''});
     const machiningPlacementState = reactive({active:false,mode:null,message:''});
@@ -118,11 +139,12 @@ createApp({
     const connectionBatchNotice=ref('');
     const frameEdit=reactive({active:false,assemblyId:null,ready:false,memberCount:0,addedCount:0,removedCount:0,panelCount:0,collisionCount:0,error:''});
     const selectedParameterFrame=computed(()=>{projectRevision.value;const id=selectedPart.value?.assemblyId;return id&&selectedMeshes.value.every(mesh=>mesh.userData.part.assemblyId===id)?editor?.assemblyManager.get(id)?.configurator==='LAYERED_RACK'?editor.assemblyManager.get(id):null:null;});
+    const selectedRackMeasurements=computed(()=>{projectRevision.value;layerMeasurementRevision.value;return selectedParameterFrame.value?rackLayerMeasurements(selectedParameterFrame.value,editor?.parts||[]):null;});
     function beginFrameEdit(){
       const id=selectedParameterFrame.value?.id;if(!id)return;
       cancelPlacementTools();
       layoutManager?.expandSide('left');layoutManager?.expandSide('right');
-      try{const parameters=editor.frameParameterManager.begin(id);Object.assign(diyForm,{layoutVersion:1,bayCount:1,bayMode:'SHARED',topMount:'BETWEEN',bottomMount:'BETWEEN',sideMount:'FRAME',bottomClearance:0,manualLevelHeights:false},parameters,{profileRoles:{...createRackRoleSettings(),...structuredClone(parameters.profileRoles||{})},levelSettings:structuredClone(parameters.levelSettings||[])});syncDiyLayers();diyTemplateId.value='CUSTOM';Object.assign(frameEdit,{active:true,assemblyId:id,ready:false,error:''});quickPanel.value='build';rightPanelMode.value='create';}
+      try{const parameters=editor.frameParameterManager.begin(id);Object.assign(diyForm,{layoutVersion:1,bayCount:1,bayMode:'SHARED',topMount:'BETWEEN',bottomMount:'BETWEEN',sideMount:'FRAME',bottomClearance:0,centerDirection:'DEPTH',manualLevelHeights:false},parameters,{profileRoles:{...createRackRoleSettings(),...structuredClone(parameters.profileRoles||{})},levelSettings:structuredClone(parameters.levelSettings||[])});syncDiyLayers();diyTemplateId.value='CUSTOM';Object.assign(frameEdit,{active:true,assemblyId:id,ready:false,error:''});quickPanel.value='build';rightPanelMode.value='create';}
       catch(error){notify(error.message,'warning');}
     }
     function previewFrameEdit(){
@@ -260,7 +282,7 @@ createApp({
     const dimensionState = ref(null);
     const userDimensions = ref([]);
     const dimensionChainAxis = ref('AUTO');
-    const annotationOptions = reactive({showOverall:true,showPartDimensions:false,showPartNumbers:true,showMachiningLabels:true,showMachiningSurface:true,showMachiningDimensions:false,showUserDimensions:true});
+    const annotationOptions = reactive({showOverall:true,showRackLayers:true,showPartDimensions:false,showPartNumbers:true,showMachiningLabels:true,showMachiningSurface:true,showMachiningDimensions:false,showUserDimensions:true});
     const boxSelectMode = ref(false);
     const lassoSelectMode = ref(false);
     const transformSpace = ref('world');
@@ -276,6 +298,7 @@ createApp({
     const machiningSelection = ref([]);
     const batchMachiningFace = ref('FRONT');
     const projectRevision = ref(0);
+    const layerMeasurementRevision = ref(0);
     const selectedAssemblyId = ref(null);
     const contourEditState = reactive({active:false,assemblyId:null,pointCount:0,points:[],edges:[],orthogonal:true,plane:'XZ',message:''});
     const contourPresetForm = reactive({widthMm:1000,depthMm:600,notchMm:300});
@@ -307,6 +330,11 @@ createApp({
     const manufacturingConfigTab = ref('profiles');
     const showShortcutHelp = ref(false);
     let editor = null;
+    let profileRollHasWarning=false;
+    const canRollProfileSection=computed(()=>{
+      projectRevision.value;selected.value;selectedMeshes.value;transformMoveScope.value;
+      return !!editor?.canRollSelectedProfileSection();
+    });
     let viewportResizeObserver = null;
     let diyGenerator = null;
     let timer = null;
@@ -371,8 +399,8 @@ createApp({
     watch([()=>catalogAccessoryForm.head,()=>catalogAccessoryForm.thread],()=>{if(catalogAccessoryForm.head!=='ELASTIC_NUT'&&!fastenerLengthOptions.value.includes(catalogAccessoryForm.screwLength))catalogAccessoryForm.screwLength=fastenerLengthOptions.value[0];});
     watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value,selectedDesignProfile.value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
     const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#8491a5','钢板':'#8b959f'});
-    const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',normalOffsetMm:0,previewRelief:true});
-    const panelReliefState=reactive({active:false,partId:null,ready:false,error:'',note:'',notchCount:0});
+    const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',placement:'T_SLOT',normalOffsetMm:0,previewRelief:true});
+    const panelReliefState=reactive({active:false,partId:null,ready:false,error:'',note:'',notchCount:0,adaptation:false,dimensions:null});
     const panelReliefForm=reactive({gapMm:1,notches:[]});
     const connectionReplacementState=reactive({active:false,connectionId:null,ready:false,error:'',note:''});
     const connectionReplacementForm=reactive({choices:[],kind:'',spec:''});
@@ -390,20 +418,21 @@ createApp({
     const diyProfileRoles=RackProfileRoles;
     const diySideMountOptions=RackSideMountOptions;
     watch(diyForm,()=>{if(frameEdit.active){editor?.frameParameterManager.clearPreview();frameEdit.ready=false;frameEdit.error='参数已改变，请重新预览';}},{deep:true});
-    watch(()=>diyForm.levels,syncDiyLayers,{immediate:true});
+    watch(()=>diyForm.levels,(_levels,previousLevels)=>syncDiyLayers(previousLevels),{immediate:true});
     const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const diyLayoutInput=computed(()=>frameEdit.active?diyForm:{...diyForm,layoutVersion:RACK_LAYOUT_VERSION});
     const diyLayout=computed(()=>{sectionRevision.value;try{return {layout:layeredRackLayout(diyLayoutInput.value),error:''};}catch(error){return {layout:null,error:error.message};}});
     const diyAutomaticLayout=computed(()=>{sectionRevision.value;const input=diyLayoutInput.value;try{return layeredRackLayout({...input,layoutVersion:Number(input.layoutVersion)===1?2:input.layoutVersion,manualLevelHeights:false});}catch{return null;}});
     const diyPartCount=computed(()=>diyLayout.value.layout?.members.length??null);
     const diyFrameError=computed(()=>diyLayout.value.error);
+    const diyPlannedMeasurements=computed(()=>plannedRackLayerMeasurements(diyLayout.value.layout));
     const diyStructureSummary=computed(()=>{
       const layout=diyLayout.value.layout;if(!layout)return '';
       const counts=layout.roleCounts;
       if(!counts)return `${layout.members.filter(row=>row.key.startsWith('POST:')).length} 根立柱 · ${diyForm.levels} 层 · 共 ${layout.members.length} 根型材`;
       return diyProfileRoles.filter(role=>counts[role.id]).map(role=>counts[role.id]+' 根'+role.label).join(' · ')+' · 共 '+layout.members.length+' 根';
     });
-    const diyLayerRows=computed(()=>diyForm.levelSettings.map((setting,index)=>({index,setting,label:index===0?'底层':index===diyForm.levelSettings.length-1?'顶层':`第 ${index+1} 层`,middle:index>0&&index<diyForm.levelSettings.length-1,defaultHeight:Math.round(diyAutomaticLayout.value?.layerHeights?.[index]??index*diyForm.height/Math.max(1,diyForm.levels-1))})));
+    const diyLayerRows=computed(()=>diyForm.levelSettings.map((setting,index)=>({index,setting,label:index===0?'底层':index===diyForm.levelSettings.length-1?'顶层':`第 ${index+1} 层`,middle:index>0&&index<diyForm.levelSettings.length-1,defaultHeight:Math.round(diyAutomaticLayout.value?.layerHeights?.[index]??index*diyForm.height/Math.max(1,diyForm.levels-1)),measurement:diyPlannedMeasurements.value?.rows[index]})));
     const drawForm = reactive({catalogId:getDefaultDesignProfileId('3030'),plane:'XZ',orthogonal:true,gridSnap:true,gridStepMm:10,fixedLengthMm:0,continueDrawing:false,boxWidthMm:1000,boxDepthMm:600,boxHeightMm:1000});
     const selectedDesignProfile = computed(()=>{sectionRevision.value;return getDesignProfileDefinition(newProfile.catalogId);});
     const hasChosenProfile = ref(false);
@@ -442,6 +471,8 @@ createApp({
       catalogConnectionForm.free=false;
     },{immediate:true});
     const selectionCount = computed(() => selectedMeshes.value.length);
+    const panelProfileCount=computed(()=>selectedMeshes.value.filter(mesh=>mesh.userData?.part?.type==='PROFILE').length);
+    watch(selectionCount,count=>{if(!count)closeFooterRotation();},{flush:'post'});
     const projectParts = computed(() => { projectRevision.value; return editor ? editor.parts.map(part => ({...part})) : []; });
     const hasHiddenParts = computed(() => projectParts.value.some(part=>part.hidden===true));
     const projectGroups = computed(() => {
@@ -1048,7 +1079,7 @@ createApp({
       editor.connectionReplacementManager.onChanged=state=>Object.assign(connectionReplacementState,state);
       editor.wholeStretchManager.onChanged=state=>Object.assign(wholeStretchState,state);
       editor.onInteractionError=message=>notify(message,'warning');
-      editor.onStatsChanged = value => Object.assign(stats,value);
+      editor.onStatsChanged = value => {Object.assign(stats,value);layerMeasurementRevision.value++;};
       editor.onSnapChanged = value => {
         lastSnap.value = value;
         if (!value?.preview && value?.targetFace) notify(`已吸附：${endLabel(value.sourceEnd)} → ${faceLabel(value.targetFace)}`,'success');
@@ -1070,6 +1101,12 @@ createApp({
         const count=Array.isArray(items)?items.length:0;
         if(count)notify(`单个移动后 ${count} 个失效连接已解除；需要整体保持时请选择“保持连接移动”`,'warning');
       };
+      editor.onProfileRollConnectionsChanged = result => {
+        if(!result.invalid.length)return;
+        profileRollHasWarning=true;
+        const reason=result.invalid[0].validation?.errors?.[0]?.message||'孔槽、贴合或安装空间不匹配';
+        notify(`截面已转动，${result.invalid.length} 个连接需重新检查；原记录保留。${reason}`,'warning');
+      };
       autoConnectionEnabled.value = editor.autoConnectionEnabled !== false;
       editor.connectionPlacementManager.onChanged = state => {
         Object.assign(connectionPlacementState,{active:false,mode:null,step:1,message:'',...(state||{})});
@@ -1084,6 +1121,7 @@ createApp({
         if(state?.notify && state?.message) notify(state.message,state.message.includes('失败')||state.message.includes('不能')||state.message.includes('干涉')?'warning':'success');
       };
       editor.onProjectChanged = () => {
+        editor.annotationManager.requestRefresh();
         if(panelReliefState.active)cancelPanelRelief();
         if(connectionReplacementState.active)cancelConnectionReplacement();
         projectRevision.value++;
@@ -1237,12 +1275,21 @@ createApp({
       // 底栏因绘制/旋转或窄屏换行变高时，更新实际画布，不改变工程坐标。
       viewportResizeObserver=new ResizeObserver(()=>{hideFooterTip();repositionFooterMenus();editor?.sceneManager.resize();});
       viewportResizeObserver.observe(viewport.value);
+      footerResizeObserver=new ResizeObserver(scheduleFooterActions);
+      for(const element of [footerScroll.value,footerTransformBar.value,footerDisplayBar.value,footerMeasureBar.value]){
+        if(element)footerResizeObserver.observe(element);
+      }
+      scheduleFooterActions();
     });
 
     onBeforeUnmount(() => {
       hideFooterTip();
+      closeFooterRotation();
       clearTimeout(viewportSaveTimer);
       viewportResizeObserver?.disconnect();
+      footerLayoutDisposed=true;
+      footerResizeObserver?.disconnect();
+      cancelAnimationFrame(footerLayoutFrame);
       window.removeEventListener('keydown', handleKeyboard);
       window.removeEventListener('keyup', handleKeyboardUp);
       window.removeEventListener('pointerdown',closeContextMenu,true);
@@ -1269,7 +1316,10 @@ createApp({
     });
 
     function handleKeyboard(event) {
-      if(event.key==='Escape')hideFooterTip();
+      if(event.key==='Escape'){
+        hideFooterTip();
+        if(footerRotateMenu.value?.open){event.preventDefault();closeFooterRotation(true);return;}
+      }
       if(event.key==='Control'&&drawState.active)editor?.setSnapTemporarilyDisabled(true);
       if (event.defaultPrevented || gripState.active) return;
       if(event.key==='Escape'){
@@ -1304,6 +1354,8 @@ createApp({
       const target = event.target;
       if (target && (['INPUT','SELECT','TEXTAREA'].includes(target.tagName)||target.isContentEditable)) return;
       if(editor?.selectionGestureManager.marqueeGesture||editor?.sceneManager.marqueeStart){event.preventDefault();return;}
+      // 旋转入口和轴按钮保留原生 Enter/Space 点击，连续操作时不误触发画布的临时框选。
+      if(target?.closest?.('button,summary')&&footerRotateMenu.value?.contains(target)&&['Enter',' '].includes(event.key)&&!event.ctrlKey&&!event.metaKey&&!event.altKey)return;
       // 编辑器剪贴板只接管构件操作；输入框、可编辑文字和工程报表继续使用浏览器剪贴板。
       if((event.ctrlKey||event.metaKey)&&!event.altKey&&['c','v','x'].includes(event.key.toLowerCase())){
         if(document.querySelector('.engineering-center-backdrop'))return;
@@ -1633,10 +1685,7 @@ createApp({
       try {
         const part=selectedPart.value;
         if(!part)throw new Error('请先选择框口板材');
-        editor.refitConfiguredPanel(part.id);
-        projectRevision.value++;
-        notify('板材已重新适配当前框口');
-        if(part.dimensions.edgeNotches?.length||part.panelSpec?.connectorRelief)beginPanelRelief(part.id);
+        beginPanelRelief(part.id,true);
       } catch(error) { notify(error.message,'warning'); }
     }
 
@@ -1693,15 +1742,23 @@ createApp({
       const label=role.id==='post'?(turn?'转90°':'原朝向'):across>vertical?'平放':'立放';
       return `${label} ${across}×${vertical}`;
     }
-    function syncDiyLayers(){
+    function syncDiyLayers(previousLevels){
       const length=Math.max(2,Math.min(12,Math.trunc(Number(diyForm.levels)||2)));
-      while(diyForm.levelSettings.length<length)diyForm.levelSettings.push({heightMm:null,catalogId:'',centerCatalogId:'',centerBeamCount:null,leftSideMount:'',rightSideMount:''});
-      for(const setting of diyForm.levelSettings){
+      const settings=diyForm.levelSettings;
+      const previousLength=previousLevels==null?0:Math.max(2,Math.min(12,Math.trunc(Number(previousLevels)||2)));
+      // 层数改变时只增减中间层，顶层整组选配跟随顶层，不能留在旧层号；手动覆盖同样保留。
+      // 载入预设/已保存参数的显式同步不移动层设置，也不猜测旧工程是否受过此问题影响。
+      const topSetting=previousLength>=2&&settings.length===previousLength&&previousLength!==length?settings.pop():null;
+      const bodyLength=topSetting?length-1:length;
+      if(settings.length>bodyLength)settings.splice(bodyLength);
+      while(settings.length<bodyLength)settings.push({heightMm:null,catalogId:'',centerCatalogId:'',centerBeamCount:null,centerDirection:'',leftSideMount:'',rightSideMount:''});
+      if(topSetting)settings.push(topSetting);
+      for(const setting of settings){
         if(setting.centerCatalogId==null)setting.centerCatalogId='';
+        if(setting.centerDirection==null)setting.centerDirection='';
         if(setting.leftSideMount==null)setting.leftSideMount='';
         if(setting.rightSideMount==null)setting.rightSideMount='';
       }
-      if(diyForm.levelSettings.length>length)diyForm.levelSettings.splice(length);
     }
     function setDiyManualHeights(){
       if(diyForm.manualLevelHeights)for(const row of diyLayerRows.value)if(row.middle&&row.setting.heightMm==null)row.setting.heightMm=Math.round(row.defaultHeight*1000)/1000;
@@ -1896,15 +1953,100 @@ createApp({
       event.preventDefault();const menu=summary.parentElement;closeCadMenus(menu);menu.open=true;
     }
 
+    // 同一组动作供直接按钮与收纳菜单使用；顺序也决定空间不足时的保留优先级。
+    const footerActions=computed(()=>{
+      const noSelection=!selectionCount.value;
+      return [
+        {id:'copy',label:'复制',shortcut:'Ctrl+C',icon:'batch',disabled:noSelection,tip:'复制 · Ctrl+C；Ctrl+V 粘贴。Ctrl+D 或 Ctrl/Alt 拖拽直接创建副本',run:()=>copySelected()},
+        {id:'paste',label:'粘贴',shortcut:'Ctrl+V',disabled:!clipboardCount.value,run:()=>pasteSelected()},
+        {id:'cut',label:'剪切',shortcut:'Ctrl+X',disabled:noSelection,run:()=>cutSelected()},
+        {id:'delete',label:'删除',shortcut:'D / Delete',icon:'delete',danger:true,disabled:!selected.value&&!selectedConnection.value,run:()=>deleteSelected()},
+        {id:'align',label:'对齐',menuLabel:'快速对齐',shortcut:'E',disabled:selectionCount.value<2,active:quickAlignmentVisible.value,run:toggleQuickAlignment},
+        {id:'box',label:'框选',shortcut:'Shift / Space+拖动',active:boxSelectMode.value,run:toggleBoxSelect},
+        {id:'group',label:'组合',menuLabel:'组合组件',shortcut:'G',disabled:selectionCount.value<2,tip:'组合组件 · G；将多个构件归入同一个组件，不会合并几何',run:groupSelection},
+        {id:'ungroup',label:'解组',shortcut:'X',disabled:noSelection,run:ungroupSelection},
+        {id:'duplicate',label:'创建副本',shortcut:'Ctrl+D',disabled:noSelection,run:()=>duplicateSelected()},
+        {id:'measure',label:'标尺',shortcut:'T',active:measureMode.value,run:toggleMeasure},
+        {id:'dimension',label:'永久标注',active:dimensionMode.value,run:toggleDimensionMode},
+        {id:'visibility',label:selectionCount.value?'隐藏':'显示隐藏',menuLabel:selectionCount.value?'隐藏选中构件':'显示全部隐藏构件',shortcut:'H',disabled:noSelection&&!hasHiddenParts.value,run:toggleSelectionVisibility},
+        {id:'stretch',label:'整体拉伸',shortcut:'Shift+B',disabled:noSelection,run:startWholeStretch},
+        {id:'lasso',label:'自由选择',shortcut:'L',active:lassoSelectMode.value,run:toggleLassoSelect},
+        ...['X','Y','Z'].map(axis=>({id:'mirror-'+axis,label:'镜像 '+axis,menuLabel:'镜像 · '+axis+' 方向',disabled:noSelection,run:()=>mirrorAlong(axis)})),
+        ...['X','Y','Z'].map(axis=>({id:'rotate-'+axis,label:axis+' +90°',menuLabel:'旋转 '+axis+' +90°',shortcut:'Alt+'+axis,disabled:noSelection,run:()=>quickRotate(axis)})),
+        {id:'batch',label:'批量 / 阵列',menuLabel:'批量操作 / 阵列',run:()=>openQuickPanel('batch')},
+        {id:'validation',label:'结构检查',menuLabel:'检查结构与制造',run:runFactoryValidation},
+        {id:'space',label:transformSpace.value==='local'?'构件轴':'画布轴',menuLabel:'轴方向：'+(transformSpace.value==='local'?'构件方向':'画布方向'),tip:'画布方向：固定的 X/Y/Z；构件方向：随构件旋转。与鼠标位置、旋转中心无关。',run:toggleTransformSpace}
+      ];
+    });
+    const footerInlineActions=computed(()=>footerActions.value.slice(0,footerVisibleActionCount.value));
+    const footerOverflowActions=computed(()=>footerActions.value.slice(footerVisibleActionCount.value));
+    function footerActionTip(action){return action.tip||`${action.menuLabel||action.label}${action.shortcut?' · '+action.shortcut:''}`;}
+
+    function scheduleFooterActions(){
+      if(footerLayoutDisposed||footerLayoutFrame||!footerElement.value)return;
+      footerLayoutFrame=requestAnimationFrame(()=>{footerLayoutFrame=0;layoutFooterActions();});
+    }
+
+    function layoutFooterActions(){
+      const scroll=footerScroll.value,bar=footerTransformBar.value,measure=footerMeasureBar.value;
+      if(footerLayoutDisposed||drawState.active||!scroll||!bar||!measure||scroll.clientWidth<=0)return;
+      const actions=footerActions.value;
+      const samples=[...measure.querySelectorAll('[data-footer-measure]')];
+      if(samples.length!==actions.length)return;
+      const barStyle=getComputedStyle(bar),scrollStyle=getComputedStyle(scroll);
+      const gap=parseFloat(barStyle.columnGap)||0,scrollGap=parseFloat(scrollStyle.columnGap)||0;
+      const outerWidth=element=>{const style=getComputedStyle(element);return element.getBoundingClientRect().width+(parseFloat(style.marginLeft)||0)+(parseFloat(style.marginRight)||0);};
+      const fixed=[...bar.children].filter(element=>!element.hasAttribute('data-footer-action')&&!element.hasAttribute('data-footer-overflow')&&element.getClientRects().length);
+      const fixedWidth=fixed.reduce((width,element)=>width+outerWidth(element),0);
+      const padding=(parseFloat(barStyle.paddingLeft)||0)+(parseFloat(barStyle.paddingRight)||0);
+      const displayWidth=footerDisplayBar.value?outerWidth(footerDisplayBar.value)+scrollGap:0;
+      const budget=scroll.clientWidth-displayWidth-padding-fixedWidth;
+      const widths=samples.map(outerWidth);
+      const moreWidth=outerWidth(measure.querySelector('[data-footer-measure-more]'));
+      const required=(count,withMore)=>widths.slice(0,count).reduce((width,value)=>width+value,0)+(withMore?moreWidth:0)+Math.max(0,fixed.length+count+(withMore?1:0)-1)*gap;
+      let count=actions.length;
+      if(required(count,false)>budget-1){
+        count=0;
+        for(let candidate=1;candidate<actions.length;candidate++){
+          if(required(candidate,true)>budget-1)break;
+          count=candidate;
+        }
+      }
+      if(count===footerVisibleActionCount.value)return;
+      const previousCount=footerVisibleActionCount.value;
+      const focusedAction=document.activeElement?.closest?.('[data-footer-action]');
+      const focusedId=focusedAction&&footerElement.value.contains(focusedAction)?focusedAction.dataset.footerAction:null;
+      const menuFocused=footerMoreMenu.value?.contains(document.activeElement);
+      if(count===actions.length&&footerMoreMenu.value)footerMoreMenu.value.open=false;
+      footerVisibleActionCount.value=count;
+      hideFooterTip();
+      nextTick(()=>{
+        if(footerLayoutDisposed||!footerElement.value)return;
+        if(focusedId&&!focusedAction.isConnected){
+          const inline=footerElement.value.querySelector(`.footer-inline-action[data-footer-action="${focusedId}"]`);
+          const menu=footerMoreMenu.value;
+          const target=inline||(menu?.open?menu.querySelector(`[data-footer-action="${focusedId}"]`):menu?.querySelector('summary'));
+          target?.focus({preventScroll:true});
+        }else if(menuFocused&&count===actions.length){
+          const target=footerElement.value.querySelector(`.footer-inline-action[data-footer-action="${actions[previousCount]?.id}"]`);
+          (target||footerElement.value.querySelector('.select-tool'))?.focus({preventScroll:true});
+        }
+        repositionFooterMenus();
+      });
+    }
+    watch(footerActions,scheduleFooterActions,{flush:'post'});
+    watch([()=>drawState.active,()=>wholeStretchState.active,()=>wholeStretchState.phase],scheduleFooterActions,{flush:'post'});
+
     function positionFooterMenu(event) {
       hideFooterTip();
       const menu=event.target;
       requestAnimationFrame(()=>{
-        if(!menu.open)return;
+        if(!menu.open||!menu.isConnected)return;
         const panel=menu.querySelector('.cad-menu-popover'),anchor=menu.querySelector('summary').getBoundingClientRect();
         // 等浏览器完成聚焦滚动后再定位；底栏横向滚动不能裁掉或误关闭弹层。
         const width=panel.offsetWidth,height=panel.offsetHeight;
-        panel.style.left=`${Math.max(8,Math.min(anchor.right-width,window.innerWidth-width-8))}px`;
+        const left=menu===footerRotateMenu.value?anchor.left+(anchor.width-width)/2:anchor.right-width;
+        panel.style.left=`${Math.max(8,Math.min(left,window.innerWidth-width-8))}px`;
         panel.style.top=`${Math.max(8,anchor.top-height-8)}px`;
       });
     }
@@ -1951,8 +2093,8 @@ createApp({
     function handleCadMenuClick(event) {
       const current=event.target?.closest?.('details.cad-menu') || null;
       // 必须等 click 处理完再收起；pointerdown 就隐藏会让 pointerup 落到画布。
-      if(current && event.target?.closest?.('.cad-menu-popover button')) {
-        queueMicrotask(()=>{ current.open=false; });
+      if(current && current!==footerRotateMenu.value && event.target?.closest?.('.cad-menu-popover button')) {
+        queueMicrotask(()=>{current.open=false;});
       }
     }
 
@@ -2768,6 +2910,7 @@ createApp({
     }
 
     function cancelPlacementTools() {
+      closeFooterRotation();
       cancelPanelRelief();cancelConnectionReplacement();
       cancelFrameEdit();
       closeQuickAlignment();cancelConnectionBatch();
@@ -2996,6 +3139,7 @@ createApp({
       if (!selected.value || !selectedPart.value) return;
       if (selectedPart.value.type==='ACCESSORY' && selectedPart.value.mountReference) return notify('已安装配件由宿主定位，请先解除安装关系','warning');
       const radians = Number(event.target.value || 0) * Math.PI / 180;
+      const beforeTransforms=editor.connectionManager.captureProfileTransforms();
       selectedPart.value.rotation[axis] = radians;
       selected.value.rotation[axis] = radians;
       selected.value.updateMatrixWorld(true);
@@ -3004,7 +3148,7 @@ createApp({
       const applied=editor.constraintManager.solveForChangedParts(changed);
       editor.accessoryMountManager?.refreshForTargets([...changed,...applied]);
       const profileIds=[...new Set([...changed,...applied])].filter(partId=>editor.getMeshByPartId(partId)?.userData.part?.type==='PROFILE');
-      editor.connectionManager.updateConnectionsForProfiles(profileIds);
+      editor.connectionManager.updateConnectionsForProfiles(profileIds,{beforeTransforms});
       propertyChanged({skipConnection:true});
     }
 
@@ -3389,10 +3533,10 @@ createApp({
         notify(result.changed?'已更换这一件连接件，另一侧保持不变，可撤销':'已保留当前型号','success');
       }catch(error){connectionReplacementState.ready=false;connectionReplacementState.error=error.message;notify(error.message,'warning');}
     }
-    function beginPanelRelief(partId=selectedPart.value?.id) {
+    function beginPanelRelief(partId=selectedPart.value?.id,fitSlots=false) {
       cancelPlacementTools();
       try{
-        Object.assign(panelReliefForm,editor.panelReliefManager.begin(partId));
+        Object.assign(panelReliefForm,fitSlots?editor.previewConfiguredPanelSlots(partId):editor.panelReliefManager.begin(partId));
         layoutManager?.expandSide('right');rightPanelMode.value='modify';inspectorTab.value='properties';
         if(panelReliefForm.notches.length)previewPanelRelief();else rescanPanelRelief();
       }catch(error){cancelPanelRelief();notify(error.message,'warning');}
@@ -3412,14 +3556,14 @@ createApp({
     }
     function removePanelReliefNotch(index) {panelReliefForm.notches.splice(index,1);invalidatePanelRelief();}
     function addPanelReliefNotch() {
-      const d=selectedPart.value.dimensions;
+      const d=panelReliefState.dimensions||selectedPart.value.dimensions;
       panelReliefForm.notches.push({edge:'LEFT',anchor:'START',offsetMm:0,widthMm:Math.min(20,d.height/4),depthMm:Math.min(20,d.width/4)});
       invalidatePanelRelief();
     }
-    function reliefNotchLabel(notch) {try{return panelNotchLabel(selectedPart.value,notch);}catch{return '缺口';}}
+    function reliefNotchLabel(notch) {try{return panelNotchLabel(panelReliefState.dimensions?{...selectedPart.value,dimensions:panelReliefState.dimensions}:selectedPart.value,notch);}catch{return '缺口';}}
     function cancelPanelRelief(){editor?.panelReliefManager.cancel();}
     function confirmPanelRelief() {
-      try{const result=editor.panelReliefManager.confirm();notify('已确认板材轮廓 · '+result.notchCount+' 处缺口，可撤销','success');}
+      try{const result=editor.panelReliefManager.confirm();notify((result.adapted?'已确认四边插槽适配':'已确认板材轮廓')+' · '+result.notchCount+' 处缺口，可撤销','success');}
       catch(error){panelReliefState.ready=false;panelReliefState.error=error.message;notify(error.message,'warning');}
     }
 
@@ -3822,15 +3966,16 @@ createApp({
     return {
       workbenchConfirm,finishWorkbenchConfirm,contextLengthEditable,
       wholeStretchState,startWholeStretch,confirmWholeStretch,cancelWholeStretch,stretchRangeMode,
-      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
+      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,selectedRackMeasurements,rackDistanceText,rackClearanceText,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
       shaftSmart,shaftSmartTypes,shaftSmartDefinition,shaftSmartPorts,shaftSmartBaseLabel,shaftSmartAvailable,createShaftSmartFixture,
       hasHiddenParts,toggleSelectionVisibility,mirrorAlong,clearAllConnections,
-      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,coplanarTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,
+      footerElement,footerScroll,footerTransformBar,footerDisplayBar,footerMeasureBar,footerMoreMenu,footerRotateMenu,activateFooterRotation,footerActions,footerInlineActions,footerOverflowActions,footerActionTip,
+      quickPanel,rightPanelMode,resourceCategories,workbenchIcon,hoverCadMenu,keepCadMenuOpen,closeCadMenus,positionFooterMenu,repositionFooterMenus,footerTip,footerTipElement,footerContextTip,coplanarTip,showFooterTip,hideFooterTip,leaveFooterTip,viewCubeViewport,viewDirections,openQuickPanel,openResource,viewDirection,quickRotate,canRollProfileSection,
       ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
       catalogConnectionForm,catalogAccessoryForm,profileClosure,profileChoices,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,selectedConnectionInstallable,snapSelectedConnection,editorCycleConnectionCandidate,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
       PanelShapeFields,updatePanelShapeParameter,
-      panelReliefState,panelReliefForm,beginPanelRelief,previewPanelRelief,rescanPanelRelief,invalidatePanelRelief,removePanelReliefNotch,addPanelReliefNotch,reliefNotchLabel,cancelPanelRelief,confirmPanelRelief,
+      panelProfileCount,panelReliefState,panelReliefForm,beginPanelRelief,previewPanelRelief,rescanPanelRelief,invalidatePanelRelief,removePanelReliefNotch,addPanelReliefNotch,reliefNotchLabel,cancelPanelRelief,confirmPanelRelief,
       connectionReplacementState,connectionReplacementForm,replacementSpecs,beginConnectionReplacement,changeReplacementKind,previewConnectionReplacement,cancelConnectionReplacement,confirmConnectionReplacement,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,clipboardCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,

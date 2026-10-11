@@ -26,7 +26,7 @@ export function automaticConnectionChoice(solution,source,planes) {
   const kind=solution.definition.dimensions.geometryKind;
   if(!solution.checked?.valid||!solution.envelope)return {valid:false,message:solution.checked?.message||'当前位置没有合法安装面'};
   if(kind==='HIDDEN_CORNER')return {valid:true,score:60};
-  if(kind!=='CORNER_CUBE')return {valid:false,message:'自动模式只使用普通角码或槽内隐藏件'};
+  if(kind!=='CORNER_CUBE')return {valid:false,message:'自动模式使用普通角码或槽内隐藏件'};
   if(planes.unknownSupport)return {valid:false,message:'当前截面没有可确认的水平承托面，未自动放置外置角码'};
   const envelope=solution.envelope;
   const top=envelope.center.y+envelope.axes.reduce((sum,axis,index)=>sum+Math.abs(axis.y)*envelope.half[index],0);

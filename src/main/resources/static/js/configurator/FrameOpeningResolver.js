@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {resolvePanelSlots} from './PanelSlotPlacement.js';
 
 const AXIS_NAMES = ['X','Y','Z'];
 
@@ -88,6 +89,93 @@ export default class FrameOpeningResolver {
       bounds:{width:widthBounds,height:heightBounds},
       assemblyId:assemblyIds.length === 1 ? assemblyIds[0] : null
     };
+  }
+
+  /**
+   * 板材专用：选四根外边或连同中间承托梁一起选，仍只解析一块外框板；门框的严格四边入口不变。
+   * 水平板按实际梁顶判断同层，而非中心同高；四角允许同一根真实立柱同时贴合两条外边。
+   */
+  resolvePanel(partIds=null,options={}){
+    const ids=partIds?.length?[...new Set(partIds)]:this.selectedProfileIds();
+    if(ids.length<4||ids.length>64)throw new Error('请选择同一框面的四根外边，可一起选中间承托梁（最多64根）');
+    const members=ids.map(id=>{
+      const mesh=this.editor.getMeshByPartId(id);
+      if(!mesh||mesh.userData.part?.type!=='PROFILE')throw new Error('框口板仅支持直线型材');
+      return this.describePanelMember(mesh);
+    });
+    const grouped=new Map();
+    for(const member of members){if(!grouped.has(member.axis))grouped.set(member.axis,[]);grouped.get(member.axis).push(member);}
+    const directions=[...grouped.keys()];
+    if(directions.length!==2||directions.some(axis=>grouped.get(axis).length<2))throw new Error('请选择一个矩形外框的完整四边，不要混选不同层或立柱');
+    const normalAxis=AXIS_NAMES.find(axis=>!directions.includes(axis)),preferred=preferredPanelAxes(normalAxis);
+    const tolerance=Math.max(.01,Number(options.axisToleranceMm??.1)),n=normalAxis.toLowerCase();
+    const placement=options.placement==null||options.placement==='T_SLOT'?'T_SLOT':normalAxis==='Y'&&options.placement!=='INSET'?'ON_FRAME':'INSET';
+    const tops=members.map(m=>m.box.max[n]),bottoms=members.map(m=>m.box.min[n]);
+    const centers=members.map(m=>m.center[n]);
+    if(placement!=='T_SLOT'&&normalAxis==='Y'){
+      if(Math.max(...tops)-Math.min(...tops)>tolerance)throw new Error('所选型材梁顶不在同一层，请只选本层外框与齐平承托梁');
+    }else if(placement!=='T_SLOT'&&Math.max(...centers)-Math.min(...centers)>tolerance&&Math.max(...tops)-Math.min(...tops)>tolerance&&Math.max(...bottoms)-Math.min(...bottoms)>tolerance){
+      throw new Error('所选型材不在同一个框面，请分面生成板材');
+    }
+    const pair=(axis,coordinate)=>{
+      const sorted=[...grouped.get(axis)].sort((a,b)=>a.center[coordinate.toLowerCase()]-b.center[coordinate.toLowerCase()]);
+      const low=sorted[0],high=sorted[sorted.length-1];
+      if(low===high||sorted.some((m,i)=>i&&Math.abs(m.center[coordinate.toLowerCase()]-sorted[i-1].center[coordinate.toLowerCase()])<tolerance))throw new Error('外框有重叠或拼接边，暂不能唯一判断整块板材');
+      return [low,high];
+    };
+    const widthPair=pair(preferred.widthAxis,preferred.heightAxis),heightPair=pair(preferred.heightAxis,preferred.widthAxis);
+    const widthBounds=this.innerBounds(heightPair,preferred.widthAxis),heightBounds=this.innerBounds(widthPair,preferred.heightAxis);
+    const width=widthBounds.max-widthBounds.min,height=heightBounds.max-heightBounds.min;
+    if(width<=1||height<=1)throw new Error('外框净尺寸无效，请检查四条外边');
+    const touches=(a,b)=>AXIS_NAMES.every(axis=>a.box.min[axis.toLowerCase()]<=b.box.max[axis.toLowerCase()]+tolerance&&b.box.min[axis.toLowerCase()]<=a.box.max[axis.toLowerCase()]+tolerance);
+    const columns=[];
+    for(const mesh of this.editor.meshes||[]){
+      const p=mesh.userData?.part;if(!p||p.hidden||mesh.visible===false||ids.includes(p.id)||p.type!=='PROFILE')continue;
+      try{const member=this.describePanelMember(mesh);if(member.axis===normalAxis)columns.push(member);}catch{ /* 未适配/斜切对象不作为闭合证明。 */ }
+    }
+    for(const a of widthPair)for(const b of heightPair){
+      if(!touches(a,b)&&!columns.some(column=>touches(a,column)&&touches(b,column)))throw new Error('外框角部没有贴合，也没有同时接到同一根立柱；请先吸附或补齐外边');
+    }
+    const boundary=[...widthPair,...heightPair],boundaryIds=new Set(boundary.map(m=>m.part.id));
+    for(const member of members.filter(m=>!boundaryIds.has(m.part.id))){
+      const along=member.axis===preferred.widthAxis?widthBounds:heightBounds;
+      const across=member.axis===preferred.widthAxis?heightBounds:widthBounds;
+      const key=(member.axis===preferred.widthAxis?preferred.heightAxis:preferred.widthAxis).toLowerCase();
+      this.assertCovers(member,member.axis,along,tolerance);
+      if(member.box.min[key]<across.min-tolerance||member.box.max[key]>across.max+tolerance)throw new Error('中间承托梁超出所选外框，请只选择同一框内的构件');
+    }
+    const planeMembers=placement==='T_SLOT'?boundary:members;
+    const min=Math.max(...planeMembers.map(m=>m.box.min[n])),max=Math.min(...planeMembers.map(m=>m.box.max[n]));
+    if(max<min-tolerance)throw new Error('所选构件没有共同框面');
+    const center={x:0,y:0,z:0};
+    center[preferred.widthAxis.toLowerCase()]=(widthBounds.min+widthBounds.max)/2;
+    center[preferred.heightAxis.toLowerCase()]=(heightBounds.min+heightBounds.max)/2;
+    center[n]=(min+max)/2;
+    const basis=makePanelBasis(preferred.widthAxis,preferred.heightAxis),euler=new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(basis.width,basis.height,basis.normal)),'XYZ');
+    const assemblyIds=[...new Set(members.map(m=>m.part.assemblyId).filter(Boolean))];
+    const cornerPartIds=columns.filter(column=>widthPair.some(a=>heightPair.some(b=>touches(a,column)&&touches(b,column)))).map(column=>column.part.id);
+    const opening={sourcePartIds:members.map(m=>m.part.id),boundaryPartIds:boundary.map(m=>m.part.id),cornerPartIds,sourceDisplayIds:members.map(m=>m.part.displayId||m.part.id),
+      widthAxis:preferred.widthAxis,heightAxis:preferred.heightAxis,normalAxis,width,height,center,rotation:{x:euler.x,y:euler.y,z:euler.z},
+      basis:{width:{...basis.width},height:{...basis.height},normal:{...basis.normal}},bounds:{width:widthBounds,height:heightBounds},
+      panelPlacement:placement,supportFaceMm:Math.max(...tops),assemblyId:assemblyIds.length===1?assemblyIds[0]:null};
+    return placement==='T_SLOT'?resolvePanelSlots(opening,boundary,options):opening;
+  }
+
+  /** 包络来自型材尺寸和本体姿态，不把表面印字、孔标或选择辅助线算作外框尺寸。 */
+  describePanelMember(mesh){
+    const part=mesh.userData.part,d=part?.dimensions;
+    if(part?.profilePath?.type==='ARC'||part?.type!=='PROFILE'||Object.values(part.endCuts||{}).some(c=>Math.abs(Number(c?.angleDeg||0))>1e-7))throw new Error('自动框口板暂不支持弯杆或斜切边');
+    mesh.updateWorldMatrix(true,false);
+    const scale=mesh.getWorldScale(new THREE.Vector3()),quaternion=mesh.getWorldQuaternion(new THREE.Quaternion());
+    if([scale.x,scale.y,scale.z].some(v=>Math.abs(v-1)>1e-7))throw new Error('自动框口板不支持缩放型材，请用实际截面尺寸');
+    const axes=[new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,1)].map(v=>v.applyQuaternion(quaternion));
+    if(axes.some(v=>Math.max(Math.abs(v.x),Math.abs(v.y),Math.abs(v.z))<1-1e-7))throw new Error('自动框口板暂支持横平竖直及截面90°朝向');
+    const [w,h]=d.sectionSize||[d.size,d.size],length=Number(part.profilePath?.length??d.length);
+    if(![Number(w),Number(h),length].every(v=>Number.isFinite(v)&&v>0))throw new Error('框口型材尺寸无效');
+    const points=[];
+    for(const x of [-w/2,w/2])for(const y of [-h/2,h/2])for(const z of [-length/2,length/2])points.push(new THREE.Vector3(x,y,z).applyMatrix4(mesh.matrixWorld));
+    const box=new THREE.Box3().setFromPoints(points),center=mesh.getWorldPosition(new THREE.Vector3());
+    return {mesh,part,box,center,size:box.getSize(new THREE.Vector3()),axis:dominantAxis(axes[2])};
   }
 
   selectedProfileIds() {

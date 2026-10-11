@@ -13,11 +13,14 @@ const axisWorld=mesh=>new THREE.Vector3(0,0,1).transformDirection(mesh.matrixWor
 /** 梁侧安装保存宿主局部站位与槽偏移，不保存世界姿态，也不占用梁端的另一条连接。 */
 export function normalizeSideMount(value){
   if(!value||!faces.includes(value.sourceContactFace)||!Number.isFinite(value.sourceStationS)||value.sourceStationS<0||!Number.isFinite(value.sourceSlotOffset))return null;
-  return {sourceContactFace:value.sourceContactFace,sourceStationS:value.sourceStationS,sourceSlotOffset:value.sourceSlotOffset};
+  if(value.mode!=null&&(value.mode!=='OUTER_CORNER'||!faces.includes(value.targetContactFace)))return null;
+  if(value.mode==null&&value.targetContactFace!=null)return null;
+  return {sourceContactFace:value.sourceContactFace,sourceStationS:value.sourceStationS,sourceSlotOffset:value.sourceSlotOffset,
+    ...(value.mode==='OUTER_CORNER'?{mode:value.mode,targetContactFace:value.targetContactFace}:{})};
 }
 
 export function sideMountKey(sourceId,targetId,targetFace,reference){
-  return ['SIDE_MOUNT',sourceId,targetId,targetFace,reference?.sourceContactFace].join('|');
+  return ['SIDE_MOUNT',sourceId,targetId,targetFace,reference?.sourceContactFace,reference?.mode||'',reference?.targetContactFace||''].join('|');
 }
 
 /** 只识别水平直梁与竖直柱的真实侧面贴合；斜切、缩放和未知安装面不凭包围盒猜可装。 */
@@ -50,10 +53,32 @@ export function sideMountContacts(source,target){
   return result;
 }
 
+/** 内收梁的外侧角在柱搭接区的内边，不在梁端或正面横梁上。沿真实柱面求边界站位。 */
+export function sideMountJoints(source,target){
+  const contacts=sideMountContacts(source,target),result=[];if(!contacts.length)return result;
+  const part=source.userData.part,tp=target.userData.part,axis=axisWorld(source);
+  for(const contact of contacts){
+    result.push({...contact,sideMount:{sourceContactFace:contact.sourceContactFace,sourceStationS:contact.sourceStationS,sourceSlotOffset:0}});
+    for(const targetFace of faces){
+      const direction=slotWorldNormal(target,targetFace).dot(axis);
+      if(Math.abs(direction)<.99999||!getSlotDefinitionsForFace(tp,targetFace).length)continue;
+      const plane=getFaceSurfaceOffset(tp.dimensions.sectionSize,targetFace),point=new THREE.Vector3();point[plane.axis]=plane.value;
+      const station=source.worldToLocal(target.localToWorld(point)).z+part.dimensions.length/2;
+      // 只取梁长范围内、朝向梁中段的搭接边：柱外边会使角码腿伸到梁外，不能伪报可装。
+      if(station<=.1||station>=part.dimensions.length-.1||Math.abs(station-(direction>0?contact.maximum:contact.minimum))>.10001)continue;
+      result.push({...contact,targetFace,sourceStationS:station,sideMount:{sourceContactFace:contact.sourceContactFace,sourceStationS:station,sourceSlotOffset:0,mode:'OUTER_CORNER',targetContactFace:contact.targetFace}});
+    }
+  }
+  return result;
+}
+
 /** 梁侧参考规格显式派生腿深和孔站位。保持原目录件不变，不把改孔后的设计件称作采购同型号。 */
 export function sideMountComponent(definition,source,sourceMountFace,reference){
   const layout=angleBracketLayout(definition?.dimensions),part=source.userData.part,side=normalizeSideMount(reference);
-  if(!layout||!side||!['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(definition.dimensions.geometryKind)||axisOf(sourceMountFace)===axisOf(side.sourceContactFace))return null;
+  if(!layout||!side||!['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(definition.dimensions.geometryKind))return null;
+  // 外侧直角两面本来就能用原目录角码，不沿用梁下参考件的改孔 / 缩腿尺寸。
+  if(side.mode==='OUTER_CORNER')return sourceMountFace===side.sourceContactFace&&definition.dimensions.sideMountGeometryVersion==null?definition:null;
+  if(axisOf(sourceMountFace)===axisOf(side.sourceContactFace))return null;
   if(definition.dimensions.sideMountGeometryVersion===1)return definition;
   const span=Number(part.dimensions.sectionSize[axisOf(side.sourceContactFace)]),surface=getFaceSurfaceOffset(part.dimensions.sectionSize,side.sourceContactFace);
   const distance=span/2-Math.sign(surface.value)*side.sourceSlotOffset;
@@ -67,12 +92,13 @@ export function sideMountComponent(definition,source,sourceMountFace,reference){
   return result;
 }
 
-/** 同一局部定位用于 Ghost、确认与加载重建；横腿跨梁宽，立腿沿柱高。 */
+/** 同一局部定位用于 Ghost、确认与加载重建；梁下跨宽，外侧角沿梁长 / 柱侧槽安装。 */
 export function sideMountTransform(connection,source,target){
   const side=normalizeSideMount(connection.sideMount),face=connection.sourceMountFace;
-  if(!side||!faces.includes(face)||axisOf(face)===axisOf(side.sourceContactFace))return null;
+  if(!side||!faces.includes(face)||(side.mode==='OUTER_CORNER'?face!==side.sourceContactFace:axisOf(face)===axisOf(side.sourceContactFace)))return null;
   const part=source.userData.part,position=new THREE.Vector3(0,0,side.sourceStationS-part.dimensions.length/2);
   for(const value of [side.sourceContactFace,face]){const plane=getFaceSurfaceOffset(part.dimensions.sectionSize,value);position[plane.axis]=plane.value;}
+  if(side.mode==='OUTER_CORNER')position[axisOf(face)===0?'y':'x']=side.sourceSlotOffset;
   source.localToWorld(position);
   const y=slotWorldNormal(source,face),z=slotWorldNormal(target,connection.targetFace),x=y.clone().cross(z);
   if(x.lengthSq()<.99998)return null;
@@ -84,10 +110,29 @@ export function sideMountTransform(connection,source,target){
 /** 按目标真实槽枚举梁长站位，按源槽派生实际孔；多孔能否同时落槽仍交给逐孔校验。 */
 export function sideMountContexts(source,target,definition,options={}){
   const layout=angleBracketLayout(definition?.dimensions);if(!layout)return [];
-  const part=source.userData.part,contacts=sideMountContacts(source,target),result=[],keys=new Set();
+  const part=source.userData.part,contacts=sideMountJoints(source,target),result=[],keys=new Set();
   for(const contact of contacts){
     if(options.targetFace&&options.targetFace!==contact.targetFace)continue;
     if(options.sideMount&&options.sideMount.sourceContactFace!==contact.sourceContactFace)continue;
+    if(options.sideMount&&(options.sideMount.mode||'')!==(contact.sideMount.mode||''))continue;
+    if(contact.sideMount.mode==='OUTER_CORNER'){
+      const face=contact.sourceContactFace;
+      if(options.sourceMountFace&&options.sourceMountFace!==face)continue;
+      if(options.sideMount&&(options.sideMount.targetContactFace!==contact.sideMount.targetContactFace||Math.abs(options.sideMount.sourceStationS-contact.sourceStationS)>.10001))continue;
+      for(const slot of getSlotDefinitionsForFace(part,face)){
+        if(options.sideMount&&Math.abs(slot.offset-options.sideMount.sourceSlotOffset)>.00001)continue;
+        const sideMount={...contact.sideMount,sourceStationS:options.sideMount?.sourceStationS??contact.sourceStationS,sourceSlotOffset:slot.offset};
+        const componentDefinition=sideMountComponent(definition,source,face,sideMount);if(!componentDefinition)continue;
+        const plane=getFaceSurfaceOffset(part.dimensions.sectionSize,face),local=new THREE.Vector3(0,0,sideMount.sourceStationS-part.dimensions.length/2);
+        local[plane.axis]=plane.value;local[plane.axis==='x'?'y':'x']=slot.offset;
+        const point=source.localToWorld(local),targetLocal=target.worldToLocal(point.clone()),targetLength=target.userData.part.dimensions.length;
+        const sourceEnd=sideMount.sourceStationS<part.dimensions.length/2?'START':'END';
+        result.push({source:{mesh:source,feature:{type:'PROFILE_FACE',face,end:sourceEnd,stationS:sideMount.sourceStationS},point,displayId:part.displayId||part.name},
+          target:{mesh:target,feature:{type:'PROFILE_FACE',face:contact.targetFace,stationS:targetLocal.z+targetLength/2},point:point.clone(),displayId:target.userData.part.displayId||target.userData.part.name},
+          sourceMountFace:face,jointKind:'SIDE_MOUNT',sideMount,designAnchorOffset:{x:0,y:0},componentDefinition});
+      }
+      continue;
+    }
     for(const face of faces){
       if((options.sourceMountFace&&face!==options.sourceMountFace)||axisOf(face)===axisOf(contact.sourceContactFace))continue;
       const slots=getSlotDefinitionsForFace(part,face);
@@ -123,6 +168,12 @@ export function sideMountContexts(source,target,definition,options={}){
 /** 梁侧规则只替代错误的端轴/完整端面假设；接触、真实槽、支撑和空间的严格检查保持。 */
 export function sideMountContactErrors(source,target,options){
   const side=normalizeSideMount(options.sideMount),errors=[];
+  if(side?.mode==='OUTER_CORNER'){
+    const joint=sideMountJoints(source,target).find(value=>value.sideMount.mode==='OUTER_CORNER'&&value.targetFace===options.targetFace&&value.sourceContactFace===side.sourceContactFace&&value.sideMount.targetContactFace===side.targetContactFace&&Math.abs(value.sourceStationS-side.sourceStationS)<=.10001);
+    if(!joint)errors.push({code:'SIDE_MOUNT_OUTER_CONTACT_INVALID',message:'内收梁外侧角没有真实柱面搭接，或保存的安装边界 / 朝向已改变'});
+    if(options.sourceMountFace!==side.sourceContactFace||!sideMountComponent(options.componentDefinition,source,options.sourceMountFace,side))errors.push({code:'SIDE_MOUNT_OUTER_MODEL_UNSUPPORTED',message:'侧梁外侧角请选择原孔位的90度直角件 / 普通角码 / L型件，不使用梁下改孔参考件'});
+    return errors;
+  }
   const contact=side&&sideMountContacts(source,target).find(value=>value.targetFace===options.targetFace&&value.sourceContactFace===side.sourceContactFace);
   if(!contact||side.sourceStationS<contact.minimum-.1||side.sourceStationS>contact.maximum+.1)errors.push({code:'SIDE_MOUNT_CONTACT_INVALID',message:'梁侧与柱面未真实贴合、局部站位越界，或当前斜切/缩放/姿态不支持'});
   if(!side||!faces.includes(options.sourceMountFace)||axisOf(options.sourceMountFace)===axisOf(side.sourceContactFace)||options.componentDefinition?.dimensions?.sideMountGeometryVersion!==1||!['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(options.componentDefinition?.dimensions?.geometryKind))errors.push({code:'SIDE_MOUNT_MODEL_UNSUPPORTED',message:'请选择已适配梁侧孔位的90度直角件或角码参考规格'});

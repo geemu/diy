@@ -1044,13 +1044,24 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .workbench-footer .canvas-bottom-bar .cad-menu-popover button.active{background:transparent;color:#d1d5db;font-weight:400;box-shadow:none}
 .workbench-footer .canvas-bottom-bar .cad-menu-popover button:hover:not(:disabled),.workbench-footer .canvas-bottom-bar .cad-menu-popover button:focus-visible{background:rgba(255,255,255,.06);color:#fff}
 .workbench-footer .footer-display-menu[open]>summary,.workbench-footer .footer-display-menu>summary:hover{background:rgba(255,255,255,.8);color:#33465c}
+/* 操作按底栏实际余量展开；同样式测量区不占布局、不能点击或获得键盘焦点。 */
+.workbench-footer .footer-action-measure{position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none}
+.workbench-footer .footer-action-measure .canvas-transform-bar{width:max-content;max-width:none}
+/* 旋转快捷键只在工具按钮上方临时展开，固定弹层不占底栏宽高。 */
+.workbench-footer .footer-rotate-menu .cad-menu-popover{width:max-content;min-width:0;padding:7px;flex-direction:row;gap:5px;overflow:visible}
+.workbench-footer .footer-rotate-menu .cad-menu-popover button{height:34px;min-width:64px;padding:0 8px;gap:5px;justify-content:center;white-space:nowrap;background:#1b2130;border:1px solid #3a4353;font-size:12px}
+.workbench-footer .footer-rotate-menu .cad-menu-popover button:hover:not(:disabled),.workbench-footer .footer-rotate-menu .cad-menu-popover button:focus-visible{background:#252b3b;border-color:var(--accent);outline:none}
+.workbench-footer .footer-rotate-menu [data-axis="X"] b{color:#f87171}
+.workbench-footer .footer-rotate-menu [data-axis="Y"] b{color:#4ade80}
+.workbench-footer .footer-rotate-menu [data-axis="Z"] b{color:#60a5fa}
+.workbench-footer .footer-rotate-menu .profile-section-rotate{margin-left:3px;border-color:#766038}
+.workbench-footer .footer-rotate-menu .profile-section-rotate b{color:#ffb451}
 .profile-replace-card>summary{font-size:13px;color:#aeb9c9;cursor:pointer;list-style-position:inside}
 .profile-replace-card[open]>.profile-replace-head{margin-top:10px}
 .connection-card.connection-selected{border-color:#ff9800;box-shadow:0 0 0 1px #ff980038}
 .connection-selected-label{margin-bottom:10px;color:#ffb451;font-size:13px;font-weight:600}
 .scene-annotation-label.overall{background:#40576e;color:#fff;border-color:#dce5ee;box-shadow:0 1px 3px #24374c26}
 .library-panel .property-row>label{font-size:12px}.library-panel .inspector-section-title{font-size:13px}
-@media(max-width:1250px){.workbench-footer .canvas-transform-bar>.transform-tool.danger{display:none}}
 .cad-project-chip .project-dot.save-error{background:#ef4444;box-shadow:0 0 0 3px #ef44441f}
 .cad-project-chip .autosave-error{font-size:11px;color:#ff8b8b;white-space:nowrap}
 
@@ -1127,6 +1138,18 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .frame-layer-row{border-top:1px solid #303442;margin-top:10px;padding-top:10px}
 .frame-layer-row>strong{display:block;font-size:12px;font-weight:500;color:#d0d7e2;margin-bottom:8px}
 .frame-layer-row .field-pair{margin-bottom:8px}
+.frame-layer-measurement{margin:0 0 8px;color:#b6c8df;font-size:11px;line-height:1.6}
+.rack-layer-card{margin:12px 0;padding:11px;border:1px solid #303442;border-radius:8px;background:#0c1020;min-width:0}
+.rack-layer-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.rack-layer-heading strong{font-size:12px;font-weight:600;color:#e1e7ef}.rack-layer-heading>span{font-size:10px;color:#9ca6b5}
+.rack-layer-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;line-height:1.5;font-variant-numeric:tabular-nums}
+.rack-layer-table th,.rack-layer-table td{padding:7px 3px;text-align:right;border-bottom:1px solid #252b39;color:#d0d9e7;overflow-wrap:break-word}
+.rack-layer-table th:first-child{width:22%;text-align:left;font-weight:500}.rack-layer-table thead th{font-size:10px;font-weight:500;color:#96a5b9}
+.rack-layer-table tbody th small{display:block;font-size:10px;color:#8291a5}.rack-layer-table tr:last-child td,.rack-layer-table tr:last-child th{border-bottom:0}
+.rack-layer-table .rack-layer-negative{color:#f59a9a}.rack-layer-note{margin:9px 0 0;font-size:10px;line-height:1.65;color:#929eaf}
+.rack-layer-warning{margin:8px 0 0;color:#e4b773;font-size:11px;line-height:1.65}.rack-layer-toggle{margin:10px 0 0;font-size:11px;color:#b9c5d6}
+.scene-annotation-label.rack-layer{background:#eef4fb;color:#365573;border:1px solid #91a8bf;font-size:11px;font-weight:600;padding:3px 6px;box-shadow:none;pointer-events:none}
+.scene-annotation-label.rack-layer.is-overlap{color:#a13f3f;border-color:#c88181;background:#fff0ed}
 .frame-options .inline-check{font-size:12px;line-height:1.6;margin:0 0 8px}
 
 /* 连接件更换和板材裁角共用紧凑深色表单；只在用户进入预览后展开参数。 */

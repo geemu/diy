@@ -56,10 +56,11 @@ export function addMachiningHoleAppearance(group,item,items,pose,part) {
     entranceDepth:{value:data.entrance},traceDepth:{value:data.traceDepth},holeMode:{value:data.mode},
     threadPitch:{value:Math.max(.01,data.pitch)},threadAmplitude:{value:data.amplitude},closedBottom:{value:data.closed?1:0},
     cameraLocal:{value:new THREE.Vector3()},viewLocal:{value:new THREE.Vector3(0,0,1)},orthographic:{value:0},
-    keyLocal:{value:new THREE.Vector3()},fillLocal:{value:new THREE.Vector3()},metalColor:{value:new THREE.Color('#a2a6ab')}
+    keyLocal:{value:new THREE.Vector3()},fillLocal:{value:new THREE.Vector3()},metalColor:{value:new THREE.Color(part.color||0xd3d7db).multiplyScalar(.78)}
   };
   const material=new THREE.ShaderMaterial({uniforms,vertexShader,fragmentShader,
     side:THREE.FrontSide,transparent:true,opacity:1,depthTest:true,depthWrite:true,fog:false});
+  material.extensions.derivatives=true;
   const aperture=new THREE.Mesh(new THREE.CircleGeometry(data.radius,64),material);
   aperture.name='__hole_aperture__';aperture.renderOrder=1600;aperture.raycast=()=>{};
   const inverse=new THREE.Matrix4(),cameraWorld=new THREE.Vector3(),direction=new THREE.Vector3();
@@ -113,18 +114,23 @@ vec3 inwardNormal(vec3 p) {
   return -g/max(length(g),0.00001);
 }
 
-vec3 metalShade(vec3 p,vec3 normal,vec3 view) {
+vec3 metalShade(vec3 p,vec3 normal,vec3 view,float pixelSpan) {
   float depth=max(0.0,-p.z),relativeDepth=depth/max(openingRadius,0.1);
   float cavityLight=0.35+0.65*exp(-relativeDepth*.38);
   float key=max(0.0,dot(normal,keyLocal)),fill=max(0.0,dot(normal,fillLocal));
-  float reflection=pow(max(0.0,dot(normal,normalize(keyLocal+view))),30.0);
+  float reflection=pow(max(0.0,dot(normal,normalize(keyLocal+view))),22.0);
+  float fillReflection=pow(max(0.0,dot(normal,normalize(fillLocal+view))),28.0);
   float edge=pow(1.0-max(0.0,dot(normal,view)),3.0)*.09;
-  float toolMark=sin(depth*90.0/openingRadius)*.015;
-  return (metalColor*(.16+.65*key+.24*fill+toolMark)+vec3(reflection*.48+edge))*cavityLight;
+  float markPhase=depth*90.0/openingRadius;
+  // 屏幕孔口的导数在主函数统一读取，避免命中/未命中分支中求导导致孔边不稳定。
+  float markWidth=pixelSpan*90.0/max(openingRadius,.1)/max(.1,abs(dot(normal,view)));
+  float toolMark=sin(markPhase)*(1.0-smoothstep(.7,3.0,markWidth))*.008;
+  return (metalColor*(.20+.60*key+.26*fill+toolMark)+vec3(reflection*.32+fillReflection*.1+edge))*cavityLight;
 }
 
 void main() {
   vec3 entry=vec3(aperturePoint,0.0);
+  float pixelSpan=length(fwidth(aperturePoint));
   vec3 view=orthographic>.5?normalize(viewLocal):normalize(cameraLocal-entry);
   if (view.z<=.015) discard;
   vec3 ray=-view;
@@ -148,10 +154,10 @@ void main() {
     vec3 p=entry+ray*(hitDepth/view.z),normal=inwardNormal(p);
     // 沉孔的台阶底面朝外，不能误画成连续斜面。
     if (holeMode>1.5&&holeMode<2.5&&abs(hitDepth-entranceDepth)<stepDepth*.06) normal=vec3(0.0,0.0,1.0);
-    color=metalShade(p,normal,view);
+    color=metalShade(p,normal,view,pixelSpan);
   } else if (closedBottom>.5&&holeDepth<=traceDepth+.001) {
     vec3 p=entry+ray*(holeDepth/view.z);
-    color=metalShade(p,vec3(0.0,0.0,1.0),view)*.55;
+    color=metalShade(p,vec3(0.0,0.0,1.0),view,pixelSpan)*.55;
   }
   gl_FragColor=vec4(color,1.0);
   #include <tonemapping_fragment>

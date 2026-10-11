@@ -339,7 +339,7 @@ function describeGenericPart(part){
   } else return null;
   if(part.type==='PANEL'&&part.dimensions?.edgeNotches?.length){
     shapeKey=JSON.stringify(part.dimensions.edgeNotches);
-    note=part.dimensions.edgeNotches.map(n=>({LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge])+'边缺口 '+n.widthMm+'×'+n.depthMm+'mm，距'+(n.anchor==='END'?'右/上':'左/下')+'端'+n.offsetMm+'mm').join('；');
+    note=part.dimensions.edgeNotches.map(n=>({LEFT:'左',RIGHT:'右',TOP:'上',BOTTOM:'下'}[n.edge])+'边'+(n.outline?'轮廓避让（非矩形，范围 ':'矩形缺口 ')+n.widthMm+'×'+n.depthMm+'mm'+(n.outline?'，按切割轮廓）':'')+'，距'+(n.anchor==='END'?'右/上':'左/下')+'端'+n.offsetMm+'mm').join('；');
   }
   return {category,spec,size,material,note,shapeKey};
 }

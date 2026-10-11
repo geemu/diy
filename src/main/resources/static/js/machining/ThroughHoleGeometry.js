@@ -63,7 +63,7 @@ export function renderThroughHoleGeometry(root,group,holes) {
     }
   }
   if(wallVertices.length) {
-    const material=ProfileGeometryFactory.material(part);material.roughness=.3;
+    const material=ProfileGeometryFactory.material(part);
     const wall=new THREE.Mesh(geometryFrom(wallVertices),material);
     wall.name='__through_hole_walls__';wall.userData.appearanceOnly=true;wall.userData.profileRoot=root;
     wall.castShadow=true;wall.receiveShadow=true;group.add(wall);
@@ -169,19 +169,21 @@ function clip(polygon,plane,inside) {
   return result;
 }
 
-function makeVertex(p,n,uv=new THREE.Vector2(),color=new THREE.Vector3(1,1,1)) {return {p,n,uv,color};}
-function interpolate(a,b,t) {return makeVertex(a.p.clone().lerp(b.p,t),a.n.clone().lerp(b.n,t).normalize(),a.uv.clone().lerp(b.uv,t),a.color.clone().lerp(b.color,t));}
+// 新孔壁标记为加工面；宿主端面/侧面的着色属性随原裁剪插值保留，不从新三角面猜材质。
+function makeVertex(p,n,uv=new THREE.Vector2(),color=new THREE.Vector3(1,1,1),surface=new THREE.Vector2(0,1),rim=new THREE.Vector4()) {return {p,n,uv,color,surface,rim};}
+function interpolate(a,b,t) {return makeVertex(a.p.clone().lerp(b.p,t),a.n.clone().lerp(b.n,t).normalize(),a.uv.clone().lerp(b.uv,t),a.color.clone().lerp(b.color,t),a.surface.clone().lerp(b.surface,t),a.rim.clone().lerp(b.rim,t));}
 function transformVertex(vertex,matrix) {
   let normalMatrix=normalMatrices.get(matrix);
   if(!normalMatrix){normalMatrix=new THREE.Matrix3().getNormalMatrix(matrix);normalMatrices.set(matrix,normalMatrix);}
-  return makeVertex(vertex.p.clone().applyMatrix4(matrix),vertex.n.clone().applyMatrix3(normalMatrix).normalize(),vertex.uv,vertex.color);
+  return makeVertex(vertex.p.clone().applyMatrix4(matrix),vertex.n.clone().applyMatrix3(normalMatrix).normalize(),vertex.uv,vertex.color,vertex.surface,vertex.rim);
 }
 function eachTriangle(geometry,callback) {
-  const {position,normal,uv,color}=geometry.attributes,index=geometry.index,count=index?index.count:position.count;
+  const {position,normal,uv,color,profileSurface,profileRim}=geometry.attributes,index=geometry.index,count=index?index.count:position.count;
   for(let i=0;i<count;i+=3)callback([0,1,2].map(offset=>{
     const k=index?index.getX(i+offset):i+offset;
     return makeVertex(new THREE.Vector3().fromBufferAttribute(position,k),normal?new THREE.Vector3().fromBufferAttribute(normal,k):new THREE.Vector3(0,0,1),
-      uv?new THREE.Vector2().fromBufferAttribute(uv,k):new THREE.Vector2(),color?new THREE.Vector3().fromBufferAttribute(color,k):new THREE.Vector3(1,1,1));
+      uv?new THREE.Vector2().fromBufferAttribute(uv,k):new THREE.Vector2(),color?new THREE.Vector3().fromBufferAttribute(color,k):new THREE.Vector3(1,1,1),
+      profileSurface?new THREE.Vector2().fromBufferAttribute(profileSurface,k):new THREE.Vector2(),profileRim?new THREE.Vector4().fromBufferAttribute(profileRim,k):new THREE.Vector4());
   }));
 }
 function appendPolygon(vertices,polygon,orient=false) {
@@ -193,10 +195,11 @@ function appendPolygon(vertices,polygon,orient=false) {
   }
 }
 function geometryFrom(vertices) {
-  const geometry=new THREE.BufferGeometry(),positions=[],normals=[],uvs=[],colors=[];
-  for(const vertex of vertices){positions.push(...vertex.p.toArray());normals.push(...vertex.n.toArray());uvs.push(...vertex.uv.toArray());colors.push(...vertex.color.toArray());}
+  const geometry=new THREE.BufferGeometry(),positions=[],normals=[],uvs=[],colors=[],surfaces=[],rims=[];
+  for(const vertex of vertices){positions.push(...vertex.p.toArray());normals.push(...vertex.n.toArray());uvs.push(...vertex.uv.toArray());colors.push(...vertex.color.toArray());surfaces.push(...vertex.surface.toArray());rims.push(...vertex.rim.toArray());}
   geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));
   geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  geometry.setAttribute('profileSurface',new THREE.Float32BufferAttribute(surfaces,2));geometry.setAttribute('profileRim',new THREE.Float32BufferAttribute(rims,4));
   if(vertices.length){geometry.computeBoundingBox();geometry.computeBoundingSphere();}
   else {geometry.boundingBox=new THREE.Box3().makeEmpty();geometry.boundingSphere=new THREE.Sphere(new THREE.Vector3(),0);}
   return geometry;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {panelMaterialContours,SolidPanelShapes} from '../model/PanelShapeModel.js';
+import {cleanContour,contourArea,contourBounds,unionContours} from '../model/PanelContourMath.js';
 
 const triangleCache=new WeakMap(),panelCache=new WeakMap();
 const EPS=1e-6;
@@ -124,19 +125,59 @@ export function panelObjectIntersection(part,object,toleranceMm=.5) {
   return supported?{intersects:false}:null;
 }
 
-/** 在未裁板的厚度内取实体交线/表面点；不是按连接件大包围盒整块挖角。 */
+/**
+ * 在板厚范围内投影真实表面，并补两侧截平面的外环；仅取外部切割边，孔内不保留材料孤岛。
+ * 截平面补环很重要：板厚完全位于立腿内部时，侧壁投影只是线，不能当成没有障碍。
+ */
 export function panelObstacleFootprint(part,object) {
   const d=part.dimensions,w=Number(d.width)/2,h=Number(d.height)/2,half=Number(d.thickness)/2;
-  const inverse=panelPose(part).invert(),points=[];
+  const inverse=panelPose(part).invert(),polygons=[];
   const planes=[{n:new THREE.Vector3(0,0,1),c:-half+EPS},{n:new THREE.Vector3(0,0,-1),c:-half+EPS},
     {n:new THREE.Vector3(1,0,0),c:-w},{n:new THREE.Vector3(-1,0,0),c:-w},
     {n:new THREE.Vector3(0,1,0),c:-h},{n:new THREE.Vector3(0,-1,0),c:-h}];
-  for(const mesh of materialMeshes(object))for(const triangle of meshTriangles(mesh,inverse)){
-    let polygon=triangle;
-    for(const plane of planes){polygon=clip(polygon,plane.n,plane.c);if(!polygon.length)break;}
-    points.push(...polygon);
+  for(const mesh of materialMeshes(object)){
+    const triangles=meshTriangles(mesh,inverse),projected=[];
+    for(const triangle of triangles){
+      let polygon=triangle;
+      for(const plane of planes){polygon=clip(polygon,plane.n,plane.c);if(!polygon.length)break;}
+      const ring=cleanContour(polygon.map(p=>({x:p.x,y:p.y})));
+      if(ring.length>=3&&Math.abs(contourArea(ring))>EPS)projected.push(ring);
+    }
+    for(const z of [-half+EPS,half-EPS])projected.push(...sectionContours(triangles,z));
+    if(projected.length)polygons.push(...unionContours(projected).filter(r=>contourArea(r)>0));
   }
-  if(!points.length)return null;
-  return {minX:Math.min(...points.map(p=>p.x)),maxX:Math.max(...points.map(p=>p.x)),
-    minY:Math.min(...points.map(p=>p.y)),maxY:Math.max(...points.map(p=>p.y))};
+  if(!polygons.length)return null;
+  const outlines=unionContours(polygons).filter(r=>contourArea(r)>0);
+  return outlines.length?{...contourBounds(outlines.flat()),outlines}:null;
+}
+
+function sectionContours(triangles,z){
+  const segments=new Map(),nodes=new Map(),adjacent=new Map(),key=p=>Math.round(p.x*1e5)+','+Math.round(p.y*1e5);
+  for(const triangle of triangles){
+    const points=[];
+    for(let i=0;i<3;i++){
+      const a=triangle[i],b=triangle[(i+1)%3],da=a.z-z,db=b.z-z;
+      if(Math.abs(da)<EPS)points.push({x:a.x,y:a.y});
+      if(da*db<0){const t=da/(da-db);points.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}
+    }
+    const unique=[...new Map(points.map(p=>[key(p),p])).values()];
+    if(unique.length!==2)continue;
+    const [a,b]=unique,[ka,kb]=unique.map(key);if(ka===kb)continue;
+    const id=ka<kb?ka+'|'+kb:kb+'|'+ka;if(segments.has(id))continue;
+    segments.set(id,[ka,kb]);nodes.set(ka,a);nodes.set(kb,b);
+    for(const [from,to] of [[ka,kb],[kb,ka]]){if(!adjacent.has(from))adjacent.set(from,new Set());adjacent.get(from).add(to);}
+  }
+  const rings=[];
+  while(segments.size){
+    const [start,second]=segments.values().next().value,ring=[nodes.get(start)];let previous=start,current=second;
+    const remove=(a,b)=>{segments.delete(a<b?a+'|'+b:b+'|'+a);adjacent.get(a)?.delete(b);adjacent.get(b)?.delete(a);};
+    remove(start,second);
+    while(current!==start){
+      ring.push(nodes.get(current));const candidates=[...(adjacent.get(current)||[])].filter(id=>id!==previous);
+      if(candidates.length!==1)throw new Error('连接件截面轮廓未闭合，不能自动裁剪');
+      const next=candidates[0];remove(current,next);previous=current;current=next;
+    }
+    const clean=cleanContour(ring);if(clean.length>=3&&Math.abs(contourArea(clean))>EPS)rings.push(clean);
+  }
+  return rings;
 }

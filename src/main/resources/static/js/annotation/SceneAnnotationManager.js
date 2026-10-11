@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {getLocalFrameAtStation, normalizeProfilePath, isLinearProfile} from '../model/ProfilePath.js';
 import {machiningLocalPose} from '../machining/MachiningManager.js';
 import ProfileSurfaceNumber, {machiningSizeInfo} from './ProfileSurfaceNumber.js';
+import {rackLayerMeasurements,rackClearanceText} from '../diy/RackLayerMeasurements.js';
 
 /**
  * CAD scene annotations.
@@ -14,6 +15,7 @@ export default class SceneAnnotationManager {
     this.sceneManager = sceneManager;
     this.options = {
       showOverall:true,
+      showRackLayers:true,
       showPartDimensions:false,
       showPartNumbers:true,
       showMachiningLabels:true,
@@ -29,6 +31,7 @@ export default class SceneAnnotationManager {
     this.layer.className = 'scene-annotation-layer';
     this.sceneManager.container.appendChild(this.layer);
     this.labels = [];
+    this.rackMeasurements = [];
     this.machiningMeasurements = [];
     this.machiningLaneGroups = new Map();
     this.refreshQueued = false;
@@ -70,6 +73,7 @@ export default class SceneAnnotationManager {
       occludingRoots:[...(this.editor.connectionManager?.helperMeshes?.values()||[])]
     });
     if (this.options.showOverall) this.addOverallDimensions();
+    if (this.options.showRackLayers) this.addRackLayerDimensions();
     this.addProfileDimensions();
     if (this.options.showMachiningDimensions) this.addMachiningDimensions();
     if (this.options.showMachiningLabels||this.options.showMachiningDimensions) this.addMachiningLabels();
@@ -86,6 +90,8 @@ export default class SceneAnnotationManager {
     }
     this.layer.replaceChildren();
     this.labels = [];
+    this.rackMeasurements = [];
+    this.rackProjectionState = null;
     this.machiningMeasurements = [];
     this.machiningLaneGroups.clear();
     this.machiningVisibilityState=null;
@@ -123,6 +129,103 @@ export default class SceneAnnotationManager {
       `H: ${round0(size.y)}`,
       'overall'
     );
+  }
+
+  /** 每个有实际成员的参数架只建一组层间净高；没有上梁的顶层不画虚构尺寸。 */
+  addRackLayerDimensions() {
+    for(const assembly of this.editor.assemblyManager.assemblies) {
+      const info=rackLayerMeasurements(assembly,this.editor.parts);
+      if(!info||info.error)continue;
+      const chain={info,records:[],screenCache:[]};
+      for(const row of info.rows.slice(0,-1)) {
+        const upper=info.rows[row.index+1];
+        const label=this.addLabel(`rack:${assembly.id}:${row.index}`,`${row.index+1}–${row.index+2}层 · 净高 ${rackClearanceText(row)}`,new THREE.Vector3(),'rack-layer');
+        label.rackMeasurement=true;
+        label.element.title=`${info.name}：本层承托面到上方梁或关联板底面；未计连接件局部凸出和未关联板材`;
+        label.element.classList.toggle('is-overlap',row.clearHeightMm<-.1);
+        const roots=ids=>ids.map(id=>this.editor.getMeshByPartId(id)).filter(Boolean);
+        chain.records.push({row,label,lowerRoots:roots(row.partIds),upperRoots:roots(upper.partIds),lines:this.addDynamicSegments(8,row.clearHeightMm<-.1?0xb85858:0x6483a0,.8)});
+      }
+      this.rackMeasurements.push(chain);
+    }
+  }
+
+  /** 侧边单列是屏幕布局，数值仍读实际世界高度；相机变化只更新固定线缓冲，不写尺寸实体。 */
+  renderRackLayerDimensions(occupied,width,height,camera) {
+    if(!this.rackMeasurements.length)return;
+    const state=[width,height,...camera.matrixWorld.elements,...camera.projectionMatrix.elements];
+    for(const chain of this.rackMeasurements)for(const record of chain.records) {
+      record.visible=record.lowerRoots.some(annotationObjectVisible)&&record.upperRoots.some(annotationObjectVisible);
+      state.push(record.visible);
+    }
+    if(this.rackProjectionState&&state.length===this.rackProjectionState.length&&state.every((value,index)=>value===this.rackProjectionState[index])) {
+      for(const chain of this.rackMeasurements)occupied.push(...chain.screenCache);
+      return;
+    }
+    this.rackProjectionState=state;
+    for(const chain of this.rackMeasurements) {
+      chain.screenCache=[];
+      const hide=()=>{for(const record of chain.records){record.label.element.style.display='none';record.lines.visible=false;}};
+      hide();
+      const {min,max}=chain.info.bounds,outline=[];
+      for(const x of [min.x,max.x])for(const y of [min.y,max.y])for(const z of [min.z,max.z]) {
+        const point=this.screenPoint(new THREE.Vector3(x,y,z),width,height,camera);
+        if(screenPointVisible(point))outline.push(point);
+      }
+      const records=chain.records.filter(record=>record.visible);
+      if(!outline.length||!records.length)continue;
+      const left=Math.min(...outline.map(point=>point.x)),right=Math.max(...outline.map(point=>point.x));
+      const corners=[];
+      for(const x of [min.x,max.x])for(const z of [min.z,max.z]) {
+        const world=new THREE.Vector3(x,(min.y+max.y)/2,z),point=this.screenPoint(world,width,height,camera);
+        if(screenPointVisible(point))corners.push({world,point});
+      }
+      if(!corners.length)continue;
+      for(const record of records)record.label.element.style.display='';
+      const sizes=records.map(record=>annotationBoxSize(record.label)),boxWidth=Math.max(...sizes.map(box=>box.width)),boxHeight=Math.max(...sizes.map(box=>box.height)),spacing=boxHeight+8;
+      const sides=[{sign:1,edge:right,room:width-right},{sign:-1,edge:left,room:left}];
+      let placement=null;
+      for(const side of sides) {
+        const corner=corners.reduce((best,value)=>value.point.x*side.sign>best.point.x*side.sign?value:best);
+        const candidates=records.map(record=>{
+          const a=new THREE.Vector3(corner.world.x,record.row.clearanceStartMm,corner.world.z),b=new THREE.Vector3(corner.world.x,record.row.clearanceEndMm,corner.world.z);
+          return {record,a,b,start:this.screenPoint(a,width,height,camera),end:this.screenPoint(b,width,height,camera)};
+        }).filter(value=>screenPointVisible(value.start)&&screenPointVisible(value.end)&&Math.max(value.start.y,value.end.y)>=0&&Math.min(value.start.y,value.end.y)<=height);
+        if(!candidates.length||candidates.length*spacing>height-16)continue;
+        candidates.sort((a,b)=>(a.start.y+a.end.y)-(b.start.y+b.end.y));
+        let previous=8-boxHeight/2-spacing;
+        for(const value of candidates) {
+          value.y=Math.max(previous+spacing,Math.max(8+boxHeight/2,Math.min(height-8-boxHeight/2,(value.start.y+value.end.y)/2)));previous=value.y;
+        }
+        const overflow=Math.max(0,previous-(height-8-boxHeight/2));
+        for(const value of candidates)value.y-=overflow;
+        for(let lane=0;lane<3;lane++) {
+          const offset=24+lane*(boxWidth+32);
+          if(side.room<offset+boxWidth+16)break;
+          const railX=side.edge+side.sign*offset,textX=railX+side.sign*(boxWidth/2+10);
+          const rectangles=candidates.map(value=>rectAround(textX,value.y,boxWidth+4,boxHeight+4));
+          if(rectangles.some(rect=>occupied.some(other=>rectanglesOverlap(rect,other))))continue;
+          placement={candidates,rectangles,railX,textX};break;
+        }
+        if(placement)break;
+      }
+      if(!placement){hide();continue;}
+      const fromScreen=point=>this.worldScreenPoint(point,width,height,camera);
+      for(let index=0;index<placement.candidates.length;index++) {
+        const value=placement.candidates[index],{record,start,end}=value,x=placement.railX;
+        const a={x,y:start.y,z:start.z},b={x,y:end.y,z:end.z},mid={x,y:(start.y+end.y)/2,z:(start.z+end.z)/2};
+        const segments=[[value.a,fromScreen(a)],[value.b,fromScreen(b)],[fromScreen(a),fromScreen(b)]];
+        const length=Math.abs(b.y-a.y),direction=Math.sign(b.y-a.y),arrow=Math.min(5,length/4);
+        if(length>.1)for(const [point,sign] of [[a,1],[b,-1]])for(const side of [-1,1])segments.push([fromScreen(point),fromScreen({x:x+side*arrow*.45,y:point.y+direction*sign*arrow,z:point.z})]);
+        if(Math.abs(value.y-mid.y)>2)segments.push([fromScreen(mid),fromScreen({x:placement.textX,y:value.y,z:mid.z})]);
+        this.updateDynamicSegments(record.lines,segments);
+        record.label.worldPoint.copy(fromScreen(mid));record.label.element.style.display='';
+        record.label.element.style.transform=`translate(-50%,-50%) translate(${Math.round(placement.textX)}px,${Math.round(value.y)}px)`;
+      }
+      const shown=new Set(placement.candidates.map(value=>value.record));
+      for(const record of chain.records)if(!shown.has(record)){record.label.element.style.display='none';record.lines.visible=false;}
+      chain.screenCache=placement.rectangles;occupied.push(...chain.screenCache);
+    }
   }
 
   addProfileDimensions() {
@@ -649,8 +752,10 @@ export default class SceneAnnotationManager {
     if(this.sceneManager.container.dataset.machiningHover!==hoverState)this.sceneManager.container.dataset.machiningHover=hoverState;
     if (!this.labels.length) return;
     const occupied = [];
+    this.renderRackLayerDimensions(occupied,width,height,camera);
     const labels = [...this.labels].sort((a,b) => labelPriority(a) - labelPriority(b));
     for (const label of labels) {
+      if(label.rackMeasurement)continue;
       if(label.measurement){this.renderMachiningMeasurement(label.measurement,occupied,width,height,camera);continue;}
       if(label.kind==='machining-size'){this.renderMachiningSize(label,occupied,width,height,camera);continue;}
       if(label.kind==='machining') {

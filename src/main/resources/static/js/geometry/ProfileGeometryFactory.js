@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {normalizeProfilePath} from '../model/ProfilePath.js';
 import {getSectionDefinition} from '../model/ProfileSectionRegistry.js';
-import {applyProfileSurfaceShading} from './ProfileSurfaceAppearance.js';
+import {applyProfileSurfaceShading,createProfileAluminumMaterial,configureProfileAluminumMaterial} from './ProfileSurfaceAppearance.js';
 
 export default class ProfileGeometryFactory {
   static create(part) {
@@ -10,20 +10,7 @@ export default class ProfileGeometryFactory {
   }
 
   static material(part) {
-    return new THREE.MeshStandardMaterial({
-      color: part.color || 0xd3d7db,
-      metalness: 0.68,
-      roughness: 0.36,
-      envMapIntensity:0.65,
-      vertexColors:true,
-      // 金属面略退后一个深度单位，真实轮廓线不再与同位置的面争抢像素。
-      polygonOffset:true,
-      polygonOffsetFactor:1,
-      polygonOffsetUnits:1,
-      // 远处淡出只用于地面，不应让适配后的大型工程消失。
-      fog:false,
-      side: THREE.DoubleSide
-    });
+    return createProfileAluminumMaterial(part);
   }
 
   static createLine(part,path) {
@@ -104,8 +91,10 @@ export default class ProfileGeometryFactory {
   }
 
   static createSectionMesh(section,length,material) {
+    configureProfileAluminumMaterial(material);
     if (!section?.outer?.length) {
       const geometry = new THREE.BoxGeometry(30,30,length);
+      applyProfileSurfaceShading(geometry,null);
       return new THREE.Mesh(geometry,material);
     }
     const shape = this.toThreeShape(section);
@@ -148,6 +137,7 @@ export default class ProfileGeometryFactory {
     const tolerance = Math.max(0.01,Number(length)*0.00001);
     const tanStart = Math.tan(start.angleDeg*Math.PI/180);
     const tanEnd = Math.tan(end.angleDeg*Math.PI/180);
+    const sideNormals=geometry.attributes.normal?.array.slice(),surface=geometry.attributes.profileSurface;
     for (let index=0; index<position.count; index++) {
       const x = position.getX(index);
       const y = position.getY(index);
@@ -159,6 +149,12 @@ export default class ProfileGeometryFactory {
     }
     position.needsUpdate = true;
     geometry.computeVertexNormals();
+    // 斜切只改变端面；不能让重算法向把原有圆孔壁重新变成逐面亮暗的棱柱。
+    if(sideNormals&&surface) {
+      const normal=geometry.attributes.normal;
+      for(let i=0;i<normal.count;i++)if(surface.getX(i)<.5)normal.setXYZ(i,sideNormals[i*3],sideNormals[i*3+1],sideNormals[i*3+2]);
+      normal.needsUpdate=true;
+    }
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
   }
@@ -169,7 +165,7 @@ export default class ProfileGeometryFactory {
     const material = new THREE.LineBasicMaterial({
       color:0x4a535d,
       transparent:true,
-      opacity:0.32,
+      opacity:0.22,
       depthTest:true,
       fog:false
     });

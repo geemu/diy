@@ -102,6 +102,7 @@ export default class Editor {
     this.onInterferenceChanged = null;
     this.onTransformBlocked = null;
     this.onConnectionsBroken = null;
+    this.onProfileRollConnectionsChanged = null;
     this.onMeasurementChanged = null;
     this.onFeatureSelectionChanged = null;
     this.projectSettings = {
@@ -306,6 +307,7 @@ export default class Editor {
         primaryEuler:primary.rotation.clone(),
         constrainedSingle:this.selectedMeshes.length <= 1,
         scope:this.selectedMeshes.length > 1 ? 'SELECTION' : this.transformMoveScope,
+        profileTransforms:this.connectionManager.captureProfileTransforms(),
         items:followers.map(mesh => ({
           mesh,
           position:mesh.position.clone(),
@@ -387,10 +389,11 @@ export default class Editor {
         return;
       }
       const currentCollision=this.interferenceFeedbackManager.refresh({focusIds:new Set(this.currentTransformMeshes().map(mesh=>mesh.userData.part.id)),live:false});
+      const preliminaryRolls=this.connectionManager.profileRolls(snapshot?.profileTransforms,this.currentTransformMeshes().map(mesh=>mesh.userData.part.id));
       // 明确点选的方向目标不能在提交时被附近另一个槽位抢走；落地不执行几何自动吸附。
       let snap = currentCollision.active ? null : this.axisClearanceCommit
         ? (this.axisClearanceCommit.targetPartId?this.snapManager.snapToTarget(this.selected,this.axisClearanceCommit.targetPartId):null)
-        : this.quickRotationActive ? null : this.snapManager.snap(this.selected);
+        : this.quickRotationActive||preliminaryRolls.size ? null : this.snapManager.snap(this.selected);
       const snapDelta = this.selected.position.clone().sub(beforeSnap);
       if (snapDelta.lengthSq() > 0) {
         for (const mesh of this.currentTransformMeshes()) {
@@ -429,11 +432,13 @@ export default class Editor {
         this.sceneManager.showSnapFeedback?.({status:'blocked',label:'位置已调整 · 未贴合',details:['约束调整后接头不再贴合，请重新选择目标']});
       }
       const profileIds=[...refreshIds].filter(partId=>this.getMeshByPartId(partId)?.userData.part?.type==='PROFILE');
-      this.connectionManager.updateConnectionsForProfiles(profileIds);
+      const profileRolls=this.connectionManager.profileRolls(snapshot?.profileTransforms,profileIds);
+      this.connectionManager.updateConnectionsForProfiles(profileIds,{profileRolls});
       const brokenConnections=[];
       if(snapshot?.scope==='SINGLE' && this.selectedMeshes.length<=1){
         for(const connection of [...this.connectionManager.connections]){
           if(!profileIds.includes(connection.sourceProfileId) && !profileIds.includes(connection.targetProfileId))continue;
+          if(profileRolls.has(connection.sourceProfileId)||profileRolls.has(connection.targetProfileId))continue;
           if(connection.status!=='INVALID')continue;
           brokenConnections.push({id:connection.id,sourceProfileId:connection.sourceProfileId,targetProfileId:connection.targetProfileId});
           this.connectionManager.removeConnection(connection.id);
@@ -520,8 +525,10 @@ export default class Editor {
   rotateSelectionQuarterTurn(axis) {
     if(!this.selected||!this.isMeshTransformable(this.selected))throw new Error('先选择可旋转的构件；已安装配件需先解除安装');
     if(this.selectedMeshes.some(mesh=>!this.isMeshTransformable(mesh)))throw new Error('所选构件包含锁定或已安装的配件，请调整选择后再旋转');
+    const sectionRoll=String(axis).toUpperCase()==='PROFILE';
+    if(sectionRoll&&!this.canRollSelectedProfileSection())throw new Error('截面旋转请单独选择一根水平直型材，并使用单个构件作用域');
     const vectors={X:new THREE.Vector3(1,0,0),Y:new THREE.Vector3(0,1,0),Z:new THREE.Vector3(0,0,1)};
-    const vector=vectors[String(axis).toUpperCase()];
+    const vector=sectionRoll?vectors.Z:vectors[String(axis).toUpperCase()];
     if(!vector)throw new Error('旋转轴必须为 X、Y 或 Z');
     if(this.profileDrawTool.isActive())this.profileDrawTool.stop();
     this.quickRotationActive=true;this.quickRotationBlocked=false;
@@ -529,14 +536,26 @@ export default class Editor {
     try {
       controls.dispatchEvent({type:'mouseDown'});
       const rotation=new THREE.Quaternion().setFromAxisAngle(vector,Math.PI/2);
-      if(this.transformSpace==='local')this.selected.quaternion.multiply(rotation);
+      if(sectionRoll||this.transformSpace==='local')this.selected.quaternion.multiply(rotation);
       else this.selected.quaternion.premultiply(rotation);
       this.selected.updateMatrixWorld(true);
+      const expectedSectionQuaternion=sectionRoll?this.selected.quaternion.clone():null;
       controls.dispatchEvent({type:'objectChange'});
+      if(sectionRoll&&(this.selected.quaternion.angleTo(expectedSectionQuaternion)>1e-7||this.selected.position.distanceTo(this.transformSelectionSnapshot.primaryPosition)>1e-5)) {
+        this.cancelPrecisionMove();throw new Error('当前约束不允许横梁原地转动截面，请先调整约束');
+      }
       controls.dispatchEvent({type:'mouseUp'});
       this.onSelectionChanged?.(this.selected,[...this.selectedMeshes]);
       return !this.quickRotationBlocked;
     } finally {this.quickRotationActive=false;}
+  }
+
+  canRollSelectedProfileSection() {
+    const mesh=this.selected,part=mesh?.userData?.part;
+    if(part?.type!=='PROFILE'||!isLinearProfile(part)||this.selectedMeshes.length!==1||this.transformMoveScope!=='SINGLE'||!this.isMeshTransformable(mesh))return false;
+    mesh.updateWorldMatrix(true,false);
+    if(mesh.matrixWorld.determinant()<0||new THREE.Vector3().setFromMatrixScale(mesh.matrixWorld).toArray().some(value=>Math.abs(value-1)>1e-5))return false;
+    return Math.abs(new THREE.Vector3(0,0,1).transformDirection(mesh.matrixWorld).y)<1e-5;
   }
 
   applyMultiSelectionTransform() {
@@ -726,6 +745,7 @@ export default class Editor {
       color:options.color || '#d7b889',
       dimensions:{width:Number(width), height:Number(height), thickness:Number(thickness),...(options.shapeDimensions||{})},
       materialSpec:{material:options.material || '木饰面板'},
+      ...(options.panelSpec?{panelSpec:structuredClone(options.panelSpec)}:{}),
       assemblyId:options.assemblyId || null,
       hidden:false,
       locked:false
@@ -950,6 +970,10 @@ export default class Editor {
 
   refitConfiguredPanel(partId) {
     return this.panelDoorConfigurator.refitPanel(partId);
+  }
+
+  previewConfiguredPanelSlots(partId){
+    return this.panelReliefManager.begin(partId,{fitSlots:true});
   }
 
   createDoorFromSelectedOpening(options = {}) {
@@ -1683,7 +1707,7 @@ export default class Editor {
         if(original.mountReference&&sourceIds.has(original.mountReference.targetPartId))copy.mountReference=remap(structuredClone(original.mountReference));
         // 部分复制不能保留指向原框口的参数化宿主关系。
         if(original.configuratorId&&(options.detachConfigurator||!mapping.has(original.configuratorId))){delete copy.configuratorId;delete copy.configuratorRole;}
-        if(options.detachConfigurator||original.panelSpec?.sourcePartIds?.some(id=>!sourceIds.has(id))){if(copy.panelSpec){delete copy.panelSpec.configurator;delete copy.panelSpec.sourcePartIds;}}
+        if(options.detachConfigurator||original.panelSpec?.sourcePartIds?.some(id=>!sourceIds.has(id))){if(copy.panelSpec){delete copy.panelSpec.configurator;delete copy.panelSpec.sourcePartIds;delete copy.panelSpec.openingVersion;delete copy.panelSpec.placement;delete copy.panelSpec.slotFit;}}
         return this.insertPart(copy,{select:false,captureHistory:false});
       });
       const connections=graph.connections.map(item=>({...remap(structuredClone(item)),manufacturingCode:null,generatedHardwareIds:[]}));

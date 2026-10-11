@@ -48,7 +48,7 @@ export function createRackRoleSettings(){
 export function rackSideJointPlan(layout,memberIds){
   return (layout.sideJoints||[]).map(joint=>{
     const sourceProfileId=memberIds[joint.sourceKey],targetProfileId=memberIds[joint.targetKey];
-    if(!sourceProfileId||!targetProfileId)throw new Error('侧梁接头的框架成员信息不完整');
+    if(!sourceProfileId||!targetProfileId)throw new Error('梁接头的框架成员信息不完整');
     return {sourceProfileId,targetProfileId,sourceEnd:joint.sourceEnd,targetFace:joint.targetFace};
   });
 }
@@ -66,14 +66,14 @@ function configuredRackLayout(input){
     profileRoles[role.id]={catalogId:String(value.catalogId||''),quarterTurns:integer(value.quarterTurns??0,0,1,role.label+'截面朝向')};
   }
   const parameters={layoutVersion,catalogId,profileRoles,width:positive(input.width??dimensionDefaults.width,'宽'),depth:positive(input.depth??dimensionDefaults.depth,'深'),height:positive(input.height??dimensionDefaults.height,'高'),
-    levels:integer(input.levels??4,2,12,'层数'),centerBeamCount:integer(input.centerBeamCount??0,0,4,'每层承托梁数'),
+    levels:integer(input.levels??4,2,12,'层数'),centerBeamCount:integer(input.centerBeamCount??0,0,4,'每层承托梁数'),centerDirection:normalizeCenterDirection(input.centerDirection),
     bayCount:integer(input.bayCount??1,1,8,'联排格数'),bayMode:input.bayMode==='INDEPENDENT'?'INDEPENDENT':'SHARED',
     topMount:input.topMount==='ON_TOP'?'ON_TOP':'BETWEEN',bottomMount:input.bottomMount==='UNDER_POST'?'UNDER_POST':'BETWEEN',
     sideMount:normalizeSideMount(input.sideMount),bottomClearance:nonnegative(input.bottomClearance??0,'底层梁离地高度'),manualLevelHeights:input.manualLevelHeights===true,autoConnect:input.autoConnect!==false};
   const {width,depth,height,levels,centerBeamCount,bayCount,bayMode}=parameters;
   parameters.levelSettings=Array.from({length:levels},(_,index)=>{
     const row=input.levelSettings?.[index]||{};
-    return {heightMm:row.heightMm==null||row.heightMm===''?null:positive(row.heightMm,'层顶面高度'),catalogId:String(row.catalogId||''),centerCatalogId:String(row.centerCatalogId||''),centerBeamCount:row.centerBeamCount==null||row.centerBeamCount===''?null:integer(row.centerBeamCount,0,4,'本层承托梁数'),leftSideMount:normalizeSideMount(row.leftSideMount,true),rightSideMount:normalizeSideMount(row.rightSideMount,true)};
+    return {heightMm:row.heightMm==null||row.heightMm===''?null:positive(row.heightMm,'层顶面高度'),catalogId:String(row.catalogId||''),centerCatalogId:String(row.centerCatalogId||''),centerBeamCount:row.centerBeamCount==null||row.centerBeamCount===''?null:integer(row.centerBeamCount,0,4,'本层承托梁数'),centerDirection:normalizeCenterDirection(row.centerDirection,true),leftSideMount:normalizeSideMount(row.leftSideMount,true),rightSideMount:normalizeSideMount(row.rightSideMount,true)};
   });
   const profile=(role,layer=null,override='')=>{
     const option=profileRoles[role],inherit=['side','center'].includes(role)&&!override&&!option.catalogId&&layer;
@@ -88,7 +88,7 @@ function configuredRackLayout(input){
   const layerProfiles=Array.from({length:levels},(_,index)=>{
     const role=index===0?'bottom':index===levels-1?'top':'middle';
     const beam=profile(role,null,role==='middle'?parameters.levelSettings[index].catalogId:'');
-    return {role,beam,side:profile('side',beam),center:profile('center',beam,parameters.levelSettings[index].centerCatalogId),centerCount:parameters.levelSettings[index].centerBeamCount??centerBeamCount};
+    return {role,beam,side:profile('side',beam),center:profile('center',beam,parameters.levelSettings[index].centerCatalogId),centerCount:parameters.levelSettings[index].centerBeamCount??centerBeamCount,centerDirection:parameters.levelSettings[index].centerDirection||parameters.centerDirection};
   });
   const bottom=layerProfiles[0],top=layerProfiles[levels-1];
   const bottomThickness=Math.max(bottom.beam.h,bottom.side.h),bottomTop=parameters.bottomClearance+bottomThickness;
@@ -137,7 +137,7 @@ function configuredRackLayout(input){
     const layer=layerProfiles[index],levelTop=heights[index],stacked=index===0&&parameters.bottomMount==='UNDER_POST'||index===levels-1&&parameters.topMount==='ON_TOP';
     const zFront=-postZ+lane(slotsZ,postDepth,layer.beam,'X',-1,'宽向梁'),zBack=postZ+lane(slotsZ,postDepth,layer.beam,'X',1,'宽向梁');
     // 柱间净长与横梁间净长不同；内收量由柱宽和侧梁宽决定，不能只加长原柱间梁。
-    const beamGap=zBack-zFront-layer.beam.across,sidePositions=[],sideByKey=new Map();
+    const beamGap=zBack-zFront-layer.beam.across,sidePositions=[],sideByKey=new Map(),baySides=new Map();
     if(layoutVersion===RACK_LAYOUT_VERSION&&beamGap<=1)throw new Error(`第${index+1}层前后梁之间没有足够净深，请增加深度或调整梁截面`);
     const widthKey=(bay,sign)=>(stacked&&bayMode==='SHARED'||bayCount===1)?`WIDTH:${index}:${sign}`:`WIDTH:${index}:${bay.index}:${sign}`;
     for(const bay of compartments)for(const side of ['left','right']){
@@ -145,7 +145,7 @@ function configuredRackLayout(input){
       const mount=setting[side+'SideMount']||parameters.sideMount,inset=mount==='INSET';
       const sharedMiddle=bayMode==='SHARED'&&column.sign===0;
       const key=`DEPTH:${index}:${column.key}`+(inset&&sharedMiddle?`:INSET:${direction}`:'');
-      if(sideByKey.has(key))continue; // 共享中柱的默认柱间梁只生成一次；内收后每格有自己的侧梁。
+      if(sideByKey.has(key)){baySides.set(bay.index+':'+side,sideByKey.get(key));continue;} // 共享柱间梁仍需供每格的左右承托接头引用。
       const x=inset?column.x+direction*(postWidth+layer.side.across)/2:column.x+lane(slotsX,postWidth,layer.side,'Z',column.sign,'侧梁');
       const length=inset||stacked?beamGap:depth-postDepth*2;
       if(inset){
@@ -154,6 +154,7 @@ function configuredRackLayout(input){
       }
       const entry={key,column,x,length,z:(inset||layoutVersion===RACK_LAYOUT_VERSION&&stacked)?(zFront+zBack)/2:0,mount};
       sideByKey.set(key,entry);sidePositions.push(entry);
+      baySides.set(bay.index+':'+side,entry);
       for(const sign of [-1,1]){
         const targetKey=inset||stacked?widthKey(bay,sign):`POST:${column.key}:${sign}`;
         const faces=inset||stacked?(layer.beam.turn?['FRONT','BACK']:['LEFT','RIGHT']):(post.turn?['LEFT','RIGHT']:['BACK','FRONT']);
@@ -169,9 +170,23 @@ function configuredRackLayout(input){
     }
     for(const entry of sidePositions)add(entry.key,layer.side,entry.length,{x:entry.x,y:levelTop-layer.side.h/2,z:entry.z},'Z','side',`第${index+1}层侧梁${entry.mount==='INSET'?'（内收）':''}`);
     for(const bay of compartments)for(let count=1;count<=layer.centerCount;count++){
-      const x=bay.left.x+count/(layer.centerCount+1)*(bay.right.x-bay.left.x);
-      if(sidePositions.some(entry=>Math.abs(entry.x-x)<(layer.side.across+layer.center.across)/2-.001)||(bay.right.x-bay.left.x)/(layer.centerCount+1)<layer.center.across-.001)throw new Error('本层承托梁过密或与侧梁重叠，请减少根数或增加格宽');
-      add(bayCount===1?`CENTER:${index}:${count}`:`CENTER:${index}:${bay.index}:${count}`,layer.center,zBack-zFront-layer.beam.across,{x,y:levelTop-layer.center.h/2,z:(zFront+zBack)/2},'Z','center',`第${index+1}层承托梁${count}`);
+      const key=bayCount===1?`CENTER:${index}:${count}`:`CENTER:${index}:${bay.index}:${count}`,y=levelTop-layer.center.h/2;
+      if(layer.centerDirection==='WIDTH'){
+        // 转走向必须重算实际左右侧梁间净长，不是把原深向长度原地旋转而穿柱/穿梁。
+        const left=baySides.get(bay.index+':left'),right=baySides.get(bay.index+':right');
+        const minX=left.x+layer.side.across/2,maxX=right.x-layer.side.across/2;
+        const z=zFront+count/(layer.centerCount+1)*(zBack-zFront),half=layer.center.across/2;
+        if(layer.center.h>layer.side.h+.001||z-half<zFront+layer.beam.across/2-.001||z+half>zBack-layer.beam.across/2+.001||(zBack-zFront)/(layer.centerCount+1)<layer.center.across-.001||[left,right].some(side=>z-half<side.z-side.length/2-.001||z+half>side.z+side.length/2+.001))throw new Error('左右向承托梁过密或超出侧梁完整支撑，请减少根数、调整截面或增加净深');
+        add(key,layer.center,maxX-minX,{x:(minX+maxX)/2,y,z},'X','center',`第${index+1}层左右向承托梁${count}`);
+        const faces=layer.side.turn?['BACK','FRONT']:['RIGHT','LEFT'];
+        for(const [target,end,face] of [[left,'START',faces[0]],[right,'END',faces[1]]])sideJoints.push({sourceKey:key,targetKey:target.key,sourceEnd:end,targetFace:face});
+      }else{
+        const x=bay.left.x+count/(layer.centerCount+1)*(bay.right.x-bay.left.x);
+        if(sidePositions.some(entry=>Math.abs(entry.x-x)<(layer.side.across+layer.center.across)/2-.001)||(bay.right.x-bay.left.x)/(layer.centerCount+1)<layer.center.across-.001)throw new Error('本层承托梁过密或与侧梁重叠，请减少根数或增加格宽');
+        add(key,layer.center,beamGap,{x,y,z:(zFront+zBack)/2},'Z','center',`第${index+1}层前后向承托梁${count}`);
+        const faces=layer.beam.turn?['FRONT','BACK']:['LEFT','RIGHT'];
+        for(const sign of [-1,1])sideJoints.push({sourceKey:key,targetKey:widthKey(bay,sign),sourceEnd:sign<0?'START':'END',targetFace:faces[sign<0?0:1]});
+      }
     }
   }
   return {parameters,members,roleCounts,layerHeights:heights,sideJoints};
@@ -213,6 +228,12 @@ function rackLane(available,span,spec,axis,sign,label,layoutVersion){
 function normalizeSideMount(value,inherit=false){
   if(value==null||value==='')return inherit?'':'FRAME';
   if(!RackSideMountOptions.some(option=>option.value===value))throw new Error('侧梁接法不存在，请重新选择');
+  return value;
+}
+
+function normalizeCenterDirection(value,inherit=false){
+  if(value==null||value==='')return inherit?'':'DEPTH';
+  if(!['DEPTH','WIDTH'].includes(value))throw new Error('承托梁走向应为前后或左右');
   return value;
 }
 

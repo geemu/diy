@@ -14,12 +14,14 @@ import {matchNearestSlot,slotReference,slotWorldNormal,slotWorldPoint} from '../
 import {profileSeries as designProfileSeries,profileSlotWidth,isProfileFaceClosed} from '../model/DesignProfileCatalog.js';
 import {DesignConnectionList,DEFAULT_DESIGN_CONNECTION_TYPE,designConnectionLabel,getDesignConnectionDefinition} from '../model/DesignConnectionCatalog.js';
 import {connectorFootprintFits} from './ConnectionPlacementManager.js';
-import {angleBracketLayout,hiddenCornerLayout} from '../model/ConnectionComponentPorts.js';
+import {angleBracketLayout,hiddenCornerLayout,flatConnectionPlateLayout} from '../model/ConnectionComponentPorts.js';
 import {hiddenConnectorFits} from './HiddenConnectionPlacement.js';
 import {ConnectionComponentOptions,connectionSpecs,connectionComponent,connectionDesignType} from '../model/ComponentCatalog.js';
 import {profileEndContact} from '../model/ProfileEndContact.js';
 import {normalizeDesignAnchor,sameDesignAnchor,isCenteredDesignAnchor,componentAnchorOffsets} from '../model/ConnectionAnchor.js';
-import {normalizeSideMount,sideMountContexts,sideMountTransform,sideMountContactErrors} from './SideMountConnection.js';
+import {normalizeSideMount,sideMountKey,sideMountContexts,sideMountTransform,sideMountContactErrors} from './SideMountConnection.js';
+import {normalizeSideSlot,sideSlotKey,sideSlotContexts,sideSlotTransform,sideSlotGeometry} from './SideSlotConnection.js';
+import {profileQuarterRolls,rolledConnectionReferences} from './ProfileRollConnection.js';
 
 export default class ConnectionManager {
   constructor(editor) {
@@ -30,7 +32,7 @@ export default class ConnectionManager {
   }
 
   createConnection(source,target,options={}) {
-    if(options.jointKind==='SIDE_MOUNT'&&options.ruleId)throw new Error('梁侧安装尚未配置制造方案，不能绑定梁端制造规则');
+    if(['SIDE_MOUNT','SIDE_SLOT'].includes(options.jointKind)&&options.ruleId)throw new Error('侧面安装尚未配置制造方案，不能绑定梁端制造规则');
     const rule=options.ruleId?getConnectionRule(options.ruleId):null;
     const designType=String(options.designType || rule?.type || DEFAULT_DESIGN_CONNECTION_TYPE).toUpperCase();
     const connection=this.createDesignConnection(source,target,{...options,designType});
@@ -43,8 +45,8 @@ export default class ConnectionManager {
     const sourceId=source.userData.part.id,targetId=target.userData.part.id;
     const candidate=this.recommendDesignFor(source,target,options).find(c=>c.type===options.designType&&c.valid);
     if(!candidate)throw new Error('当前接头不支持所选连接件');
-    const occupied=this.connections.find(c=>!['SIDE_CORNER','SIDE_MOUNT'].includes(c.jointKind)&&c.sourceProfileId===sourceId&&c.sourceEnd===options.sourceEnd&&c.targetProfileId!==targetId);
-    if(!options.componentDefinition&&!['SIDE_CORNER','SIDE_MOUNT'].includes(candidate.geometry.jointKind)&&occupied&&occupied.targetProfileId!==targetId)throw new Error('这一端已连接其他型材，请先解除原连接');
+    const occupied=this.connections.find(c=>!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(c.jointKind)&&c.sourceProfileId===sourceId&&c.sourceEnd===options.sourceEnd&&c.targetProfileId!==targetId);
+    if(!options.componentDefinition&&!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(candidate.geometry.jointKind)&&occupied&&occupied.targetProfileId!==targetId)throw new Error('这一端已连接其他型材，请先解除原连接');
     const face=options.sourceMountFace||candidate.geometry.sourceMountFace;
     const joint=this.connectionsAtJoint(sourceId,targetId,options.sourceEnd,options.targetFace,options.designAnchorOffset,options);
     const existing=joint.find(c=>this.mountFaces(c).includes(face))||joint.find(c=>!c.designComponent&&!c.designComponentVariants&&!c.manufacturingRuleId);
@@ -71,14 +73,17 @@ export default class ConnectionManager {
 
   connectionsAtJoint(sourceId,targetId,sourceEnd,targetFace,anchorOffset=undefined,reference={}) {
     return this.connections.filter(c=>c.sourceProfileId===sourceId&&c.targetProfileId===targetId&&c.targetFace===targetFace&&(
-      reference.jointKind==='SIDE_MOUNT'
-        ?c.jointKind==='SIDE_MOUNT'&&c.sideMount?.sourceContactFace===reference.sideMount?.sourceContactFace
-        :c.jointKind!=='SIDE_MOUNT'&&c.sourceEnd===sourceEnd&&(anchorOffset===undefined||!c.designComponent||sameDesignAnchor(c.designAnchorOffset,anchorOffset))));
+      reference.jointKind==='SIDE_SLOT'
+        ?c.jointKind==='SIDE_SLOT'&&sideSlotKey(sourceId,targetId,c.sourceEnd,targetFace,c.sideSlot)===sideSlotKey(sourceId,targetId,sourceEnd,targetFace,reference.sideSlot)
+        :reference.jointKind==='SIDE_MOUNT'
+        ?c.jointKind==='SIDE_MOUNT'&&sideMountKey(sourceId,targetId,targetFace,c.sideMount)===sideMountKey(sourceId,targetId,targetFace,reference.sideMount)
+        :!['SIDE_MOUNT','SIDE_SLOT'].includes(c.jointKind)&&c.sourceEnd===sourceEnd&&(anchorOffset===undefined||!c.designComponent||sameDesignAnchor(c.designAnchorOffset,anchorOffset))));
   }
 
   assignJointReference(connection,geometry) {
-    if(['SIDE_CORNER','SIDE_MOUNT'].includes(geometry?.jointKind))connection.jointKind=geometry.jointKind;else delete connection.jointKind;
+    if(['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(geometry?.jointKind))connection.jointKind=geometry.jointKind;else delete connection.jointKind;
     if(geometry?.jointKind==='SIDE_MOUNT')connection.sideMount=normalizeSideMount(geometry.sideMount);else delete connection.sideMount;
+    if(geometry?.jointKind==='SIDE_SLOT')connection.sideSlot=normalizeSideSlot(geometry.sideSlot);else delete connection.sideSlot;
   }
 
   mountFaces(connection) {
@@ -104,6 +109,7 @@ export default class ConnectionManager {
   resolveDesignComponentTransform(connection,source,target) {
     source.updateMatrixWorld(true);target.updateMatrixWorld(true);
     if(connection.jointKind==='SIDE_MOUNT')return sideMountTransform(connection,source,target);
+    if(connection.jointKind==='SIDE_SLOT')return sideSlotTransform(connection,source,target);
     const offset=normalizeDesignAnchor(connection.designAnchorOffset);
     if(!offset)return null;
     const end=source.localToWorld(new THREE.Vector3(offset.x,offset.y,endToLocalZ(Number(source.userData.part.dimensions.length),connection.sourceEnd)));
@@ -131,7 +137,7 @@ export default class ConnectionManager {
 
   /** 多槽截面逐槽试安装；不平移宿主、不放宽贴合或孔轴容差。 */
   componentAnchorOptions(source,target,options={}) {
-    if(options.jointKind==='SIDE_MOUNT')return [{x:0,y:0}];
+    if(['SIDE_MOUNT','SIDE_SLOT'].includes(options.jointKind))return [{x:0,y:0}];
     if(options.designAnchorOffset!==undefined)return [options.designAnchorOffset];
     const definition=options.componentDefinition,layout=angleBracketLayout(definition?.dimensions)||hiddenCornerLayout(definition?.dimensions);
     if(!layout)return [{x:0,y:0}];
@@ -242,10 +248,10 @@ export default class ConnectionManager {
       const specs=connectionSpecs(option.value).filter(spec=>!spec.disabled).map(spec=>{
         const definition=connectionComponent({type:option.value,spec:spec.value});
         return {...spec,value:String(spec.value),definition,designType:connectionDesignType(definition)};
-      }).filter(spec=>spec.designType&&Number(spec.definition.dimensions.size)===series&&(connection.jointKind!=='SIDE_MOUNT'||['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(spec.definition.dimensions.geometryKind)));
+      }).filter(spec=>spec.designType&&Number(spec.definition.dimensions.size)===series&&(connection.jointKind!=='SIDE_MOUNT'||['ANGLE_BRACKET','CORNER_CUBE','L_BRACKET'].includes(spec.definition.dimensions.geometryKind))&&(connection.jointKind!=='SIDE_SLOT'||flatConnectionPlateLayout(spec.definition.dimensions)));
       if(specs.length)choices.push({kind:option.value,label:option.label,designType:specs[0].designType,specs});
     }
-    for(const definition of DesignConnectionList.filter(d=>connection.jointKind!=='SIDE_MOUNT'&&['END_SCREW','ANCHOR_CONNECTOR'].includes(d.id))){
+    for(const definition of DesignConnectionList.filter(d=>!['SIDE_MOUNT','SIDE_SLOT'].includes(connection.jointKind)&&['END_SCREW','ANCHOR_CONNECTOR'].includes(d.id))){
       choices.push({kind:'INTENT_'+definition.id,label:definition.label+'（设计方式）',designType:definition.id,specs:[]});
     }
     return choices;
@@ -267,6 +273,17 @@ export default class ConnectionManager {
     }
     let first=null;
     for(const definition of definitions){
+      if(connection.jointKind==='SIDE_SLOT'){
+        const reference=saved?.sideSlot||connection.sideSlot;
+        const contexts=definition&&designType==='CONNECTION_PLATE'?sideSlotContexts(source,target,definition,{sourceEnd:connection.sourceEnd,sourceMountFace:face,targetFace:connection.targetFace,sideSlot:reference}):[];
+        for(const context of contexts){
+          const checked=this.editor.connectionPlacementManager.evaluateCandidate(context,{mode:designType,componentDefinition:definition,preserveExisting:true,ignoreConnectionId:connection.id,evaluationCache:options.evaluationCache});
+          if(!checked)continue;
+          const result={...checked.item,componentDefinition:definition,sideSlot:checked.sideSlot,designAnchorOffset:checked.designAnchorOffset,sourceMountFace:face,valid:checked.valid,error:checked.valid?null:checked.message};
+          if(!first)first=result;if(result.valid)return result;
+        }
+        continue;
+      }
       if(connection.jointKind==='SIDE_MOUNT'){
         const reference=saved?.sideMount||connection.sideMount;
         const contexts=definition&&designType==='ANGLE_BRACKET'?sideMountContexts(source,target,definition,{sourceMountFace:face,targetFace:connection.targetFace,sideMount:reference}):[];
@@ -291,7 +308,7 @@ export default class ConnectionManager {
       if(!first)first=result;
       if(result.valid)return result;
     }
-    return first||{type:designType,label:designConnectionLabel(designType),score:0,valid:false,error:connection.jointKind==='SIDE_MOUNT'?'该梁侧位置没有适配的90度直角件或角码参考规格；原件保持不变':'当前系列没有可安装的目录连接件型号'};
+    return first||{type:designType,label:designConnectionLabel(designType),score:0,valid:false,error:connection.jointKind==='SIDE_SLOT'?'此处是共面侧槽，只支持孔位与完整支撑通过的两孔一字连接板；原件保持不变':connection.jointKind==='SIDE_MOUNT'?'该梁侧位置没有适配的90度直角件或角码参考规格；原件保持不变':'当前系列没有可安装的目录连接件型号'};
   }
 
   switchDesignType(connectionOrId,nextType,options={}) {
@@ -306,7 +323,7 @@ export default class ConnectionManager {
     if(!option?.valid)throw new Error(option?.error || '当前几何关系不支持该连接方式');
     const previousType=connection.designType;
     const before=structuredClone(connection),variants=structuredClone(connection.designComponentVariants||{});
-    if(connection.designComponent)variants[previousType]={designComponent:structuredClone(connection.designComponent),sourceMountFace:connection.designComponentMountFace||connection.sourceMountFace,designAnchorOffset:normalizeDesignAnchor(connection.designAnchorOffset),...(connection.jointKind==='SIDE_MOUNT'?{sideMount:normalizeSideMount(connection.sideMount)}:{})};
+    if(connection.designComponent)variants[previousType]={designComponent:structuredClone(connection.designComponent),sourceMountFace:connection.designComponentMountFace||connection.sourceMountFace,designAnchorOffset:normalizeDesignAnchor(connection.designAnchorOffset),...(connection.jointKind==='SIDE_MOUNT'?{sideMount:normalizeSideMount(connection.sideMount)}:{}),...(connection.jointKind==='SIDE_SLOT'?{sideSlot:normalizeSideSlot(connection.sideSlot)}:{})};
     try{
       connection.designType=connection.type=designType;
       connection.designComponent=option.componentDefinition?structuredClone(option.componentDefinition):null;
@@ -348,7 +365,7 @@ export default class ConnectionManager {
     const connection=this.resolveConnection(connectionOrId);
     if(!connection)return [];
     // 新槽内角槽件没有对应采购/加工映射；旧圆柱内置方案不是这种零件的制造认证。
-    if(['SIDE_CORNER','SIDE_MOUNT'].includes(connection.jointKind)||hiddenCornerLayout(connection.designComponent?.dimensions)||!isCenteredDesignAnchor(connection.designAnchorOffset))return [];
+    if(['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(connection.jointKind)||hiddenCornerLayout(connection.designComponent?.dimensions)||!isCenteredDesignAnchor(connection.designAnchorOffset))return [];
     const source=this.editor.getMeshByPartId(connection.sourceProfileId);
     const target=this.editor.getMeshByPartId(connection.targetProfileId);
     if(!source||!target)return [];
@@ -378,6 +395,7 @@ export default class ConnectionManager {
     const connection=this.resolveConnection(connectionOrId);
     if(!connection)throw new Error('未找到要配置的连接');
     if(connection.jointKind==='SIDE_MOUNT')throw new Error('梁侧贴柱目前是参数化设计参考安装，尚未配置对应采购五金与制造方案');
+    if(connection.jointKind==='SIDE_SLOT')throw new Error('共面侧槽连接板目前是目录设计参考安装，尚未配置两孔板的采购五金与制造方案');
     if(hiddenCornerLayout(connection.designComponent?.dimensions))throw new Error('槽内角槽连接件尚未配置真实五金与加工方案，不能绑定旧内置连接制造规则');
     if(connection.jointKind==='SIDE_CORNER')throw new Error('两根横梁的侧面内角目前是设计参考安装，尚未配置对应制造方案');
     if(!isCenteredDesignAnchor(connection.designAnchorOffset))throw new Error('多槽偏置安装目前是设计参考，尚未配置对应制造孔组和五金方案');
@@ -465,7 +483,7 @@ export default class ConnectionManager {
     const useDesignMounts=connection.designComponent&&!connection.manufacturingRuleId;
     const sourceMountFace=connection.designComponentMountFace||connection.sourceMountFace||null;
     if(!rule){
-      const representative=this.recommendDesignFor(source,target,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace,designAnchorOffset:connection.designAnchorOffset,componentDefinition:useDesignMounts?connection.designComponent:null,jointKind:connection.jointKind,sideMount:connection.sideMount})
+      const representative=this.recommendDesignFor(source,target,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace,designAnchorOffset:connection.designAnchorOffset,componentDefinition:useDesignMounts?connection.designComponent:null,jointKind:connection.jointKind,sideMount:connection.sideMount,sideSlot:connection.sideSlot})
         .find(item=>item.type===connection.designType);
       if(!representative?.representativeRuleId){
         connection.status='INVALID';
@@ -474,9 +492,9 @@ export default class ConnectionManager {
       }
       rule=getConnectionRule(representative.representativeRuleId);
     }
-    const validation=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace,designAnchorOffset:connection.designAnchorOffset,componentDefinition:useDesignMounts?connection.designComponent:null,requireExactContact:!connection.manufacturingRuleId,jointKind:connection.jointKind,sideMount:connection.sideMount});
+    const validation=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace,designAnchorOffset:connection.designAnchorOffset,componentDefinition:useDesignMounts?connection.designComponent:null,requireExactContact:!connection.manufacturingRuleId,jointKind:connection.jointKind,sideMount:connection.sideMount,sideSlot:connection.sideSlot});
     for(const face of useDesignMounts?(connection.designComponentMountFaces||[]):[]){
-      const extra=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace:face,designAnchorOffset:connection.designAnchorOffset,componentDefinition:connection.designComponent,requireExactContact:true,jointKind:connection.jointKind,sideMount:connection.sideMount});
+      const extra=this.evaluateConnectionGeometry(source,target,rule,{sourceEnd:connection.sourceEnd,targetFace:connection.targetFace,sourceMountFace:face,designAnchorOffset:connection.designAnchorOffset,componentDefinition:connection.designComponent,requireExactContact:true,jointKind:connection.jointKind,sideMount:connection.sideMount,sideSlot:connection.sideSlot});
       if(!extra.ok){validation.ok=false;validation.errors.push(...extra.errors);}
     }
     if(connection.designComponent&&Number(connection.designComponent.dimensions?.size)!==Number(designProfileSeries(source.userData.part))){validation.ok=false;validation.errors.push({code:'DESIGN_COMPONENT_SERIES_MISMATCH',message:'所选连接件规格与变更后的型材系列不匹配'});}
@@ -629,6 +647,13 @@ export default class ConnectionManager {
   evaluateConnectionGeometry(source,target,rule,options={}) {
     const errors=[];const warnings=[];
     if(!source?.userData?.part||!target?.userData?.part)return {ok:false,errors:[{code:'MISSING_PROFILE',message:'连接源或目标型材不存在'}],warnings};
+    if(options.jointKind==='SIDE_SLOT'){
+      const geometry=sideSlotGeometry(source,target,options);
+      if(rule&&rule.type!=='CONNECTION_PLATE')geometry.errors.push({code:'SIDE_SLOT_TYPE_UNSUPPORTED',message:'共面侧槽没有直角安装面，请选择两孔一字连接板'});
+      if(!isCenteredDesignAnchor(options.designAnchorOffset))geometry.errors.push({code:'SIDE_SLOT_ANCHOR_INVALID',message:'共面侧槽使用各自保存的槽位，不能叠加梁端偏置'});
+      if(rule?.hardware?.tNutSku&&[geometry.sourceSlot,geometry.targetSlot].some(slot=>slot&&!isHardwareCompatibleWithSlot(rule.hardware.tNutSku,slot.width)))geometry.errors.push({code:'T_NUT_SLOT_MISMATCH',message:'连接板紧固参考与宿主的实际槽宽不匹配'});
+      geometry.ok=geometry.errors.length===0;return geometry;
+    }
     const sourcePart=source.userData.part;const targetPart=target.userData.part;
     const side=options.jointKind==='SIDE_MOUNT',reference=side?normalizeSideMount(options.sideMount):null;
     if(!side&&options.componentDefinition?.dimensions?.sideMountGeometryVersion!=null)errors.push({code:'SIDE_MOUNT_REFERENCE_REQUIRED',message:'梁侧参考件必须用梁侧接触定位，不能套成普通梁端安装'});
@@ -645,9 +670,10 @@ export default class ConnectionManager {
     const targetLength=Number(targetPart.dimensions?.length||0);
     const sourcePoint=new THREE.Vector3(0,0,reference?reference.sourceStationS-sourceLength/2:endToLocalZ(sourceLength,sourceEnd));
     if(reference)sourcePoint[['FRONT','BACK'].includes(reference.sourceContactFace)?'y':'x']=facePlaneCoordinate(sourcePart,reference.sourceContactFace);
+    if(reference?.mode==='OUTER_CORNER')sourcePoint[['FRONT','BACK'].includes(reference.sourceContactFace)?'x':'y']=reference.sourceSlotOffset;
     const worldEnd=source.localToWorld(sourcePoint);
     const targetLocal=target.worldToLocal(worldEnd.clone());
-    const sourceAxis=reference?slotWorldNormal(source,reference.sourceContactFace):profileAxisWorld(source,sourceEnd);
+    const sourceAxis=reference&&reference.mode!=='OUTER_CORNER'?slotWorldNormal(source,reference.sourceContactFace):profileAxisWorld(source,sourceEnd);
     const targetNormal=slotWorldNormal(target,targetFace);
     const dot=Math.abs(THREE.MathUtils.clamp(sourceAxis.dot(targetNormal),-1,1));
     const angleErrorDeg=THREE.MathUtils.radToDeg(Math.acos(dot));
@@ -827,8 +853,48 @@ export default class ConnectionManager {
 
   selectableHelpers() {return [...this.helperMeshes.values()].filter(mesh=>mesh.visible!==false);}
 
-  updateConnectionsForProfile(profileId){this.updateConnectionsForProfiles([profileId]);}
-  updateConnectionsForProfiles(profileIds=[]){const ids=new Set((profileIds||[]).filter(Boolean));if(!ids.size)return;const related=this.connections.filter(c=>ids.has(c.sourceProfileId)||ids.has(c.targetProfileId));for(const connection of related)this.rebuild(connection);}
+  captureProfileTransforms() {
+    const transforms=new Map();
+    for(const mesh of this.editor.meshes)if(mesh.userData?.part?.type==='PROFILE') {
+      mesh.updateWorldMatrix(true,false);transforms.set(mesh.userData.part.id,mesh.matrixWorld.clone());
+    }
+    return transforms;
+  }
+
+  profileRolls(beforeTransforms,profileIds){return profileQuarterRolls(this.editor,beforeTransforms,profileIds);}
+
+  updateConnectionsForProfile(profileId){return this.updateConnectionsForProfiles([profileId]);}
+  updateConnectionsForProfiles(profileIds=[],options={}) {
+    const ids=new Set((profileIds||[]).filter(Boolean));if(!ids.size)return null;
+    const rolls=options.profileRolls||this.profileRolls(options.beforeTransforms,[...ids]);
+    const related=this.connections.filter(c=>ids.has(c.sourceProfileId)||ids.has(c.targetProfileId)),remapped=[];
+    // 先统一重映射、重建，再看全部实际新实体；另一侧不能拿旧 helper 误挡或借暂时消失漏检。
+    for(const connection of related) {
+      const references=rolledConnectionReferences(connection,rolls.get(connection.sourceProfileId),rolls.get(connection.targetProfileId),this.mountFaces(connection));
+      if(references){Object.assign(connection,references);remapped.push(connection);}
+    }
+    for(const connection of related)this.rebuild(connection);
+    const checked=remapped.map(connection=>{
+      const source=this.editor.getMeshByPartId(connection.sourceProfileId),target=this.editor.getMeshByPartId(connection.targetProfileId);
+      if(connection.status==='INVALID'||!source||!target)return {connection,valid:false,message:connection.validation?.errors?.[0]?.message||'转动后的接头不支持原连接件'};
+      const context={source:{mesh:source,feature:{type:'PROFILE_END',end:connection.sourceEnd}},target:{mesh:target,feature:{type:'PROFILE_FACE',face:connection.targetFace}},
+        sourceMountFace:connection.designComponentMountFace,designAnchorOffset:normalizeDesignAnchor(connection.designAnchorOffset),componentDefinition:connection.designComponent,
+        jointKind:connection.jointKind,sideMount:connection.sideMount,sideSlot:connection.sideSlot};
+      const candidate=this.editor.connectionPlacementManager.evaluateCandidate(context,{mode:connection.designType,componentDefinition:connection.designComponent,preserveExisting:true,ignoreConnectionId:connection.id,existingPartId:''});
+      return {connection,valid:candidate?.valid===true,message:candidate?.message||'转动后的孔槽、支撑面或安装空间不匹配'};
+    });
+    for(const row of checked)if(!row.valid) {
+      row.connection.status='INVALID';
+      row.connection.validation={...row.connection.validation,ok:false,errors:[{code:'PROFILE_ROLL_CONNECTION_INVALID',message:`横梁截面转动后：${row.message}`},...(row.connection.validation?.errors||[])],warnings:row.connection.validation?.warnings||[]};
+      this.removeHelper(row.connection.id);
+    }
+    if(rolls.size) {
+      const invalid=related.filter(connection=>(rolls.has(connection.sourceProfileId)||rolls.has(connection.targetProfileId))&&connection.status==='INVALID');
+      const result={rolls,updated:checked.filter(row=>row.valid).length,invalid};
+      this.editor.onProfileRollConnectionsChanged?.(result);return result;
+    }
+    return null;
+  }
   removeConnection(connectionId){this.clearDesignSwitchCache();const c=this.connections.find(item=>item.id===connectionId);this.editor.machiningManager.removeGeneratedByConnection(connectionId);this.removeHelper(connectionId);if(c)this.removeGeneratedHardware(c);this.connections=this.connections.filter(item=>item.id!==connectionId);this.editor.refreshConnectionSelection?.();}
   removeHelper(connectionId){const helper=this.helperMeshes.get(connectionId);if(!helper)return;if(this.editor.sceneManager.hoveredObject===helper)this.editor.sceneManager.clearHover();this.editor.sceneManager.scene.remove(helper);helper.traverse(object=>{if(object.geometry)object.geometry.dispose();if(object.material){if(Array.isArray(object.material))object.material.forEach(m=>m.dispose());else object.material.dispose();}});this.helperMeshes.delete(connectionId);}
   clear(){this.clearDesignSwitchCache();for(const c of [...this.connections])this.removeGeneratedHardware(c);for(const id of [...this.helperMeshes.keys()])this.removeHelper(id);this.connections=[];}

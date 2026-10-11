@@ -1,3 +1,5 @@
+import {assertSimpleContour,contourArea,contourBounds,subtractContours} from './PanelContourMath.js';
+
 /** 板材/几何体的尺寸与轮廓事实源。单位 mm；薄板轮廓在 XY 面，厚度沿 Z。 */
 export const PanelShapeFields = Object.freeze({
   rectangle:[['width','宽度 (mm)',400,1],['height','高度 (mm)',400,1],['thickness','厚度 (mm)',5,.1]],
@@ -74,12 +76,40 @@ export function panelNotchRectangles(part,notches=part.dimensions?.edgeNotches||
   });
 }
 
-/** 展示、碰撞和工程图共用材料轮廓。仅对矩形板作边缘矩形缺口并集，不做任意实体布尔。 */
+/** 轮廓缺口沿自身板边定位，u 为离定位端方向的宽向毫米，v 为向板内切入毫米。 */
+export function panelNotchPolygons(part,notches=part.dimensions?.edgeNotches||[]) {
+  const bounds=panelNotchRectangles(part,notches),w=Number(part.dimensions.width),h=Number(part.dimensions.height);
+  return notches.map((n,index)=>{
+    if(n.outline==null){const r=bounds[index];return [{x:r.minX,y:r.minY},{x:r.maxX,y:r.minY},{x:r.maxX,y:r.maxY},{x:r.minX,y:r.maxY}];}
+    if(!Array.isArray(n.outline)||n.outline.length>256)throw new Error('轮廓缺口应为最多256个毫米点');
+    const points=n.outline.map(p=>({x:Number(p.u),y:Number(p.v)}));
+    assertSimpleContour(points);
+    const b=contourBounds(points);
+    if(b.minX<-.00001||b.maxX>Number(n.widthMm)+.00001||b.minY<-.00001||b.maxY>Number(n.depthMm)+.00001)throw new Error('轮廓点超出缺口宽深范围');
+    if(!points.some((p,i)=>Math.abs(p.y)<.00001&&Math.abs(points[(i+1)%points.length].y)<.00001&&Math.abs(p.x-points[(i+1)%points.length].x)>.00001))throw new Error('轮廓缺口必须连到指定板边，中央障碍不能自动裁角');
+    const vertical=['LEFT','RIGHT'].includes(n.edge),span=vertical?h:w,sign=n.anchor==='END'?-1:1;
+    return points.map(p=>{
+      const along=sign*(Number(n.offsetMm)+p.x-span/2);
+      if(n.edge==='LEFT')return {x:-w/2+p.y,y:along};
+      if(n.edge==='RIGHT')return {x:w/2-p.y,y:along};
+      if(n.edge==='BOTTOM')return {x:along,y:-h/2+p.y};
+      return {x:along,y:h/2-p.y};
+    });
+  });
+}
+
+/** 展示、碰撞和工程图共用材料轮廓；只减板边局部轮廓，不做三维实体布尔。 */
 export function panelMaterialContours(part) {
   const d=part.dimensions||{},shape=d.panelShape||'rectangle';
   const parameters=shape==='rectangle'?{...d.shapeParameters,width:d.width,height:d.height}:d.shapeParameters||d;
   const base=panelContours(shape,parameters),rectangles=panelNotchRectangles(part);
   if(!rectangles.length)return base;
+  if(d.edgeNotches.some(n=>n.outline!=null)){
+    const rings=subtractContours(base.outer,panelNotchPolygons(part)),outer=rings.filter(r=>contourArea(r)>0),holes=rings.filter(r=>contourArea(r)<0);
+    if(outer.length!==1||contourArea(outer[0])<1||holes.length)throw new Error('裁剪会把板材分成多块、形成内部孤岛或切空，请调整缺口');
+    assertSimpleContour(outer[0]);
+    return {outer:outer[0],holes:[]};
+  }
   const w=Number(d.width)/2,h=Number(d.height)/2;
   const xs=[...new Set([-w,w,...rectangles.flatMap(r=>[r.minX,r.maxX])])].sort((a,b)=>a-b);
   const ys=[...new Set([-h,h,...rectangles.flatMap(r=>[r.minY,r.maxY])])].sort((a,b)=>a-b);
