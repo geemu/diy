@@ -1,4 +1,23 @@
-# 项目交接文档 — v0.75.77
+# 项目交接文档 — v0.75.79
+
+## v0.75.79 本地自动保存术语
+
+- 用户问“草稿是啥”后确认将本地自动保存称呼说清楚；文件分组/三动作、工程状态提示、恢复/备份/清除与损坏记录覆盖确认同步新名称。菜单仍9动作/3组，没有增加另一套保存入口；侧栏按钮保持简短，title解释恢复工程/清除记录。
+- 状态卡下说明只保留当前浏览器的一份工程记录、不是云端保存，清网站数据可能丢失、重要工程另存JSON；顶栏tooltip同口径。新备份文件名为本地自动保存工程.json，备份仍getAutosaveText原文，不修复/重写损坏工程。
+- app函数名和控制流程不变；LocalProjectDraft文件/类与工程、时间、视角key保持，启动恢复/失败保留/覆盖保护、确认清除及后续自动保存继续原逻辑。无迁移或用户浏览器/桌面文件操作，“我的常用方案”独立key不受影响，不改清单表单等临时草稿。
+- v0.75.79 / Schema62 / 141模块，无新模块/字段/依赖；入口完整版本映射、pom、仓库样例及59份verifier仅机械版本身份同步，旧文案断言/8菜单/4预设断言待授权更新。本轮人工源码/差异阅读与资源交付，未测试/语法检查/Java编译/启动/重启/HTTP/浏览器/实际存储下载，已有dirty/staged保留；见VALIDATION/ROADMAP和reference/local-autosave-wording-2026-10-13-v07579.md。
+
+## v0.75.78 前三项日常搭架优化
+
+- 授权为上一轮建议确认，开工已说明仅前三项+填板tooltip，未做净高驱动、联动回改或按层隔离；无测试/启动/浏览器授权。原默认/4标签/File9动作/主菜单7个、部位朝向/逐层/生成/板/制造逻辑保持，不加用途菜单、供应链或依赖。
+- ConnectionBatchManager.diagnostics在扫描完成/确认前读原rows，提取INVALID_EXISTING、NEEDS_ALIGNMENT、真实接触SKIPPED且非preserved与blockedSideCount；报告不是全接头审计、不将自由端/原有效保留件当失败。快照仅稳定宿主ID、标签、原因/类型、实际点，缺点聚焦宿主；不复算/放宽安装判据或改变选型/分帧/提交/回滚。
+- app在成功confirm后或无ready时保存页面内存报告及fresh工程签名，取消/失败不假报成功；按需打开，生成前仍原类型/规格→生成。结果显示本次规格与新增数，工程/截面变化过期、空工程清理、Esc收起；定位fresh签名/宿主可见检查，选择两宿主并按实际点、当前视向/视口/截面范围透视/正交聚焦，不移动模型或写工程历史。没有真实鼠标/点位/过期/性能验收。
+- QuickFramePresetStore使用独立diy-quick-frame-presets-v1，不读写工程/草稿key，version1/20份/64K字符；字段白名单覆盖所有新建参数（6部位、逐层左右、承托走向数量、接法/高度与联排），不含memberIds/位置/组件/板/连接/加工。读只校验记录结构，不依赖初始化前数据库目录；保存/套用才共用当前layeredRackLayout v3，未知型号/无效布局拒绝，原数据异常不自动清空或重写。
+- app在onMounted只读库、错误捕获不阻断Editor启动。套用先fresh读库与完整布局检查再Object.assign新建表单、显式syncDiyLayers（数组长度为新层数，原顶层同步规则不改）；不会生成/改旧工程或改变初始默认，整架编辑禁用。另存不重名、替换/删除明确确认，不进工程Undo；写前fresh合并、所选旧快照变化拒绝，页面刷新/新建不清库，清网站数据会丢本机方案。没有操作实际Chrome/localStorage或运行存储功能。
+- PanelDrawingExporter挂在Editor，读取全部PANEL的完整dimensions/materialSpec/加工/备注签名，不以世界姿态或内部ID分组；代表板克隆后panelMaterialContours/panelNotchPolygons，共用cleanContour/简单闭环检查，零长接点/共线清理不回写。SVG使用版面缩放+毫米尺寸，不作1:1切割；DXF CONTOUR/HOLE为实际mm1:1闭合线段，DIMENSION/NOTES独立，原点实际轮廓外包左下。PANEL-xx为本次图纸/清单样式，非持久构件ID。
+- 图纸列原板尺寸与裁后轮廓范围、厚度/数量/材质、N避让记录/边/定位端/距端/宽深范围；沿轮廓缺口不方框化，范围不是矩形加工，原轮廓孔环保留。曲线为当前折线参考、非精密CNC/公差或正反面认证，立体PANEL/无效未知轮廓/未适配板材加工明确不出假图。普通单种/全部ZIP fresh物理组键重查，部分支持的全部包清单标未适配；正式Factory Gate后同一addFiles输出工厂汇总/板材加工图，旧原始轮廓/缺口/BOM/加工/装配等不删。
+- index/CSS接创建面板报告、快搭可折叠本机方案、统一图纸标签板材列表/打包按钮，长说明换行；Vue公开bindings已人工核对，新增refs不在未声明时immediate watch访问，填板tooltip同步多块/轮廓预览。没有编译Vue模板或执行这些函数，不将人工阅读当实际Console/Network/下载/CAD打开通过。
+- v0.75.78 / Schema62 / 141模块，新增2本地模块无依赖/工程字段，入口/importmap/pom/仓库样例及59份帶版本verifier仅身份同步，旧8菜单/4预设断言仍待授权改逻辑。模块表工具仅产生apply_patch文本；默认未测试/验证器/语法检查/Java编译、启动/重启、HTTP/浏览器、真实存储/下载打开。原用户文件、真实Chrome/存储不操作，旧dirty/untracked保留；资源和待验见VALIDATION/ROADMAP与reference/connection-report-presets-panel-drawings-2026-10-13-v07578.md。
 
 ## v0.75.77 工厂汇总视图 / 加工样式图 / 移除安装指导入口
 

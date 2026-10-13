@@ -4,7 +4,7 @@
  * 模板只描述“用户想做什么”和参数默认值，不持久化 Three.js 对象。
  * 最终仍通过 Editor 领域 API 生成标准 Project Part。
  */
-export const DEFAULT_FRAME_DIMENSIONS = Object.freeze({width:670, depth:610, height:2000});
+export const DEFAULT_FRAME_DIMENSIONS = Object.freeze({width:1060, depth:610, height:1800});
 export const DEFAULT_DIY_TEMPLATE_ID = 'GENERIC_FRAME';
 
 // 新通用框架沿用用户示例朝向和接法；不改变旧参数架的缺省角色。

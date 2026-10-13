@@ -23,6 +23,7 @@ import HistoryManager from '../history/HistoryManager.js';
 import BomExporter from '../export/BomExporter.js';
 import MaterialListManager from '../model/MaterialListManager.js';
 import DrawingGenerator from '../export/DrawingGenerator.js';
+import PanelDrawingExporter from '../export/PanelDrawingExporter.js';
 import DxfExporter from '../export/DxfExporter.js';
 import FactoryPackageExporter from '../export/FactoryPackageExporter.js';
 import {normalizeProfilePath, isLinearProfile, getLocalFrameAtStation} from '../model/ProfilePath.js';
@@ -127,6 +128,7 @@ export default class Editor {
     this.bomExporter = new BomExporter(this);
     this.materialListManager = new MaterialListManager(this);
     this.drawingGenerator = new DrawingGenerator(this);
+    this.panelDrawingExporter = new PanelDrawingExporter(this);
     this.dxfExporter = new DxfExporter();
     this.factoryValidator = new FactoryValidator(this);
     this.factoryPackageExporter = new FactoryPackageExporter(this);

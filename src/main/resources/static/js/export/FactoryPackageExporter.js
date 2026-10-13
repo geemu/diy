@@ -22,6 +22,7 @@ export default class FactoryPackageExporter {
     zip.file('生产检查报告.json',JSON.stringify(validation,null,2));
     zip.file('工程.json',JSON.stringify(this.editor.exportProject(),null,2));
     this.addFactorySummaryFiles(zip);
+    this.editor.panelDrawingExporter.addFiles(zip.folder('工厂汇总').folder('板材加工图'));
     // 切割轮廓来自板材领域数据，不导出显示网格；局部XY及Z厚度与3D/总装图一致。
     const panels=this.editor.parts.filter(p=>p.type==='PANEL'&&!SolidPanelShapes.includes(p.dimensions?.panelShape));
     const panelContours=panels.map(part=>({partId:part.id,code:part.manufacturingCode||part.displayId,
@@ -174,6 +175,7 @@ export default class FactoryPackageExporter {
       '弯型材图纸给出中心线半径、角度、弯曲平面、展开长度、弦长和拱高。',
       '直型材端部斜切会输出 SVG斜切图/ 与 DXF斜切图/，0° 表示方切。',
       '工厂汇总/ 提供不含内部构件编号的配件/加工清单与同名 STYLE-xx 加工样式图；不同孔位或端切不会混并，先按此目录核对规格与数量。',
+      '工厂汇总/板材加工图/ 提供按实际材料轮廓分组的单板SVG/DXF、厚度/数量/避让记录，DXF的CONTOUR/HOLE轮廓为mm 1:1，未适配板材会明确列出。',
       'BOM/ 下提供项目汇总、型材、五金、配件、加工、子装配 BOM 与装配步骤；所有行均使用统一制造编号追溯到三维构件。',
       'cut-list.csv 按每一根实际型材输出切割/展开长度和 A/B 端切信息；machining.csv 按每一个实际加工 Feature 输出。',
       '本项目不管理 3m/4m/6m 原料长度、锯缝排料、余料库存或采购库存；这些能力不属于当前产品范围。',

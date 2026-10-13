@@ -442,6 +442,25 @@ export default class ConnectionBatchManager {
     this.onChanged?.(state);return state;
   }
   clearPreview(){if(this.previewGroup){this.editor.sceneManager.scene.remove(this.previewGroup);ProfileGeometryFactory.disposeObject(this.previewGroup);this.previewGroup=null;}this.previewMeshes.clear();}
+  /** 本次扫描的需处理位置快照；保留既有合法件/自由端不等于失败，不在这里猜漏件。 */
+  diagnostics(){
+    if(this.busy)return [];
+    return this.rows.filter(row=>row.status==='INVALID_EXISTING'||row.status==='NEEDS_ALIGNMENT'||
+      (row.touch&&row.status==='SKIPPED'&&!row.preserved)||row.blockedSideCount>0).map(row=>{
+      let point=row.candidate.targetPoint||row.checked?.target?.point||row.checked?.source?.point;
+      if(!point&&row.candidate.snap.sideMount){
+        const reference=row.candidate.snap.sideMount;
+        point=profileFeatureWorldPoint(row.source,{type:'PROFILE_FACE',face:reference.sourceContactFace,
+          stationS:reference.sourceStationS,faceOffset:reference.sourceSlotOffset||0});
+      }
+      const partial=row.blockedSideCount>0;
+      return {id:row.id,sourceId:row.source.userData.part.id,targetId:row.target.userData.part.id,
+        sourceLabel:row.sourceLabel,targetLabel:row.targetLabel,end:row.end,face:row.face,
+        title:row.status==='INVALID_EXISTING'?'已有连接失效':row.status==='NEEDS_ALIGNMENT'?'尚未贴合':partial?'另一侧未适配':'未能安装',
+        message:humanMessage(partial?'一侧已有或可以生成；另一侧没有同时通过孔槽、支撑、承托面及空间检查的安装方案，未补件。':row.message||'没有合法安装方案'),
+        point:point&&[point.x,point.y,point.z].every(Number.isFinite)?{x:point.x,y:point.y,z:point.z}:null};
+    });
+  }
   cancel(){
     this.runRevision++;this.currentJob?.return();this.currentJob=null;this.busy=false;this.progressStep('',0,0,0);this.evaluationCache=null;this.definitionCache=null;this.existingEnvelopes=null;
     this.clearPreview();if(!this.active)return;this.active=false;this.rows=[];this.profileCount=0;this.freeEndCount=0;

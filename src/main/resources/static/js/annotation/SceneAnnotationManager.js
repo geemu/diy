@@ -32,9 +32,18 @@ export default class SceneAnnotationManager {
     this.sceneManager.container.appendChild(this.layer);
     this.labels = [];
     this.rackMeasurements = [];
+    // 层高详情和当前查看段只属于本次画布，不进入工程、尺寸约束或自动保存。
+    this.rackDetailMode=false;
+    this.rackSelectedKey=null;
+    this.rackHoverKey=null;
+    this.rackFocusKey=null;
+    this.rackHighlights=[];
+    this.rackHighlightKey=null;
+    this.onRackLayerPicked=null;
     this.machiningMeasurements = [];
     this.machiningLaneGroups = new Map();
     this.refreshQueued = false;
+    this.disposed=false;
     this.dragState = null;
     this.pointer = null;
     this.hoverRay = new THREE.Raycaster();
@@ -47,7 +56,7 @@ export default class SceneAnnotationManager {
     this.clearPointer = () => {this.pointer=null;this.surfaceNumbers.clearHover();};
     this.pointerSurface.addEventListener('pointermove',this.trackPointer,{passive:true});
     for(const type of ['pointerleave','pointerdown','contextmenu'])this.pointerSurface.addEventListener(type,this.clearPointer,{passive:true});
-    this.sceneManager.addFrameHandler(() => this.render());
+    this.removeFrameHandler=this.sceneManager.addFrameHandler(() => this.render());
   }
 
   setOptions(options = {}) {
@@ -58,15 +67,17 @@ export default class SceneAnnotationManager {
   }
 
   requestRefresh() {
-    if (this.refreshQueued) return;
+    if (this.refreshQueued||this.disposed) return;
     this.refreshQueued = true;
     requestAnimationFrame(() => {
       this.refreshQueued = false;
+      if(this.disposed)return;
       this.refresh();
     });
   }
 
   refresh() {
+    if(this.disposed)return;
     this.clearGraphics();
     this.surfaceNumbers.refresh(this.editor.meshes,this.options.showPartNumbers,{
       showMachiningSurface:this.options.showMachiningSurface&&!this.options.showMachiningDimensions,
@@ -81,6 +92,8 @@ export default class SceneAnnotationManager {
   }
 
   clearGraphics() {
+    this.clearRackHighlight();
+    this.rackHoverKey=null;this.rackFocusKey=null;
     while (this.group.children.length) {
       const child = this.group.children[0];
       this.group.remove(child);
@@ -131,20 +144,92 @@ export default class SceneAnnotationManager {
     );
   }
 
-  /** 每个有实际成员的参数架只建一组层间净高；没有上梁的顶层不画虚构尺寸。 */
+  /** 只改变显示密度；完整标注开关不写入 Project 的标注选项。 */
+  setRackDetailMode(enabled) {
+    this.rackDetailMode=enabled===true;this.requestRefresh();
+  }
+
+  setRackLayerSelection(assemblyId,index) {
+    this.rackSelectedKey=assemblyId!=null&&Number.isInteger(index)?`rack:${assemblyId}:${index}`:null;
+    this.rackProjectionState=null;
+    if(!this.rackSelectedKey)this.clearRackHighlight();
+  }
+
+  /** 查看层高不能抢走进行中的放置、框选、编辑或播放手势。锁定件仍可只读查看。 */
+  rackInteractionAvailable() {
+    const e=this.editor;
+    return !(this.disposed||this.dragState||e.transformSelectionSnapshot||this.sceneManager.transformControls?.dragging||e.profileGripEditor?.drag||
+      e.selectionGestureManager?.drag||e.selectionGestureManager?.marqueeGesture||
+      e.isBuilderReviewActive?.()||e.profileDrawTool?.isActive()||e.profilePlacementManager?.isActive()||
+      e.connectionPlacementManager?.isActive()||e.accessoryPlacementManager?.isActive()||e.machiningPlacementManager?.isActive()||
+      e.wholeStretchManager?.isActive()||e.frameParameterManager?.isActive()||e.panelFillManager?.isActive()||
+      e.panelReliefManager?.isActive()||e.connectionReplacementManager?.isActive()||e.measureMode||e.dimensionMode||
+      e.featureSelectionManager?.enabled||this.sceneManager.marqueeMode||this.sceneManager.lassoMode||
+      e.contourFrameManager?.active||e.assemblyPlaybackManager?.active||e.assemblyPresentationManager?.isExploded()||
+      document.querySelector('.modal-backdrop,.engineering-center-backdrop'));
+  }
+
+  rackRecordActive(record,available) {
+    return available&&record.key===(this.rackHoverKey||this.rackFocusKey||this.rackSelectedKey);
+  }
+
+  /** 高亮只加有深度测试的临时外框，不换实体材质，也不盖掉原红色干涉。 */
+  updateRackHighlight(record) {
+    if(this.rackHighlightKey===(record?.key||null))return;
+    this.clearRackHighlight();
+    if(!record)return;
+    this.rackHighlightKey=record.key;
+    for(const root of [...record.lowerRoots,...record.upperRoots]) {
+      if(!annotationObjectVisible(root))continue;
+      root.updateMatrixWorld(true);
+      const helper=new THREE.BoxHelper(root,0x6b9bbd);
+      helper.material.transparent=true;helper.material.opacity=.65;
+      helper.material.depthTest=true;helper.material.depthWrite=false;
+      helper.raycast=()=>{};this.group.add(helper);this.rackHighlights.push(helper);
+    }
+  }
+
+  clearRackHighlight() {
+    for(const helper of this.rackHighlights||[]) {
+      helper.removeFromParent();helper.geometry.dispose();helper.material.dispose();
+    }
+    this.rackHighlights=[];this.rackHighlightKey=null;
+  }
+
+  /** 每个参数架一组短数值，单位只写一次；没有上梁的顶层不画虚构尺寸。 */
   addRackLayerDimensions() {
     for(const assembly of this.editor.assemblyManager.assemblies) {
       const info=rackLayerMeasurements(assembly,this.editor.parts);
       if(!info||info.error)continue;
-      const chain={info,records:[],screenCache:[]};
+      const heading=this.addLabel(`rack:${assembly.id}:unit`,'净高 · mm',new THREE.Vector3(),'rack-unit');
+      heading.rackMeasurement=true;heading.element.style.display='none';
+      const chain={info,heading,records:[],screenCache:[]};
       for(const row of info.rows.slice(0,-1)) {
         const upper=info.rows[row.index+1];
-        const label=this.addLabel(`rack:${assembly.id}:${row.index}`,`${row.index+1}–${row.index+2}层 · 净高 ${rackClearanceText(row)}`,new THREE.Vector3(),'rack-layer');
-        label.rackMeasurement=true;
-        label.element.title=`${info.name}：本层承托面到上方梁或关联板底面；未计连接件局部凸出和未关联板材`;
+        const key=`rack:${assembly.id}:${row.index}`,clearance=rackClearanceText(row);
+        const text=this.rackDetailMode?`${row.index+1}–${row.index+2}层 · 净高 ${clearance}`:`${row.index+1}–${row.index+2}层  ${clearance.replace(/ mm$/,'')}`;
+        const label=this.addLabel(key,text,new THREE.Vector3(),'rack-layer');
+        label.rackMeasurement=true;label.element.style.display='none';
+        label.element.title=`${info.name} · ${row.index+1}–${row.index+2}层净高 ${clearance}；点击查看和编辑层设置。承托面到上方梁或关联板底面，未计连接件局部凸出和未关联板材`;
+        label.element.setAttribute('role','button');label.element.tabIndex=-1;
+        label.element.setAttribute('aria-label',`${info.name}，第${row.index+1}到${row.index+2}层净高${clearance}，查看层高详情`);
         label.element.classList.toggle('is-overlap',row.clearHeightMm<-.1);
         const roots=ids=>ids.map(id=>this.editor.getMeshByPartId(id)).filter(Boolean);
-        chain.records.push({row,label,lowerRoots:roots(row.partIds),upperRoots:roots(upper.partIds),lines:this.addDynamicSegments(8,row.clearHeightMm<-.1?0xb85858:0x6483a0,.8)});
+        const record={key,row,label,lowerRoots:roots(row.partIds),upperRoots:roots(upper.partIds),lines:this.addDynamicSegments(10,row.clearHeightMm<-.1?0xb85858:0x7892a6,.48)};
+        const pick=event=>{
+          event.stopPropagation();
+          if(event.shiftKey||event.ctrlKey||event.metaKey||event.altKey||!this.rackInteractionAvailable())return;
+          if(!this.rackMeasurements.some(group=>group.records.includes(record))||!record.lowerRoots.some(annotationObjectVisible)||!record.upperRoots.some(annotationObjectVisible))return;
+          event.preventDefault();this.onRackLayerPicked?.({assemblyId:info.assemblyId,index:row.index});
+        };
+        label.element.addEventListener('pointerdown',event=>event.stopPropagation());
+        label.element.addEventListener('click',pick);
+        label.element.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '||event.key==='Spacebar')pick(event);});
+        label.element.addEventListener('pointerenter',()=>{if(this.rackInteractionAvailable()){this.rackHoverKey=key;this.rackProjectionState=null;}});
+        label.element.addEventListener('pointerleave',()=>{if(this.rackHoverKey===key){this.rackHoverKey=null;this.rackProjectionState=null;}});
+        label.element.addEventListener('focus',()=>{this.rackFocusKey=key;this.rackProjectionState=null;});
+        label.element.addEventListener('blur',()=>{if(this.rackFocusKey===key){this.rackFocusKey=null;this.rackProjectionState=null;}});
+        chain.records.push(record);
       }
       this.rackMeasurements.push(chain);
     }
@@ -152,8 +237,9 @@ export default class SceneAnnotationManager {
 
   /** 侧边单列是屏幕布局，数值仍读实际世界高度；相机变化只更新固定线缓冲，不写尺寸实体。 */
   renderRackLayerDimensions(occupied,width,height,camera) {
-    if(!this.rackMeasurements.length)return;
-    const state=[width,height,...camera.matrixWorld.elements,...camera.projectionMatrix.elements];
+    if(!this.rackMeasurements.length){this.clearRackHighlight();return;}
+    const interactive=this.rackInteractionAvailable();
+    const state=[width,height,this.rackDetailMode,interactive,this.rackSelectedKey,this.rackHoverKey,this.rackFocusKey,...camera.matrixWorld.elements,...camera.projectionMatrix.elements];
     for(const chain of this.rackMeasurements)for(const record of chain.records) {
       record.visible=record.lowerRoots.some(annotationObjectVisible)&&record.upperRoots.some(annotationObjectVisible);
       state.push(record.visible);
@@ -163,25 +249,35 @@ export default class SceneAnnotationManager {
       return;
     }
     this.rackProjectionState=state;
+    let highlighted=null;
     for(const chain of this.rackMeasurements) {
       chain.screenCache=[];
-      const hide=()=>{for(const record of chain.records){record.label.element.style.display='none';record.lines.visible=false;}};
-      hide();
+      const hide=()=>{chain.heading.element.style.display='none';for(const record of chain.records){record.label.element.style.display='none';record.lines.visible=false;}};
+      chain.heading.element.style.display='none';
+      for(const record of chain.records)record.lines.visible=false;
       const {min,max}=chain.info.bounds,outline=[];
       for(const x of [min.x,max.x])for(const y of [min.y,max.y])for(const z of [min.z,max.z]) {
         const point=this.screenPoint(new THREE.Vector3(x,y,z),width,height,camera);
         if(screenPointVisible(point))outline.push(point);
       }
       const records=chain.records.filter(record=>record.visible);
-      if(!outline.length||!records.length)continue;
+      if(!outline.length||!records.length){hide();continue;}
       const left=Math.min(...outline.map(point=>point.x)),right=Math.max(...outline.map(point=>point.x));
       const corners=[];
       for(const x of [min.x,max.x])for(const z of [min.z,max.z]) {
         const world=new THREE.Vector3(x,(min.y+max.y)/2,z),point=this.screenPoint(world,width,height,camera);
         if(screenPointVisible(point))corners.push({world,point});
       }
-      if(!corners.length)continue;
-      for(const record of records)record.label.element.style.display='';
+      if(!corners.length){hide();continue;}
+      for(const record of records) {
+        record.label.element.style.display='';
+        record.label.element.tabIndex=interactive?0:-1;
+        record.label.element.disabled=!interactive;
+        record.label.element.style.pointerEvents=interactive?'':'none';
+        record.label.element.setAttribute('aria-disabled',String(!interactive));
+        record.label.element.setAttribute('aria-pressed',String(record.key===this.rackSelectedKey));
+        record.label.element.classList.toggle('is-active',this.rackRecordActive(record,interactive));
+      }
       const sizes=records.map(record=>annotationBoxSize(record.label)),boxWidth=Math.max(...sizes.map(box=>box.width)),boxHeight=Math.max(...sizes.map(box=>box.height)),spacing=boxHeight+8;
       const sides=[{sign:1,edge:right,room:width-right},{sign:-1,edge:left,room:left}];
       let placement=null;
@@ -191,34 +287,46 @@ export default class SceneAnnotationManager {
           const a=new THREE.Vector3(corner.world.x,record.row.clearanceStartMm,corner.world.z),b=new THREE.Vector3(corner.world.x,record.row.clearanceEndMm,corner.world.z);
           return {record,a,b,start:this.screenPoint(a,width,height,camera),end:this.screenPoint(b,width,height,camera)};
         }).filter(value=>screenPointVisible(value.start)&&screenPointVisible(value.end)&&Math.max(value.start.y,value.end.y)>=0&&Math.min(value.start.y,value.end.y)<=height);
-        if(!candidates.length||candidates.length*spacing>height-16)continue;
+        const topMargin=this.rackDetailMode?8:28;
+        if(!candidates.length||candidates.length*spacing>height-topMargin-8)continue;
         candidates.sort((a,b)=>(a.start.y+a.end.y)-(b.start.y+b.end.y));
         let previous=8-boxHeight/2-spacing;
         for(const value of candidates) {
-          value.y=Math.max(previous+spacing,Math.max(8+boxHeight/2,Math.min(height-8-boxHeight/2,(value.start.y+value.end.y)/2)));previous=value.y;
+          value.y=Math.max(previous+spacing,Math.max(topMargin+boxHeight/2,Math.min(height-8-boxHeight/2,(value.start.y+value.end.y)/2)));previous=value.y;
         }
         const overflow=Math.max(0,previous-(height-8-boxHeight/2));
         for(const value of candidates)value.y-=overflow;
         for(let lane=0;lane<3;lane++) {
-          const offset=24+lane*(boxWidth+32);
-          if(side.room<offset+boxWidth+16)break;
-          const railX=side.edge+side.sign*offset,textX=railX+side.sign*(boxWidth/2+10);
+          const offset=(this.rackDetailMode?24:10)+lane*(boxWidth+20);
+          if(side.room<offset+boxWidth+24)break;
+          const railX=side.edge+side.sign*offset,textX=railX+side.sign*(boxWidth/2+8);
           const rectangles=candidates.map(value=>rectAround(textX,value.y,boxWidth+4,boxHeight+4));
+          const headingY=candidates[0].y-boxHeight/2-11;
+          if(!this.rackDetailMode)rectangles.push(rectAround(textX,headingY,Math.max(60,boxWidth),16));
           if(rectangles.some(rect=>occupied.some(other=>rectanglesOverlap(rect,other))))continue;
-          placement={candidates,rectangles,railX,textX};break;
+          placement={candidates,rectangles,railX,textX,headingY};break;
         }
         if(placement)break;
       }
       if(!placement){hide();continue;}
+      if(!this.rackDetailMode) {
+        chain.heading.element.style.display='';
+        chain.heading.element.style.transform=`translate(-50%,-50%) translate(${Math.round(placement.textX)}px,${Math.round(placement.headingY)}px)`;
+      }
       const fromScreen=point=>this.worldScreenPoint(point,width,height,camera);
       for(let index=0;index<placement.candidates.length;index++) {
         const value=placement.candidates[index],{record,start,end}=value,x=placement.railX;
         const a={x,y:start.y,z:start.z},b={x,y:end.y,z:end.z},mid={x,y:(start.y+end.y)/2,z:(start.z+end.z)/2};
-        const segments=[[value.a,fromScreen(a)],[value.b,fromScreen(b)],[fromScreen(a),fromScreen(b)]];
+        const active=this.rackRecordActive(record,interactive),detailed=this.rackDetailMode||active;
+        const tick=point=>[fromScreen({...point,x:x-3}),fromScreen({...point,x:x+3})];
+        const segments=detailed?[[value.a,fromScreen(a)],[value.b,fromScreen(b)],[fromScreen(a),fromScreen(b)]]:[tick(a),tick(b),[fromScreen(a),fromScreen(b)]];
         const length=Math.abs(b.y-a.y),direction=Math.sign(b.y-a.y),arrow=Math.min(5,length/4);
-        if(length>.1)for(const [point,sign] of [[a,1],[b,-1]])for(const side of [-1,1])segments.push([fromScreen(point),fromScreen({x:x+side*arrow*.45,y:point.y+direction*sign*arrow,z:point.z})]);
+        if(detailed&&length>.1)for(const [point,sign] of [[a,1],[b,-1]])for(const side of [-1,1])segments.push([fromScreen(point),fromScreen({x:x+side*arrow*.45,y:point.y+direction*sign*arrow,z:point.z})]);
         if(Math.abs(value.y-mid.y)>2)segments.push([fromScreen(mid),fromScreen({x:placement.textX,y:value.y,z:mid.z})]);
         this.updateDynamicSegments(record.lines,segments);
+        record.lines.material.color.setHex(record.row.clearHeightMm<-.1?0xb85858:active?0x315f86:0x7892a6);
+        record.lines.material.opacity=active ? .95 : this.rackDetailMode ? .75 : .48;
+        if(active&&(!highlighted||record.key===this.rackHoverKey||record.key===this.rackFocusKey))highlighted=record;
         record.label.worldPoint.copy(fromScreen(mid));record.label.element.style.display='';
         record.label.element.style.transform=`translate(-50%,-50%) translate(${Math.round(placement.textX)}px,${Math.round(value.y)}px)`;
       }
@@ -226,6 +334,7 @@ export default class SceneAnnotationManager {
       for(const record of chain.records)if(!shown.has(record)){record.label.element.style.display='none';record.lines.visible=false;}
       chain.screenCache=placement.rectangles;occupied.push(...chain.screenCache);
     }
+    this.updateRackHighlight(highlighted);
   }
 
   addProfileDimensions() {
@@ -641,7 +750,8 @@ export default class SceneAnnotationManager {
   }
 
   addLabel(id,text,worldPoint,kind,offsetPx = {x:0,y:0},dimension = null) {
-    const element = document.createElement('div');
+    const element = document.createElement(kind==='rack-layer'?'button':'div');
+    if(kind==='rack-layer')element.type='button';
     element.className = `scene-annotation-label ${kind}`;
     element.textContent = text;
     element.dataset.annotationId = id;
@@ -733,6 +843,7 @@ export default class SceneAnnotationManager {
   }
 
   render() {
+    if(this.disposed)return;
     this.surfaceNumbers.update();
     const width = Math.max(1,this.sceneManager.container.clientWidth);
     const height = Math.max(1,this.sceneManager.container.clientHeight);
@@ -895,6 +1006,8 @@ export default class SceneAnnotationManager {
   }
 
   dispose() {
+    if(this.disposed)return;this.disposed=true;
+    this.removeFrameHandler?.();this.onRackLayerPicked=null;
     this.surfaceNumbers.dispose();
     this.pointerSurface.removeEventListener('pointermove',this.trackPointer);
     for(const type of ['pointerleave','pointerdown','contextmenu'])this.pointerSurface.removeEventListener(type,this.clearPointer);

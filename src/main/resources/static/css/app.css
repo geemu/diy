@@ -1167,8 +1167,17 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .rack-layer-table tbody th small{display:block;font-size:10px;color:#8291a5}.rack-layer-table tr:last-child td,.rack-layer-table tr:last-child th{border-bottom:0}
 .rack-layer-table .rack-layer-negative{color:#f59a9a}.rack-layer-note{margin:9px 0 0;font-size:10px;line-height:1.65;color:#929eaf}
 .rack-layer-warning{margin:8px 0 0;color:#e4b773;font-size:11px;line-height:1.65}.rack-layer-toggle{margin:10px 0 0;font-size:11px;color:#b9c5d6}
-.scene-annotation-label.rack-layer{background:#eef4fb;color:#365573;border:1px solid #91a8bf;font-size:11px;font-weight:600;padding:3px 6px;box-shadow:none;pointer-events:none}
+.scene-annotation-label.rack-layer{background:#f4f8fcc9;color:#29465e;border:1px solid transparent;font-size:11px;line-height:16px;font-weight:600;padding:2px 5px;border-radius:4px;box-shadow:none;pointer-events:auto;cursor:pointer;font-variant-numeric:tabular-nums;touch-action:manipulation}
+.scene-annotation-label.rack-layer.is-active,.scene-annotation-label.rack-layer:focus-visible{background:#f4f9ff;border-color:#789cb9;color:#244f73;outline:2px solid #5884a12e;outline-offset:1px}
+.scene-annotation-label.rack-unit{background:transparent;border:0;color:#36516a;font-size:10px;font-weight:500;padding:0;box-shadow:none;pointer-events:none}
 .scene-annotation-label.rack-layer.is-overlap{color:#a13f3f;border-color:#c88181;background:#fff0ed}
+.rack-layer-detail{margin-bottom:10px;padding:10px;border:1px solid #476782;border-radius:6px;background:#132234}
+.rack-layer-detail:focus-visible{outline:2px solid #6b9bbd;outline-offset:2px}
+.rack-layer-detail-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#dbeaf5;font-size:12px}.rack-layer-detail-title>span{color:#91aec4;font-size:10px}
+.rack-layer-detail dl{display:grid;grid-template-columns:1fr;gap:6px;margin:10px 0}.rack-layer-detail dl>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px}.rack-layer-detail dt{color:#9fb1c3}.rack-layer-detail dd{margin:0;color:#e4edf5;font-variant-numeric:tabular-nums;font-weight:600}
+.rack-layer-detail .rack-layer-negative{color:#f59a9a}.rack-layer-table tr.rack-layer-current{background:#152536}
+.rack-layer-link{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:2px 0;text-decoration:underline;text-decoration-color:#6b9bbd80;text-underline-offset:3px}.rack-layer-link:hover,.rack-layer-link:focus-visible{color:#a9d3f3;outline:1px solid #6b9bbd;outline-offset:2px}
+.frame-layer-row.is-edit-target{border-radius:6px;background:#162433;outline:1px solid #5e819e;padding:10px 7px 0}
 .frame-options .inline-check{font-size:12px;line-height:1.6;margin:0 0 8px}
 
 /* 连接件更换和板材裁角共用紧凑深色表单；只在用户进入预览后展开参数。 */
@@ -1229,6 +1238,15 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .factory-list-actions{display:flex;gap:6px;flex-wrap:wrap;min-width:62px}
 .factory-list-actions .soft-button{height:30px;padding:0 10px;font-size:12px;white-space:nowrap}
 .factory-list-warning td:first-child{color:#e4ad57}
+.quick-frame-presets summary small{margin-left:8px;color:var(--muted);font-weight:400}
+.quick-preset-select{display:flex;gap:6px;margin:5px 0 10px}.quick-preset-select select{flex:1;min-width:0}.quick-preset-select button{flex:none;white-space:nowrap}
+.quick-frame-presets>input{width:100%;margin:5px 0 8px}.quick-preset-actions{display:flex;gap:6px;flex-wrap:wrap}.quick-preset-actions button{padding:0 10px;font-size:12px;white-space:nowrap}
+.connection-report-entry{margin:10px 14px 0;width:calc(100% - 28px);height:auto;min-height:36px;white-space:normal}
+.connection-result-row{padding:12px;margin:9px 0;border:1px solid var(--line);border-radius:9px;background:#111522}
+.connection-result-row>strong{display:block;color:#e4ad57}.connection-result-row>span{display:block;margin:5px 0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.connection-result-row p{font-size:12px;line-height:1.65;color:#d1d5db;margin:8px 0}
+.panel-drawing-card{grid-column:1/-1}.panel-drawing-list{display:flex;flex-direction:column;gap:7px;margin:10px 0 14px}.panel-drawing-list article{display:flex;align-items:center;gap:12px;border:1px solid var(--line);padding:10px;border-radius:8px}.panel-drawing-list article>div{flex:1;min-width:0}.panel-drawing-list b,.panel-drawing-list span,.panel-drawing-list small{display:block;overflow-wrap:anywhere}.panel-drawing-list b{font-size:13px;color:#d1d5db}.panel-drawing-list span,.panel-drawing-list small{font-size:12px;line-height:1.6;color:var(--muted);margin-top:3px}.panel-drawing-list button{flex:none;white-space:nowrap}
+.panel-drawing-list .builder-review-warning{color:#e4ad57}
+@media(max-width:700px){.panel-drawing-list article{align-items:flex-start;flex-direction:column}.panel-drawing-list button{align-self:flex-end}}
 .list-export-secondary .drawing-export-center{min-height:0;overflow-y:auto;align-content:start;overscroll-behavior:contain}
 .list-export-modal .manufacturing-export-card{grid-column:1/-1}
 .list-export-modal .drawing-export-card .button-row{flex-wrap:wrap}
