@@ -1,4 +1,13 @@
-# 项目交接文档 — v0.75.79
+# 项目交接文档 — v0.75.80
+
+## v0.75.80 贴边层高与对应层编辑入口
+
+- 用户确认上轮展示方案，并给宽1060/深610/高180；进一步回复1800毫米（180厘米）。DiyTemplateCatalog唯一默认尺寸改1060×610×1800，5层、每层1承托、原角色/接法保持；只影响默认新建/缺省，显式保存参数优先，不迁移工程或常用方案。
+- SceneAnnotationManager rackDetailMode/selected/hover/focus/highlight均显示状态，原options和Schema62不新增字段。默认短标签（如1–2层 462）与一组净高·mm，细竖线/短刻度；当前段才箭头和实际上下梁临时有深度外框，完整开关还原长说明。固定线缓冲/原有限屏幕避让复用，不够空间隐藏、侧表仍可查，无每帧重建BoxHelper或业务测量。
+- 标签改原生button，type=button/ARIA/Tab/Enter/Space、pointerdown和click守卫；普通修饰键不进入详情，正在绘制/放置/预览/框选/拖动/特征/标尺/播放/爆炸/模态禁用，不取消在做的工具。fresh实际层数据/真实宿主ID查询后选择下层成员、展开右侧详情；不是尺寸实体或直接净高驱动，不写历史/草稿。
+- 详情显示净高、上层intervalMm（两个顶面差）与下层heightMm（离地）；表格净高也可点，当前行突出。编辑入口用原beginFrameEdit及参数副本、展开并定位原frame-layer-height-N，顶层定位frame-height；输入实际change才设置手工层高，原预览/保护/确认/一次历史与失败回滚不改。
+- 工程/选择变化清查看段；DOM刷新、隐藏/工具忙/卸载释放临时框。帧回调可移除，dispose幂等与排队刷新守卫防复建；新增交互不替换实体材质/干涉/选择，不加入拾取/Part/BOM。完整版开关只当前页面、刷新回紧凑，原showRackLayers仍走原保存选项。
+- v0.75.80 / Schema62 / 141模块，无新模块/依赖/工程字段；入口/importmap/pom/样例及59份verifier仅机械版本身份同步，不运行/新增测试或改断言。旧草稿文案/导航/预设与相关默认期望待授权同步，本轮默认未语法检查/编译/启动/HTTP/浏览器/实际存储下载；已有dirty/staged和用户文件/真实浏览器记录保留，资源及待验见VALIDATION/ROADMAP与reference/compact-rack-layer-labels-2026-10-13-v07580.md。
 
 ## v0.75.79 本地自动保存术语
 
