@@ -1,4 +1,88 @@
-# 项目交接文档 — v0.75.69
+# 项目交接文档 — v0.75.77
+
+## v0.75.77 工厂汇总视图 / 加工样式图 / 移除安装指导入口
+
+- 用户确认“工厂不关心内部编号”和“安装指导作用有限”的精简方案。统一资料窗口材料/accessories/machining/drawing四标签，删除assembly标签、整块说明书/播放步骤模板与打印按钮；不删除AssemblyManager/组合解组/爆炸播放底层或正式包装配记录。原文件9动作/3组、7主菜单、统一资料焦点/辅助层/材料草稿保护保持，旧assembly tab请求按原未知tab兜底材料页。
+- BomExporter.buildFactoryAccessoryList读取同一buildDesignMaterialList，不再单独数ACCESSORY_CATALOG；ACCESSORY散件/CONNECTION套装/待选型、完整dimensions/规格分组、失效/两端体系提醒沿原源。可见cells只输出类别/名称/规格型号/尺寸/数量/单位/备注，待选型量列—、备注明确处数不计采购，隐藏partIds/connectionIds用于原focusMaterialEntry/选中高亮。
+- 原材料machiningSignature副本排除manufacturingCode/id/连接来源/孔组随机身份及pattern/patternSource/mirror编辑来源，保留normalizeMachiningFeature后完整物理参数/工序/基准；复合孔引用转成目标参数签名、孔组成员签名，未解析引用保守分开。排序对象键/特征集合，不按四舍五入参数合并；材料key还纳入实际sectionSize/wallThickness，型号/制造规格/封槽/路径/端切/备注继续区分。没有改原Feature、编号、图案关系或旧生产groups/逐件方法。
+- factoryMachiningGroups从同一材料组取完整克隆，仅含有加工或非零端切的PROFILE，STYLE-xx本次顺序标签不持久化。buildFactoryMachiningList显示型号/制造材料、长度/数量/A/B端切/孔面/距A端S/横向或端面XY偏移/孔径螺纹深度/槽铣方向/阶段/基准，原自动ID/组件路径不作可见列；本次样式与同名SVG/DXF对应，不拿旧M组或首件displayId假装整组要求。
+- DrawingGenerator的buildMachiningDrawings/buildCutDrawings仅增加显式组入参，默认调用保持旧分组；新buildFactoryStyleDrawings复用相同绘制器、使用STYLE/-CUT并清空可见partIds，加参考脚注。直料已知加工图复用现有边界；弯料/未知特征清单明确未适配且不出假图，不声明补齐精确CNC、复杂端面复合、公差、真实截面或弯料加工图。
+- app结构化行从row.cells渲染，key来自完整规格，定位不再正则解析可见编号；按钮可键盘定位/下载，长加工说明换行。配件/加工CSV及单样式CSV+SVG/DXF ZIP下载前fresh取组，过期加工键拒绝/完整图数不符拒绝，文本公式防护；这些是设计参考，不触发Factory配置或假称可生产。原材料Excel/CSV文档格式不变。
+- FactoryPackageExporter原validateForFactory阻断后增加工厂汇总/配件清单.csv、加工清单.csv、加工样式图/与阅读说明，样式组同一快照；原生产报告/工程/板材轮廓/BOM/逐件切割与加工/装配/总装子装/弯曲与斜切图全保留，Gate/制造配置/警告确认不放宽。底层身份用于追溯，不因默认清单隐藏而删除。
+- v0.75.77 / Schema62 / 139模块，无新模块/依赖/持久字段；页面/importmap/pom/样例和59份带版本verifier仅身份同步，旧8菜单/4预设断言仍待授权改逻辑。按默认未测试/验证器/语法检查/Java编译、启动/重启、HTTP/浏览器/真实下载和Excel/CAD打开；用户原文件/真实Chrome/localStorage未操作，dirty/staged保留，资源结果见VALIDATION、待验见ROADMAP及reference/factory-facing-list-simplification-2026-10-13-v07577.md。
+
+下面v0.75.76五标签/装配打印为历史交付，本版四标签覆盖其资料入口；底层装配/组件仍保留。
+
+## v0.75.76 清单与导出单入口 / 单资料窗口
+
+- 用户确认单入口、统一窗口、分标签导出方案；文件资料相关9个原按钮合为1个“清单与导出”，项目5动作及本地草稿3动作保留，总9动作/3组、顶部仍7菜单。当前视图导出移图纸标签，项目工具/底部截图快捷入口保留；无新制造顶栏或删除实际功能。
+- app删除materialListVisible，材料模型以统一engineeringCenterVisible读取；五个固定tab ID复用materials/accessories/machining/assembly/drawing，selectEngineeringCenterTab只更新UI，openEngineeringCenter/旧openMaterialList别名都同一弹层。模板删除第二个资料外壳，原材料卡表/规格/统计/虚拟补充表单内容保留；非材料表只读原BOM数据，旧materials简表分支不再使用。
+- 切标签不关闭窗口、保留materialListView与临时补充项；watch仅整个窗口关闭清理表单/错误，浏览不写历史，已保存补充项仍原MaterialListManager。材料CSV/xlsx实现/fresh快照不改，打印原函数仅装配固定底栏一份，PNG用原renderer画布、SVG/DXF和Factory包全部原函数；格式/BOM/制造规则未扩展。
+- 固定标题/横向标签/底栏，材料与其他内容各自滚动，小屏标签可横滚/统计两列/图纸单列。资料层4990、原配置/检查5000，其间资料section inert/aria-hidden，关闭辅助层回主窗口active tab焦点；查看制造资料仍可明确回材料标签。Esc优先原检查/配置，其次材料补充表单、主窗口；主面板Tab/Shift+Tab仅可见可用控件循环，不接管辅助层。普通定位及检查项定位关闭主面板，实际定位逻辑不改。
+- 制造配置/导出前引导/Factory错误阻断/警告确认不改，普通清单无需配置原规则保持；不写Schema字段或操作原JSON/实际浏览器存储，原抽屉/框架/连接/板材/加工/历史及dirty/staged保持。v72其他一比一导出仍待真实样例，不能因统一UI说已解决。
+- v0.75.76 / Schema62 / 139模块，无新增依赖/模块/字段，入口/importmap/pom/样例及59份带版本verifier仅身份同步，旧8菜单/4预设断言待授权同步、不改测试逻辑或执行。默认未测试/语法检查/Java编译、启动/重启、HTTP/浏览器/下载/打印/实际文件验收；资源复制和源码不证明Vue模板/初始化/单窗/焦点/输出通过，见VALIDATION、ROADMAP及reference/unified-list-export-center-2026-10-12-v07576.md。
+
+## v0.75.75 制造导航并入文件
+
+- 用户先询问制造菜单与文件重复，再明确要求去掉制造、全部合到文件；实际范围是导航迁移/去重，不是删除制造业务。index移除独立制造details及右上制造输出，仅保留原撤销/重做，主菜单8→7。
+- 文件17个动作按项目、清单与装配、导出与制造、本地草稿四组；原项目/视图导出/样例/草稿入口保留，新增直达原配件/加工/装配、制造配置/检查/制造包动作，材料清单与工程图各一份。所有@click直接调用原函数，无新增代理、菜单业务状态或输出路径。
+- 仅追加cad-menubar下cad-file-menu限高/内滚动/子项不缩/overscroll样式，不改其他顶部或底部弹层。原hoverCadMenu/keepCadMenuOpen/native details和click后关闭复用，未改pointerdown时机或快捷键；工程中心/材料清单内标签、选中连接去配置按钮等上下文流程保持。
+- 原ManufacturingConfigurator/FactoryValidator、导出缺配置时引导配置、错误阻断与警告确认未改；工程/历史/草稿/镜头和抽屉/通用框架/BOM全部保持，原用户JSON/真实Chrome/localStorage未操作，已有dirty/staged改动不回退。
+- v0.75.75 / Schema62 / 139模块，无新依赖/模块/字段，页面/importmap/pom/样例及59份带版本verifier仅身份同步；verify-catalog-workbench-v069旧8菜单断言、v73旧4预设断言仍待授权同步，不改测试逻辑/不执行。默认未测试/语法检查/Java编译/启动/重启/HTTP/浏览器；资源阶段与点击/滚动/键盘/初始化待验见VALIDATION、ROADMAP和reference/file-manufacturing-menu-merge-2026-10-12-v07575.md。
+
+## v0.75.74 抽屉导轨 / 箱体 / 整组提交
+
+- 用户提供默认500/450/600/3/3/内置/450轨截图，报告B-965/A-970材料重叠另有5处并确认修正。当前源码原轨内体偏局部X5.76、宽9、外体宽12，外包[-6,10.26]；旧两轨同朝向使每个左轨与前板/左侧板分别交叉，旧公式3组6对与截图数量一致，但无工程JSON/本地运行逐ID证明，不操作现有抽屉、原文件或真实浏览器存储。
+- 新model/DrawerSlideGeometryModel提取原两实体尺寸/局部边界，PrimitiveGeometryFactory仅共用参数、旧形状未改。diy/DrawerGroupModel纯布局/严格输入：导轨完整设计占位16.26/侧、右Yπ朝内、按面板内面和箱背界定深度，侧板/背板/底板对接；不以固定7mm偏移/最近规格/min长夹导轨或过小箱体强行夹40mm。
+- 深度含面板，默认18mm/箱板12mm，总宽含双轨；外盖面板左右各多10mm仍保持。导轨前后各1mm为设计避碰间隙，不是供应商尺寸。D450初始配L400；用户显式L450保留并提示D至少470，默认变更只新表单。app/index共用布局错误/箱体与面板高摘要、缺导轨时禁长度输入、无效状态禁生成；数量1～12整数/空值/非有限/不足高度宽深均拒绝。
+- InterferenceFeedbackManager抽出原physicalItems只读快照，实时反馈行为/阈值/豁免未变；findInsertionInterference用同一classify检查新件内部和新旧宽阶段相交，包含可见真实Part及目录连接helper、与enabled独立，旧件彼此已有问题不检查。Editor生成前临时场景外普通板/导轨网格，检查后finally释放，不增Scene假实体或mountReference/同组件豁免。
+- 全部通过才原addPanel/addHardware插入，AssemblyManager.create建各抽屉、createParent建多抽屉父总成，单抽屉直接真实子ID。selectionGraphMutation覆盖插入/历史及失败restore，半组不通知草稿；一次历史和最终工程通知，回滚还原工程/选择/旧历史/partSequence，clear(false)保持剪贴板。暂态预检查不消耗制造/显示编号；源代码事务不等于实际异常/Undo验收。
+- v0.75.74 / Schema62 / 139模块，新增2纯模型无依赖/字段，版本/importmap/样例及59份verifier仅身份同步，不改测试逻辑；原v73过时四预设断言仍待授权工作。默认未测试/语法检查/Java编译、启动/重启、HTTP/浏览器，资源阶段另记；实际无冲突/边界/旧工程/BOM/历史/Console/性能及采购尺寸待验见ROADMAP、VALIDATION和reference/drawer-slide-layout-2026-10-12-v07574.md。
+
+## v0.75.73 合并用途预设为通用框架
+
+- 用户问各用途是否只是默认参数，源码确认四类均LAYERED_RACK、主要区别层数/承托数量后，明确确认合并方案。只修改快搭入口/名称与默认身份，没有新生成器或物理结构规则，没读/改桌面JSON、用户Chrome/真实草稿。
+- DiyTemplateCatalog公开列表仅GENERIC_FRAME，DEFAULT_DIY_TEMPLATE_ID为新建/初始化统一来源；旧四个完整记录私有，只支持getDiyTemplate旧ID直接调用/原loadSample，不显示在快搭、不执行Schema历史迁移。默认createQuickFrameDefaults(5,1)完全沿原用户结构，670×610×2000、5层1承托及3060柱/平底框、3030其他层/底承托、顶底侧梁FRAME、中层INSET。
+- index移除用途/自定义下拉，普通新建标题与组件名通用框架，编辑整架仍标题框架参数；app移除diyTemplateId/CUSTOM、selectedDiyTemplate、selectDiyTemplate/diyPresetEdited和仅改身份的事件。基本字段仍v-model、层数及深层watch，结构事件仍显式改layoutVersion；beginFrameEdit只移除CUSTOM赋值，原加载/默认缺省保护/FrameParameterManager预览和确认未变。打开面板不重设用户输入，所有部位/朝向/接法/逐层高度/承托走向/联排和连接/板材/制造保护保持。
+- Schema62/137模块/0.75.73，无新模块/依赖/持久字段，入口/importmap/pom/样例及59份既有带版本verifier仅机械身份同步，不写新测试或改逻辑。人工读到verify-diy-v045的“四模板”、鱼缸公开项、app旧UI标记断言已过时，授权测试时需同步，不将未跑脚本写为通过。
+- 默认未测试/语法检查/Java编译、启动/重启、HTTP/浏览器；资源阶段另记，不宣称实际界面/生成/旧工程回改/性能通过。原v72材料清单及未完成导出范围不在本次扩展；保留所有dirty/staged历史，见VALIDATION、ROADMAP与reference/unified-quick-frame-2026-10-12-v07573.md。
+
+## v0.75.72 独立材料清单 / 套装 CSV 与 Excel
+
+- 本轮范围来自“材料清单和导出参照乐玩”及真实套装CSV。先公开匿名UI正常交互，再只读CSV；参考文件原样留存于reference，30型材/22513mm/83套为样例核对，不是应用硬编码。表格技能使用现有缓存运行库导入CSV，未修改/导出来源工作簿；浏览公开参考站不是本地功能验收，未绕过登录、复制私有源码或采集用户工程。
+- index/app/CSS增加独立材料窗口：分类卡片/表格、型号实际截面SVG与其他符号、模型数量/待选型、按ID定位与已有选择对应、虚拟补充表单、分类/统计、固定下载栏。材料入口共用openMaterialList；模态期间原背景快捷键守卫保持，Esc先取消补充表单再关闭清单，三维定位关闭窗口。安装指导只调用旧printAssemblyGuide，不冒充参考站新模板。
+- BomExporter.buildDesignMaterialList共用业务Part/Connection，不读helperMeshes。已选未制造目录件按designComponentMountFaces独立侧数计套装需求，制造派生Part已计则不再算设计件，抽象方式待选型不购入；不删除失效记录、提醒规格/几何。路径计算仅副本，型材不同加工/封面/制造/端切、板材不同dimensions/裁角分组，旧生产报表/实例链保持，hasMachining为组内OR。截面SVG按型号本次汇总复用，不逐帧重建，未性能实测。
+- 新MaterialListManager规范化根可选materialList={profileSystems,virtualItems}，Schema62缺省为空；新建清空、加载/Undo恢复、保存/草稿沿Editor，UI不直接写业务数组。制造已配置型号不能清单覆盖规格；虚拟名称/规格/长度型号/数量/9种单位/备注、最多200项，修改一次历史/提交，不建Part、BOM总量不混加虚拟米数，浏览/下载不capture。
+- 新MaterialListExporter只格式化同一fresh模型快照；真实样例7/5/6列及分段CSV，中文BOM/全引号/CRLF、文字公式注入保护，备注保留不同参考尺寸/加工与失效。Excel同一数据以本地既有JSZip封装OOXML xlsx，非伪扩展名；未取得乐玩xlsx样例，未在Excel/LibreOffice打开或执行新下载链。普通BOM不走Factory Gate，但完整制造ZIP仍须原配置/校验；图纸旧0.75.10元信息统一读当前版本。
+- 0.75.72 / Schema62 / 137模块，2新增模块无依赖，页面/importmap/pom/样例及59份带身份verifier只版本同步、未写新测试/改逻辑。默认未运行测试/语法检查/Java编译、启动/重启、HTTP/本地浏览器或实际下载文件验收，未直接操作桌面JSON/用户Chrome/localStorage，既有dirty/staged改动保留；源码、参考CSV核对和资源阶段不等于新功能运行通过。
+- 完整“一比一导出”尚未完成：需要安装指导/板材与框架图纸实际样例；MayCAD.scene必须合法格式证据和真实导入条件，不改JSON扩展名假装互通。实际待验见ROADMAP/VALIDATION，完整规则与原始文件见reference/lewan-material-list-2026-10-12-v07572.md。
+
+## v0.75.71 点击处平移手柄 / 视线轴入口
+
+- 用户确认普通点击型材哪里，移动手柄就定位哪里；选中后另处可重新定位，拖动跟随，只改移动手柄不改业务中心或旋转中心。原选中流程丢弃了命中点，新普通无修饰键点击保留真实hit.point并转本体局部点，SelectionGestureManager直接拖动主选也在事务前取实际命中；Ctrl/Meta/Shift多选及Alt穿透/复制不重新锚定，不改原选域。
+- 新ClickAnchoredTransformControls继承本地Three0.155，不改vendor，object仍真实Part根，原attach/detach/selected等API保持；updateMatrixWorld先执行原本体/父级/相机计算，再仅translate把worldPosition、eye及_gizmo/_plane重定位。原_positionStart本体位置不变，pointerDown对worldPositionStart加局部点世界偏移、pointStart减同偏移，位移差不受新显示原点影响；原网格步长和约束作用在真实本体，不围绕点击点量化。
+- 旋转/缩放不采用锚点，原主选中心/朝向/世界或局部轴保持；切回移动可沿同根局部点，移动中不自动回中心。换主选/解绑/根重建或非拖动形状变化清除临时锚点，工程加载/清空走原detach；无真实点击仍中心。isTransforming回调冻结原Gizmo、程序移动/直接拖动和抓手期间的锚点变化，不把暂时点击位置写入Part/Project/历史/草稿/尺寸或制造。
+- SceneManager正轴picker横向扩大25%，只改拾取网格；原显示箭头尺寸、负轴裁减、双向位移和XYZ平面不变。与当前世界/局部轴方向绝对点积≥0.95的最近视线轴有一个24px圆字母按钮，标记仅在锚点处可见视口内、普通可移动PROFILE选择中显示，不能截获放置/评审/抓手/测量/框选/播放/模态。按钮调用原AxisClearanceManager.update / focusDistance，带正负号输入的是原移动量，不是v70最终净距，不偷偷实现屏幕深度拖动或直接移动。
+- 轴按钮原生Enter/Space/Tab不传后台框选/邻距快捷键，实际输入仍原Manager事务；按钮位置/轴/空间未变不重复重建DOM文字，v70邻距框屏幕避让和缓存签名纳入临时轴按钮，避免标签压住入口。整个回调不触发业务写入，实际拖动/距离提交仍原作用域、约束/吸附/连接重建/失效解除、配件及红色干涉保留位置/撤销/草稿策略，没有新制造映射或碰撞判据，缓存不等于性能验证。
+- 135模块 / Schema62 / v0.75.71，新增1本地模块无依赖/Project字段，入口身份与pom/样例和59份带版本verify机械同步；未新增/运行测试、语法检查、Java编译、启动/重启、HTTP/浏览器。v70初始化热修保持但其运行记录不能当本版控制器已通过；离线资源记录、真实±XYZ/本地轴/量化/手势/取消/近视轴/密集性能待验见VALIDATION、ROADMAP及reference/click-anchored-translation-2026-10-12-v07571.md。
+
+## v0.75.70 初始化同名声明热修复
+
+- 用户明确请求同时看Console / Network。隔离Chrome访问127.0.0.1:8080复现axisVector重复声明：新Editor命名导入与原3540行顶层函数同名，浏览器在模块解析时拒绝整个Editor。入口、app和Editor实际HTTP200，资源下载没有导致这一语法错误。
+- 仅删除Editor第16行导入中的axisVector，保留profileDistanceRelation导入；原轴向函数及既有尺寸绑定调用不变，新净距命令复用已有函数。ProfileNeighbourDistances与显示Manager仍原模块接口，0.75.70 / Schema62 / 134模块及其他代码/依赖不变。
+- 2026-10-12 08:49:22（UTC+8）离线资源复制成功，HTTP返回Editor与源内容及SHA-256完全相同。新隔离Chrome上下文冷启动和同页普通刷新各观察9秒：初始化成功/boot消失/Vue挂载/三个canvas/一个距离层，pageerror和Network失败0，Editor / app / 新两模块 / OrbitControls200；普通刷新boot304属于正常缓存验证。
+- CDP Network冷启动144项响应/133个本地JS响应，唯一HTTP / Console错误是favicon.ico404；普通刷新143响应/133本地JS响应，Console警告/错误、pageerror、HTTP错误和请求失败全0。没有屏蔽图标请求，也未扩大到无关favicon修复。
+- 只为此初始化问题运行浏览器/HTTP诊断，未运行Java编译、功能验证器、服务启动/重启、单选距离编辑/约束/撤销或性能验收，未读取修改用户原工程、现有Chrome/实际浏览器存储。下面原交付的“未浏览器验收”不否定本次初始化证据，也不能将本次启动成功当所有功能通过；详见VALIDATION及reference/initialization-axis-vector-hotfix-2026-10-12-v07570.md。
+
+## v0.75.70 单选型材的长度 / 同框面邻距
+
+- 用户确认参考所附嘉立创“单选后出现周边距离输入、Tab换输入”交互。本轮只读截图与当前选择/Gizmo/OBB/侧面/抓手/约束/历史代码后实现，没有采集对方代码、读取或修改桌面工程/用户Chrome/实际存储。距离定义为原外包络的轴向净间距，不宣称与参考站中心距/槽内距离口径一致。
+- 新ProfileNeighbourDistances从业务截面、真实世界姿态和profileSidePlanes求同框面：四角偏差≤0.1mm，平行长轴只认同向侧面，垂直长轴允许相向框侧面，且测量方向与共同平面平行；原sweepObbContact要求其余投影交叠。按世界±X/Y/Z每方向一根最近明确参照ID，最多六项，不测投影斜向杆、另一层或印字/抓手。已知T_SLOT直杆 / 方切 / 单位缩放 / 世界正交才给邻距，长度仍原直杆路径。
+- 新SelectedProfileDistanceManager只读临时Scene组和DOM，长度 + 净距框共用延长线/双端小箭头，有限屏幕档位避主体包络及尺寸标签；背向/实际其他实体和连接五金遮挡/出视口/无空位不硬显。实际参照端点不随标签避让改值；输入/临时线不加入Editor.meshes、选择raycast、模型包围盒、Project、永久Dimensions、BOM或工程图。几何固定缓冲，模型变化才重算候选，相机变化只重投影/查遮挡，不等于帧率已测。
+- Tab和Shift+Tab仅普通画布选择或本组输入内循环可见可编辑项；Enter提交最终目标、Esc撤销当前草稿并返画布焦点，不清选择/永久关系。输入框保留Ctrl文字剪贴板/方向键，按钮/其他表单正常Tab；Ctrl/Meta/Alt+Tab不截获。显示整毫米但只读不改真实参数，小数显式提交、未编辑Enter不取整；切框不提交，成功编辑刷新本组，换选/工具/工程变化丢弃过期草稿。
+- 净距命令输入非负最终距离，显式世界轴单根平移，不套用户CONNECTIVITY/ASSEMBLY作用域或局部轴。保留这些偏好与当前工具；Gizmo原约束解算前后重查全部型材朝向/其他位置和所选全位置、参照关系与目标值。约束牵动其他杆或参照不能保持就完整回滚，不松约束。原连接随动及SINGLE失效接头解除/提示、配件随宿主与红色干涉保留位置规则保持，不以邻距值当无干涉认证。
+- 长度框跟随右侧profileLengthForm的固定A/B端，移动端受原锁定/连接/端点约束不可编辑；Editor包装原ProfileGripEditor长度事务/加工A/B基准重算，成功一次历史/工程提交，异常还原工程/选择/历史，selectionGraphMutation阻止半成品草稿。原方向键相机相对移动/底栏XYZ相对移动量及其他工具Tab保持；多选、放置/绘制、评审、抓手/Gizmo拖动、标尺/框选/特征、播放/爆炸及模态不启用本组。
+- 两个新模块带入静态importmap，0.75.70/134模块/Schema62无新依赖或Project字段；页面、pom、样例与59份已有带身份verify机械同步，新增快捷说明。按规则未新增/运行测试、语法检查、Java编译、服务启动/重启、HTTP/浏览器；离线资源阶段见VALIDATION，实际交互/约束回滚/遮挡/性能等待授权验收见ROADMAP和reference/selected-profile-neighbour-distances-2026-10-12-v07570.md。此前v69暖金黄、分格插槽板、截面/加工、默认架与镜头保持。
 
 ## v0.75.69 已贴合接头的参考金黄色带
 

@@ -40,6 +40,7 @@ export default class SelectionGestureManager {
     if(!hit?.object||!e.isMeshTransformable(hit.object))return;
     if(!copy&&!e.selectedMeshes.includes(hit.object))return;
     if(e.selectedMeshes.includes(hit.object)&&!e.isSelectionTransformable())return;
+    if(!copy&&e.selected===hit.object&&e.canUseTranslationAxisInput())controls.setClickAnchor(hit.object,hit.point);
     event.preventDefault();event.stopImmediatePropagation();
     this.canvas.setPointerCapture(event.pointerId);
     // 点击不产生副本和历史；越过阈值后才启动事务。

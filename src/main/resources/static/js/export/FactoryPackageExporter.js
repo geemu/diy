@@ -2,6 +2,7 @@ import BomExporter from './BomExporter.js';
 import {getSectionDefinition, getSectionInfo, sectionToSvg} from '../model/ProfileSectionRegistry.js';
 import FactoryValidator from '../validation/FactoryValidator.js';
 import {panelMaterialContours,SolidPanelShapes} from '../model/PanelShapeModel.js';
+import {CURRENT_APP_VERSION} from '../io/ProjectSchema.js';
 
 export default class FactoryPackageExporter {
   constructor(editor) {
@@ -20,6 +21,7 @@ export default class FactoryPackageExporter {
     zip.file('生产检查报告.txt',FactoryValidator.toText(validation));
     zip.file('生产检查报告.json',JSON.stringify(validation,null,2));
     zip.file('工程.json',JSON.stringify(this.editor.exportProject(),null,2));
+    this.addFactorySummaryFiles(zip);
     // 切割轮廓来自板材领域数据，不导出显示网格；局部XY及Z厚度与3D/总装图一致。
     const panels=this.editor.parts.filter(p=>p.type==='PANEL'&&!SolidPanelShapes.includes(p.dimensions?.panelShape));
     const panelContours=panels.map(part=>({partId:part.id,code:part.manufacturingCode||part.displayId,
@@ -52,7 +54,7 @@ export default class FactoryPackageExporter {
     zip.file('加工分组.csv',BomExporter.fileText(this.editor.bomExporter.buildMachiningRows()));
 
     const assemblyDrawings = zip.folder('装配工程图');
-    const drawingPayload = this.editor.engineeringDrawingService.build({appVersion:'0.75.10'});
+    const drawingPayload = this.editor.engineeringDrawingService.build({appVersion:CURRENT_APP_VERSION});
     const drawingPaper = this.editor.drawingSettings?.paper || 'A3';
     assemblyDrawings.file(`总装工程图_${drawingPaper}.svg`,this.editor.engineeringDrawingService.svgExporter.export(drawingPayload.model,drawingPayload.layout,this.editor.drawingSettings));
     assemblyDrawings.file(`总装工程图_${drawingPaper}.dxf`,this.editor.engineeringDrawingService.dxfExporter.export(drawingPayload.model,drawingPayload.layout,this.editor.drawingSettings));
@@ -60,7 +62,7 @@ export default class FactoryPackageExporter {
     assemblyDrawings.file('DXF图层说明.json',JSON.stringify(this.editor.engineeringDrawingService.dxfExporter.layerManifest(),null,2));
     const subFolder = assemblyDrawings.folder('子装配');
     let subDrawingIndex = 1;
-    for (const sheet of this.editor.engineeringDrawingService.buildSubassemblySheets({appVersion:'0.75.10'})) {
+    for (const sheet of this.editor.engineeringDrawingService.buildSubassemblySheets({appVersion:CURRENT_APP_VERSION})) {
       const prefix = String(subDrawingIndex++).padStart(2,'0');
       const subBase=`${prefix}_${this.safeName(sheet.name)}_${String(sheet.assemblyId).slice(0,6)}`;
       subFolder.file(`${subBase}.svg`,sheet.svg);
@@ -101,6 +103,28 @@ export default class FactoryPackageExporter {
     anchor.download = '铝型材加工包.zip';
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  addFactorySummaryFiles(zip) {
+    const bom=this.editor.bomExporter,model=bom.buildDesignMaterialList();
+    const accessories=bom.buildFactoryAccessoryList(model),groups=bom.factoryMachiningGroups(model);
+    const machining=bom.buildFactoryMachiningList(groups),folder=zip.folder('工厂汇总');
+    folder.file('配件清单.csv',BomExporter.fileText(BomExporter.factoryListRows(accessories)));
+    folder.file('加工清单.csv',BomExporter.fileText(BomExporter.factoryListRows(machining)));
+    const drawings=folder.folder('加工样式图');
+    for(const drawing of this.editor.drawingGenerator.buildFactoryStyleDrawings(groups)) {
+      drawings.file(`${drawing.drawingId}.svg`,drawing.kind==='CUT'?this.editor.drawingGenerator.exportCutSvg(drawing):this.editor.drawingGenerator.exportSvg(drawing));
+      drawings.file(`${drawing.drawingId}.dxf`,drawing.kind==='CUT'?this.editor.dxfExporter.buildCutDrawing(drawing):this.editor.dxfExporter.buildDrawing(drawing));
+    }
+    folder.file('阅读说明.txt',[
+      '配件按完整规格/尺寸汇总；待选型连接不计入采购数量，套装需求不能当作已配置散件数量。',
+      '加工按完整截面/制造规格、长度/路径、端切与孔位参数分组，内部构件/加工/连接编号不出现在汇总列。',
+      '加工清单的 STYLE-xx 对应加工样式图/ 中的同名 SVG/DXF；同时有端切时另有 STYLE-xx-CUT 图。',
+      '样式仅用于本次清单与图纸的对应，不是固定构件编号。工程变更后请重新导出整套资料。',
+      '弯料或未适配加工特征不生成直料样式图，清单会明确提示，请结合原弯曲图/逐件数据人工复核。',
+      '原 BOM、cut-list.csv、machining.csv 和装配记录仍保留内部编号，用于需要逐件追溯的场合。',
+      '生产检查和制造配置门禁未取消；参考截面、图纸与实物仍须加工厂确认。'
+    ].join('\n'));
   }
 
   addSectionFiles(zip) {
@@ -149,6 +173,7 @@ export default class FactoryPackageExporter {
       '“DXF_IMPORTED / SOURCE_DXF” 表示几何直接来自用户绑定的 DXF；仍应核对 DXF 单位、版本和实际料号。',
       '弯型材图纸给出中心线半径、角度、弯曲平面、展开长度、弦长和拱高。',
       '直型材端部斜切会输出 SVG斜切图/ 与 DXF斜切图/，0° 表示方切。',
+      '工厂汇总/ 提供不含内部构件编号的配件/加工清单与同名 STYLE-xx 加工样式图；不同孔位或端切不会混并，先按此目录核对规格与数量。',
       'BOM/ 下提供项目汇总、型材、五金、配件、加工、子装配 BOM 与装配步骤；所有行均使用统一制造编号追溯到三维构件。',
       'cut-list.csv 按每一根实际型材输出切割/展开长度和 A/B 端切信息；machining.csv 按每一个实际加工 Feature 输出。',
       '本项目不管理 3m/4m/6m 原料长度、锯缝排料、余料库存或采购库存；这些能力不属于当前产品范围。',

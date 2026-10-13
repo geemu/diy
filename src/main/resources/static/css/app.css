@@ -990,6 +990,25 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .axis-clearance-panel button{min-height:30px;padding:3px 7px;border:1px solid #b4c9df;border-radius:6px;background:#f8fbff;color:#b45d13;font-size:11px}
 .axis-clearance-panel button:disabled{opacity:.45;cursor:not-allowed}
 .axis-clearance-panel span{color:#3a526b;font-variant-numeric:tabular-nums}
+
+/* 单选就地邻距是画布输入，不替代底栏移动量或永久尺寸；只有输入框接收指针。 */
+.translation-axis-hint-layer{position:absolute;inset:0;z-index:23;pointer-events:none;overflow:hidden}
+.translation-axis-hint-layer[hidden]{display:none}
+.translation-axis-hint{position:absolute;width:24px;height:24px;padding:0;border:1px solid currentColor;border-radius:50%;background:#fffffff2;box-shadow:0 1px 4px #22364c24;pointer-events:auto;font-size:12px;font-weight:700;line-height:22px;text-align:center}
+.translation-axis-hint[data-axis=X]{color:#c63a46}.translation-axis-hint[data-axis=Y]{color:#228646}.translation-axis-hint[data-axis=Z]{color:#356acc}
+.translation-axis-hint:hover,.translation-axis-hint:focus-visible{background:#fff;outline:2px solid currentColor;outline-offset:1px}
+.selected-profile-distance-layer{position:absolute;inset:0;z-index:21;pointer-events:none;overflow:hidden}
+.selected-profile-distance-layer[hidden],.selected-profile-distance-field[hidden],.selected-profile-distance-error[hidden]{display:none}
+.selected-profile-distance-field{position:absolute;pointer-events:auto;border:1px solid #609bd1;border-radius:5px;background:#fff;color:#29435d;box-shadow:0 2px 6px #26476a1c;font-size:12px;max-width:230px}
+.selected-profile-distance-control{display:flex;align-items:center;height:28px;white-space:nowrap}
+.selected-profile-distance-caption{padding:0 6px;color:#426582;font-size:11px}
+.selected-profile-distance-control input{width:64px;min-width:0;height:26px;border:0;border-radius:0;padding:2px 4px;background:#fff;color:#1f3851;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;outline:0;box-shadow:none}
+.selected-profile-distance-control>span:last-child{padding:0 6px 0 2px;color:#728396;font-size:11px}
+.selected-profile-distance-field.focused,.selected-profile-distance-field:focus-within{border-color:#247bd3;box-shadow:0 0 0 2px #247bd326}
+.selected-profile-distance-field.draft .selected-profile-distance-caption::after{content:'·';padding-left:2px;color:#bc730d}
+.selected-profile-distance-control input[readonly]{color:#83909d;background:#f5f7fa;cursor:default}
+.selected-profile-distance-control input[aria-invalid=true]{color:#b03b34;background:#fff0ee}
+.selected-profile-distance-error{padding:5px 7px;border-top:1px solid #efc3bf;background:#fff2f0;color:#9d332d;white-space:normal;overflow-wrap:anywhere;max-width:228px;font-size:11px;line-height:1.4}
 .profile-length-editor{margin:10px 0 14px;padding:10px;border:1px solid #2c303c;border-radius:8px;background:#10131f}
 .profile-length-editor .property-row{margin:0 0 8px;grid-template-columns:72px minmax(0,1fr)}
 .profile-length-editor small{display:block;color:#a6adba;line-height:1.5;font-size:11px}
@@ -1165,3 +1184,54 @@ input[type="checkbox"],input[type="range"]{accent-color:var(--accent)}
 .panel-notch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
 .panel-notch-row .field-pair,.panel-notch-row .field-stack{margin-bottom:8px}
 .panel-relief-card .advanced-options{margin:0}
+
+/* 玩家BOM：独立暗色窗口，内容区滚动，分类卡片/表格与固定下载栏共用同一快照。 */
+.material-list-modal{width:min(1120px,calc(100vw - 40px));max-height:calc(100dvh - 64px);padding:0;display:flex;flex-direction:column;overflow:hidden;background:#121720;color:#d8e0e9;border:1px solid #343e4c;border-radius:12px;box-shadow:0 22px 80px #0006}
+.material-list-header{flex:none;display:flex;align-items:center;gap:16px;padding:20px 24px;background:#151c27;border-bottom:1px solid #313b49}
+.material-list-header>div:first-child{display:flex;align-items:center;gap:14px;flex:1;flex-wrap:wrap;min-width:0}.material-list-header h3{margin:0;font-size:19px;color:#f1f5f9}.material-list-header h3 small{font-size:12px;color:#a0adbf;font-weight:400;margin-left:6px}
+.material-list-count{padding:5px 9px;border:1px solid #345650;border-radius:5px;color:#89d7c5;background:#152a28;font-size:12px;white-space:nowrap}
+.material-list-view-tabs{display:flex;gap:2px;padding:3px;border:1px solid #354152;border-radius:7px}.material-list-view-tabs button{padding:6px 12px;border:0;background:transparent;border-radius:4px;color:#aebbcf;cursor:pointer;font-size:12px}.material-list-view-tabs button.active{background:#354657;color:#f1f5f9}
+.material-list-close{position:static;flex:none;background:transparent;color:#aab7ca;border:0;font-size:23px;cursor:pointer}.material-list-close:hover{color:#fff}
+.material-list-summary{display:flex;flex-wrap:wrap;gap:18px;padding:11px 24px;border-bottom:1px solid #2b3542;color:#92a2b7;font-size:12px;flex:none}.material-list-summary b{color:#a0e4d4;font-variant-numeric:tabular-nums}.material-list-summary .material-list-warning,.material-list-summary .material-list-warning b{color:#e8b975}
+.material-list-content{overflow-y:auto;min-height:0;padding:8px 24px 20px;overscroll-behavior:contain;scrollbar-color:#465265 #151b26}.material-list-category{margin:16px 0 23px}.material-list-category h4,.material-list-virtual h4{display:flex;align-items:center;gap:10px;margin:0 0 11px;font-size:14px;color:#e2e9f2}.material-list-category h4 small,.material-list-virtual h4 small{font-size:11px;font-weight:400;color:#8d9eb5}
+.material-list-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.material-list-card{position:relative;display:flex;align-items:flex-start;gap:13px;min-width:0;padding:17px 15px 16px 35px;border:1px solid #36404e;border-radius:8px;background:#1b2330}.material-list-card.is-current,.material-list-table tr.is-current{outline:1px solid #60bca8;outline-offset:-1px;background:#1e3436}.material-list-card.has-warning{border-color:#8c6840}
+.material-list-index{position:absolute;top:7px;left:8px;display:inline-flex;justify-content:center;min-width:19px;height:19px;font-size:10px;color:#a5b6cb;background:#2c394b;border-radius:4px;align-items:center}
+.material-list-thumb{width:60px;height:64px;flex:none;display:flex;align-items:center;justify-content:center;background:#111925;border-radius:5px;overflow:hidden}.material-list-thumb svg{width:54px;height:54px;max-width:100%}.material-list-symbol{font-size:42px;color:#abb8c7;line-height:1}
+.material-list-card-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:7px;font-size:11px;color:#96a8c0}.material-list-card-copy>strong{font-size:14px;line-height:1.5;color:#e6edf5;overflow-wrap:anywhere}.material-list-card-copy>span{overflow-wrap:anywhere}.material-list-size{color:#c5d4e5;font-size:13px;font-variant-numeric:tabular-nums}
+.material-list-card-actions{display:flex;align-items:flex-end;flex-direction:column;gap:16px;flex:none}.material-list-card-actions b{color:#81d8c1;font-size:17px;white-space:nowrap;font-variant-numeric:tabular-nums}.material-list-card-actions b small{font-size:10px;margin-left:4px;font-weight:400}.material-list-card-actions button,.material-list-locate{background:#283447;color:#b5ccdf;border:1px solid #405068;border-radius:5px;cursor:pointer;padding:4px 8px;font-size:12px}.material-list-card-actions button:hover,.material-list-locate:hover{background:#3b5365;color:#fff}
+.material-list-system{display:flex;align-items:center;gap:6px;color:#8fa2bb;font-size:11px}.material-list-modal select,.material-list-modal input,.material-list-modal textarea{font:inherit;color:#dce6f1;background:#111925;border:1px solid #425066;border-radius:5px;padding:5px 7px;min-width:0;max-width:100%}.material-list-system select{width:100px;font-size:11px;height:29px}.material-list-modal :is(select,input,textarea):focus-visible,.material-list-modal button:focus-visible{outline:2px solid #e8a056;outline-offset:2px}.material-list-modal select:disabled{opacity:.65;cursor:not-allowed}
+.material-list-machining{font-size:11px;color:#bfd0e6;line-height:1.6;overflow-wrap:anywhere}.material-list-card .material-list-machining{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.material-list-detail{font-size:11px;line-height:1.7;max-width:340px}.material-list-detail summary{color:#8ea5c2;cursor:pointer}.material-list-detail p{margin:6px 0;color:#acbad0;overflow-wrap:anywhere;white-space:normal}
+.material-list-table-wrap{overflow-x:auto;scrollbar-color:#465265 #151b26}.material-list-table{width:100%;border-collapse:collapse;font-size:12px;color:#c0cddd;min-width:700px}.material-list-table th{background:#1c2838;color:#9fbed0;text-align:left;font-weight:500;padding:10px 12px;border-bottom:1px solid #3b4d60;white-space:nowrap}.material-list-table td{padding:12px;border-bottom:1px solid #2e3a4b;vertical-align:top}.material-list-table tbody tr:hover{background:#1e2b3b}.material-list-table td:first-child{color:#a3b4cc}.material-list-table td small{display:block;color:#8a9db7;margin-top:5px}.material-list-table td select{display:block;font-size:11px;margin-top:6px;max-width:110px}.material-list-table .material-list-quantity{color:#85d6c1;white-space:nowrap;font-variant-numeric:tabular-nums}.material-list-table .has-warning{box-shadow:inset 3px 0 #b68a51}
+.material-list-statistics,.material-list-warnings{padding:12px 0;font-size:12px;border-top:1px solid #2e3a4a;color:#9eb1c9}.material-list-statistics summary,.material-list-warnings summary{cursor:pointer;line-height:1.7}.material-list-statistics .material-list-table-wrap{margin-top:10px}.material-list-warnings{color:#d9ad77;border:1px solid #695138;border-radius:6px;background:#292216;padding:10px 12px;margin:10px 0}.material-list-warnings ul{padding-left:20px;max-height:120px;overflow-y:auto;margin:8px 0 0;line-height:1.8}
+.material-list-virtual{border-top:1px solid #344050;padding-top:18px;margin-top:14px}.material-list-virtual-heading{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.material-list-virtual-heading h4{margin:0}.material-list-virtual-heading+.material-list-table-wrap{margin-top:12px}
+.material-list-modal .soft-button{background:#233144;color:#bacbde;border:1px solid #40516a;font-size:12px;padding:8px 12px;border-radius:6px;cursor:pointer}.material-list-modal .primary-button{background:#e48b25;border:1px solid #ed9d3c;color:#fff;font-size:12px;padding:8px 14px;border-radius:6px;cursor:pointer}.material-list-modal button:disabled{opacity:.45;cursor:not-allowed}
+.material-list-virtual-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px;padding:16px;border:1px solid #3b4c62;background:#192232;border-radius:7px}.material-list-virtual-form>h4{grid-column:1/-1;margin:0}.material-list-virtual-form label{display:flex;flex-direction:column;gap:7px;color:#a8bad0;font-size:12px}.material-list-virtual-note{grid-column:2/-1}.material-list-virtual-error,.material-list-virtual-actions{grid-column:1/-1;margin:0}.material-list-virtual-error{font-size:12px;color:#eca49d}.material-list-virtual-actions{display:flex;justify-content:flex-end;gap:8px}
+.material-list-footer{flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 24px;background:#171f2b;border-top:1px solid #344152}.material-list-footer p{margin:0 0 10px;font-size:10px;line-height:1.6;color:#8fa1b9;max-width:540px}.material-list-footer>div:first-child button{margin-right:8px}.material-list-export-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:900px){.material-list-cards{grid-template-columns:1fr}.material-list-modal{width:calc(100vw - 24px);max-height:calc(100dvh - 32px)}.material-list-header,.material-list-footer{padding:14px 16px}.material-list-content{padding-left:16px;padding-right:16px}.material-list-header>div:first-child{gap:8px}.material-list-header h3{font-size:16px}}
+@media(max-width:540px){.material-list-header{gap:8px;flex-wrap:wrap}.material-list-header>div:first-child{flex-basis:calc(100% - 40px)}.material-list-view-tabs{order:3}.material-list-summary{padding:10px 16px;gap:10px}.material-list-virtual-form{grid-template-columns:repeat(2,minmax(0,1fr))}.material-list-virtual-note{grid-column:1/-1}.material-list-thumb{width:45px;height:52px}.material-list-card{gap:8px;padding-right:10px}.material-list-export-actions{width:100%}.material-list-export-actions button{flex:1}}
+
+/* 制造入口合入文件后，短窗口仍可滚动到全部项目，不压缩按钮或影响底部菜单。 */
+.cad-menubar .cad-file-menu{max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.cad-menubar .cad-file-menu>*{flex-shrink:0}
+
+/* 一份资料弹层承载所有标签；配置/检查仍用原辅助对话框，层级高于资料窗口。 */
+.list-export-backdrop{z-index:4990;padding:16px}
+.list-export-modal{height:min(800px,calc(100vh - 64px));height:min(800px,calc(100dvh - 64px));max-height:calc(100vh - 64px);max-height:calc(100dvh - 64px)}
+.list-export-tabs{flex:none;min-height:44px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding:0 16px;background:#171f2b;border-color:#344152}
+.list-export-tabs button{flex:none;height:auto;min-height:44px;white-space:nowrap;padding:10px 14px;font-size:12px}
+.list-export-modal .material-list-content{flex:1}
+.list-export-secondary{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.list-export-secondary>.engineering-summary-strip,.list-export-secondary>.engineering-center-tip{flex:none}
+.list-export-secondary .engineering-summary-strip{grid-template-columns:repeat(4,minmax(0,1fr))}
+.factory-list-table td{vertical-align:top;white-space:normal;overflow-wrap:anywhere}
+.factory-list-table .factory-list-spec{min-width:150px;max-width:240px}
+.factory-list-table .factory-list-detail{min-width:240px;max-width:420px;line-height:1.7}
+.factory-list-actions{display:flex;gap:6px;flex-wrap:wrap;min-width:62px}
+.factory-list-actions .soft-button{height:30px;padding:0 10px;font-size:12px;white-space:nowrap}
+.factory-list-warning td:first-child{color:#e4ad57}
+.list-export-secondary .drawing-export-center{min-height:0;overflow-y:auto;align-content:start;overscroll-behavior:contain}
+.list-export-modal .manufacturing-export-card{grid-column:1/-1}
+.list-export-modal .drawing-export-card .button-row{flex-wrap:wrap}
+.list-export-modal .drawing-export-card .button-row button{min-width:110px}
+.list-export-footer p{margin:0}
+@media(max-width:700px){.list-export-backdrop{padding:12px}.list-export-modal{width:calc(100vw - 24px);height:calc(100vh - 32px);height:calc(100dvh - 32px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px)}.list-export-secondary .engineering-summary-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.list-export-secondary .drawing-export-center{grid-template-columns:1fr;padding:12px}.list-export-tabs{padding:0 8px}}

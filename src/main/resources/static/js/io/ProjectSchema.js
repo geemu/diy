@@ -7,9 +7,10 @@ import {normalizeDesignAnchor,isCenteredDesignAnchor} from '../model/ConnectionA
 import {normalizeSideMount} from '../connection/SideMountConnection.js';
 import {normalizeSideSlot} from '../connection/SideSlotConnection.js';
 import {validPanelSlotFit} from '../configurator/PanelSlotPlacement.js';
+import {normalizeMaterialList} from '../model/MaterialListManager.js';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 62;
-export const CURRENT_APP_VERSION = '0.75.69';
+export const CURRENT_APP_VERSION = '0.75.77';
 
 /** 梁下参考件与内收梁外侧原目录件分开验收，不把改孔规格套到外侧直角上。 */
 function sideMountRecordValid(reference,component,face){
@@ -111,6 +112,7 @@ export default class ProjectSchema {
   }
 
   static normalizeCurrent(project) {
+    project.materialList=normalizeMaterialList(project.materialList);
     // 更正当前模型的已知简化内置件，保留构件/连接ID、颜色、安装侧和其他件；不回写用户原文件。
     for(const part of project.parts)if(part.dimensions?.geometryKind==='HIDDEN_CORNER')part.dimensions=normalizeHiddenCornerDimensions(part.dimensions);
     for(const connection of project.connections){

@@ -1,12 +1,13 @@
 /**
- * 面向非 CAD 用户的内置 DIY 模板目录。
+ * 面向非 CAD 用户的通用框架默认值与旧模板调用记录。
  *
  * 模板只描述“用户想做什么”和参数默认值，不持久化 Three.js 对象。
  * 最终仍通过 Editor 领域 API 生成标准 Project Part。
  */
 export const DEFAULT_FRAME_DIMENSIONS = Object.freeze({width:670, depth:610, height:2000});
+export const DEFAULT_DIY_TEMPLATE_ID = 'GENERIC_FRAME';
 
-// 按用户示例预置型材朝向和接法；只用于明确选取预设，不改变旧参数架的缺省角色。
+// 新通用框架沿用用户示例朝向和接法；不改变旧参数架的缺省角色。
 export function createQuickFrameDefaults(levels,centerBeamCount) {
   return {
     ...DEFAULT_FRAME_DIMENSIONS, levels, centerBeamCount,centerDirection:'DEPTH',
@@ -24,7 +25,19 @@ export function createQuickFrameDefaults(levels,centerBeamCount) {
   };
 }
 
-const templates = [
+// 唯一的新建默认；用途不再是快搭选项，层数和承托梁由同一参数表决定。
+export const DiyTemplateList = Object.freeze([Object.freeze({
+  id:DEFAULT_DIY_TEMPLATE_ID,
+  label:'通用框架',
+  icon:'▦',
+  category:'框架',
+  summary:'按实际尺寸、层数和承托梁配置框架，不区分用途；不代表承重已验算。',
+  generator:'LAYERED_RACK',
+  defaults:Object.freeze(createQuickFrameDefaults(5,1))
+})]);
+
+// 仅兼容已有示例和旧ID的直接调用，不在新建界面展示，也不迁移保存工程。
+const legacyTemplates = [
   {
     id:'BASIC_FRAME',
     label:'基础空间框',
@@ -63,11 +76,11 @@ const templates = [
   }
 ];
 
-export const DiyTemplateList = Object.freeze(templates.map(item => Object.freeze({
+const legacyTemplateList = Object.freeze(legacyTemplates.map(item => Object.freeze({
   ...item,
   defaults:Object.freeze({...item.defaults})
 })));
 
 export function getDiyTemplate(id) {
-  return DiyTemplateList.find(item => item.id === id) || null;
+  return DiyTemplateList.find(item => item.id === id) || legacyTemplateList.find(item => item.id === id) || null;
 }

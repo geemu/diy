@@ -13,13 +13,15 @@ import ConnectionReplacementManager from '../connection/ConnectionReplacementMan
 import PanelReliefManager from '../configurator/PanelReliefManager.js';
 import PanelFillManager from '../configurator/PanelFillManager.js';
 import SelectedProfileDistanceManager from '../interaction/SelectedProfileDistanceManager.js';
-import {profileDistanceRelation,axisVector} from '../model/ProfileNeighbourDistances.js';
+import {profileDistanceRelation} from '../model/ProfileNeighbourDistances.js';
 import {layeredRackLayout,RACK_LAYOUT_VERSION} from '../diy/LayeredRackModel.js';
+import {drawerGroupLayout} from '../diy/DrawerGroupModel.js';
 import SnapManager from '../snap/SnapManager.js';
 import AxisClearanceManager from '../interaction/AxisClearanceManager.js';
 import {groundClearance} from '../interaction/GroundClearance.js';
 import HistoryManager from '../history/HistoryManager.js';
 import BomExporter from '../export/BomExporter.js';
+import MaterialListManager from '../model/MaterialListManager.js';
 import DrawingGenerator from '../export/DrawingGenerator.js';
 import DxfExporter from '../export/DxfExporter.js';
 import FactoryPackageExporter from '../export/FactoryPackageExporter.js';
@@ -123,6 +125,7 @@ export default class Editor {
     this.autoConnectionResolver = new AutoConnectionResolver(this);
     this.historyManager = new HistoryManager(this);
     this.bomExporter = new BomExporter(this);
+    this.materialListManager = new MaterialListManager(this);
     this.drawingGenerator = new DrawingGenerator(this);
     this.dxfExporter = new DxfExporter();
     this.factoryValidator = new FactoryValidator(this);
@@ -176,6 +179,13 @@ export default class Editor {
   }
 
   bind() {
+    const controls=this.sceneManager.transformControls;
+    controls.isTransforming=()=>!!this.transformSelectionSnapshot||!!this.profileGripEditor.drag||!!this.selectionGestureManager?.drag?.started;
+    controls.canShowAxisInput=()=>this.canUseTranslationAxisInput();
+    controls.onAxisInput=axis=>{
+      if(!this.canUseTranslationAxisInput()||!['X','Y','Z'].includes(axis))return;
+      this.axisClearanceManager.update(axis);this.axisClearanceManager.focusDistance();
+    };
     this.sceneManager.secondaryClickHandler = () => {
       if(this.panelFillManager.isActive()){this.panelFillManager.cancel();return true;}
       if(this.frameParameterManager.isActive()){this.frameParameterManager.cancel();return true;}
@@ -214,7 +224,7 @@ export default class Editor {
         this.handleDimensionClick(event);
         return;
       }
-      let mesh;
+      let mesh,hitPoint;
       // Alt + 单击用于“穿透/循环选择”，解决复杂装配中前方构件遮挡后方构件的问题。
       if (event.altKey) {
         const candidates = this.sceneManager.pickRoots(event, this.interactionMeshes());
@@ -223,13 +233,17 @@ export default class Editor {
         if (cycle?.count > 1) mesh.userData.selectionCycle = {index:cycle.index+1,count:cycle.count};
       } else {
         this.selectionCycleManager.reset();
-        mesh = this.pickInteractionHit(event)?.object || null;
+        const hit=this.pickInteractionHit(event);
+        mesh=hit?.object||null;hitPoint=hit?.point;
       }
       const connection=this.connectionForMesh(mesh);
       if(connection){this.selectConnection(connection.id);return;}
       this.featureHoverManager.clear();
       this.sceneManager.clearHover();
       this.select(mesh,{additive:event.ctrlKey || event.metaKey || event.shiftKey,toggle:event.ctrlKey || event.metaKey});
+      if(!event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&this.selected===mesh&&this.canUseTranslationAxisInput()){
+        this.sceneManager.transformControls.setClickAnchor(mesh,hitPoint);
+      }
     };
 
     this.sceneManager.pointerMoveHandler = event => {
@@ -511,7 +525,8 @@ export default class Editor {
   setSelectedNeighbourDistance(targetPartId,axis,sign,value){
     const source=this.selected,target=this.getMeshByPartId(targetPartId),distance=Number(value);
     if(this.selectedMeshes.length!==1||source?.userData.part?.type!=='PROFILE'||!this.isMeshTransformable(source))throw new Error('请选择单根可移动的型材；锁定或安装状态不能绕过');
-    if(this.isBuilderReviewActive()||this.transformSelectionSnapshot||this.profileGripEditor.drag||this.singleProfileDistanceContext)throw new Error('请先结束当前拖动或预览，再修改净距');
+    if(this.isBuilderReviewActive()||this.transformSelectionSnapshot||this.profileGripEditor.drag||this.singleProfileDistanceContext
+      ||this.assemblyPlaybackManager.active||this.assemblyPresentationManager.isExploded())throw new Error('请先结束当前拖动、播放或预览，再修改净距');
     if(!Number.isFinite(distance)||distance<0)throw new Error('目标净距应为有效的非负毫米数');
     if(source.parent!==this.sceneManager.scene)throw new Error('暂不支持父级显示变换下的邻距编辑');
     const relation=profileDistanceRelation(source,target,axis,sign);
@@ -523,7 +538,10 @@ export default class Editor {
     const mutating=this.selectionGraphMutation;
     const profiles=this.meshes.filter(m=>m.userData.part?.type==='PROFILE').map(mesh=>({id:mesh.userData.part.id,
       position:mesh.getWorldPosition(new THREE.Vector3()),quaternion:mesh.getWorldQuaternion(new THREE.Quaternion())}));
+    const expectedPosition=source.getWorldPosition(new THREE.Vector3()).add(delta);
     this.singleProfileDistanceContext={validate:()=>{
+      const currentSource=this.getMeshByPartId(sourceId);
+      if(!currentSource||currentSource.getWorldPosition(new THREE.Vector3()).distanceTo(expectedPosition)>1e-4)throw new Error('当前约束会改变其他方向位置；本次净距修改已取消');
       for(const snapshot of profiles){
         const mesh=this.getMeshByPartId(snapshot.id);
         if(!mesh||mesh.getWorldQuaternion(new THREE.Quaternion()).angleTo(snapshot.quaternion)>1e-6
@@ -1126,83 +1144,58 @@ export default class Editor {
   }
 
   addDrawerGroup(options = {}) {
-    const width = Math.max(120, Number(options.width || 500));
-    const depth = Math.max(120, Number(options.depth || 450));
-    const totalHeight = Math.max(100, Number(options.height || 600));
-    const count = Math.max(1, Math.min(12, Math.round(Number(options.count || 3))));
-    const gap = Math.max(0, Number(options.gap ?? 3));
-    const frontThickness = Math.max(3, Number(options.frontThickness || 18));
-    const boardThickness = Math.max(3, Number(options.boardThickness || 12));
-    const mode = options.frontMode === 'OVERLAY' ? 'OVERLAY' : 'INSET';
-    const assemblyId = crypto.randomUUID();
-    const drawerHeight = (totalHeight - gap * (count - 1)) / count;
-    const frontWidth = mode === 'OVERLAY' ? width + 20 : width;
-    const boxHeight = Math.max(40, drawerHeight - 30);
-    const startY = Number(options.position?.y || 0);
-    const startX = Number(options.position?.x || 0);
-    const startZ = Number(options.position?.z || 0);
-    const common = {select:false,captureHistory:false,assemblyId};
-
-    for (let index = 0; index < count; index++) {
-      const yBase = startY + index * (drawerHeight + gap);
-      const centerY = yBase + drawerHeight / 2;
-      const drawerId = `${assemblyId}-${index + 1}`;
-      this.addPanel(frontWidth, drawerHeight, frontThickness, {
-        ...common,
-        name:`抽屉${index + 1}-面板`,
-        position:{x:startX,y:centerY,z:startZ},
-        assemblyId:drawerId,
-        color:options.frontColor || '#d8c1a2'
-      });
-      const sideDepth = Math.max(60, depth - 25);
-      const sideZ = startZ - frontThickness / 2 - sideDepth / 2;
-      const sideX = width / 2 - boardThickness / 2;
-      for (const sign of [-1, 1]) {
-        this.addPanel(sideDepth, boxHeight, boardThickness, {
-          ...common,
-          name:`抽屉${index + 1}-侧板`,
-          position:{x:startX + sign * sideX,y:centerY,z:sideZ},
-          rotation:{x:0,y:Math.PI/2,z:0},
-          assemblyId:drawerId,
-          color:'#caa87c'
-        });
+    const scene = this.sceneManager;
+    if (!this.selectionGestureManager.available() || scene.transformControls.dragging || this.selectionGestureManager.drag || this.selectionGestureManager.marqueeGesture || scene.marqueeStart || scene.lassoPoints.length || this.assemblyPresentationManager.isExploded() || this.assemblyPlaybackManager.active || this.selectionGraphMutation) {
+      throw new Error('请先结束当前绘制、放置、拖动、预览或播放，再生成抽屉组');
+    }
+    const layout = drawerGroupLayout(options);
+    const previewMeshes = [];
+    try {
+      for (const member of layout.members) {
+        const part = {...member,id:crypto.randomUUID(),hidden:false,locked:false};
+        previewMeshes.push(this.createPartMesh(part));
       }
-      this.addPanel(Math.max(40,width - boardThickness * 2), boxHeight, boardThickness, {
-        ...common,
-        name:`抽屉${index + 1}-背板`,
-        position:{x:startX,y:centerY,z:startZ - frontThickness - sideDepth + boardThickness / 2},
-        assemblyId:drawerId,
-        color:'#caa87c'
-      });
-      this.addPanel(Math.max(40,width - boardThickness * 2), Math.max(40,sideDepth - boardThickness * 2), boardThickness, {
-        ...common,
-        name:`抽屉${index + 1}-底板`,
-        position:{x:startX,y:yBase + boardThickness/2 + 8,z:sideZ},
-        rotation:{x:Math.PI/2,y:0,z:0},
-        assemblyId:drawerId,
-        color:'#b99568'
-      });
-      if (options.includeSlides === true) {
-        const requested = Number(options.slideLength || 450);
-        const supported = [350,400,450,500];
-        const slideLength = supported.reduce((best,value) => Math.abs(value-requested) < Math.abs(best-requested) ? value : best, supported[0]);
-        const sku = `DRAWER_SLIDE_${slideLength}`;
-        const railX = Math.max(0,width / 2 + 7);
-        const railY = centerY - boxHeight * 0.12;
-        const railZ = startZ - frontThickness / 2 - Math.min(sideDepth,slideLength) / 2;
-        for (const sign of [-1,1]) {
-          this.addHardware(sku,{
-            ...common,
-            name:`抽屉${index + 1}-${sign < 0 ? '左' : '右'}导轨`,
-            position:{x:startX + sign * railX,y:railY,z:railZ},
-            assemblyId:drawerId
-          });
-        }
+      const conflict = this.interferenceFeedbackManager.findInsertionInterference(previewMeshes);
+      if (conflict) {
+        const other = conflict.other.displayId || conflict.other.name || '现有构件';
+        const check = conflict.relation.materialChecked ? '板材材料检查' : '安装包络检查';
+        throw new Error(`${conflict.part.name} 与 ${other} 冲突（${check}），整组未生成；请调整尺寸，或先移开该位置的现有构件`);
       }
+    } finally {
+      for (const mesh of previewMeshes) PrimitiveGeometryFactory.dispose(mesh);
     }
 
-    this.emitStats();
-    this.historyManager.capture();
+    const before = this.exportProject();
+    const selectionIds = this.selectedMeshes.map(mesh => mesh.userData.part.id);
+    const connectionId = this.selectedConnectionId;
+    const historyStates = [...this.historyManager.states],historyIndex = this.historyManager.index,partSequence = this.partSequence;
+    const previousMutation = this.selectionGraphMutation;
+    let assemblyId;
+    try {
+      this.selectionGraphMutation = true;
+      const drawerPartIds = Array.from({length:layout.parameters.count},() => []);
+      for (const member of layout.members) {
+        const common = {select:false,captureHistory:false,name:member.name,position:member.position,rotation:member.rotation,color:member.color};
+        const d = member.dimensions;
+        const mesh = member.type === 'PANEL' ? this.addPanel(d.width,d.height,d.thickness,common) : this.addHardware(member.hardwareSku,common);
+        drawerPartIds[member.drawerIndex].push(mesh.userData.part.id);
+      }
+      const drawerIds = drawerPartIds.map((ids,index) => this.assemblyManager.create(ids,`抽屉${index + 1}`));
+      // 每个抽屉保留独立组件；多抽屉再组成真实父总成，不返回原来的悬空总成 ID。
+      assemblyId = drawerIds.length > 1 ? this.assemblyManager.createParent(drawerIds,String(options.name || '抽屉组')) : drawerIds[0];
+      this.updateDimensions();this.emitStats();
+      this.historyManager.capture();
+    } catch (error) {
+      this.historyManager.states = historyStates;this.historyManager.index = historyIndex;
+      // 回滚期间继续挡住半成品工程通知；保留旧选择、编号序列和剪贴板。
+      this.restoreProject(before);this.partSequence = partSequence;
+      if (connectionId) this.selectConnection(connectionId);
+      else this.selectMany(selectionIds.map(id => this.getMeshByPartId(id)).filter(Boolean));
+      throw error;
+    } finally {
+      this.selectionGraphMutation = previousMutation;
+    }
+    this.emitProjectChanged();
     this.fitView();
     return assemblyId;
   }
@@ -1244,6 +1237,7 @@ export default class Editor {
     this.drawingSettings = {projectName:'未命名工程',revision:'A',paper:'A3',sideView:'RIGHT',...(current.editorState?.engineeringDrawing || {})};
     loadCustomSections(current.profileSections || []);
     this.clear(false);
+    this.materialListManager.load(current.materialList);
 
     for (const source of current.parts || []) {
       if (source?.generatedByConnectionId) continue;
@@ -1294,6 +1288,7 @@ export default class Editor {
       schemaVersion:CURRENT_PROJECT_SCHEMA_VERSION,
       coordinateSystem:createProjectCoordinateDescriptor(),
       manufacturing:structuredClone(this.projectSettings),
+      materialList:this.materialListManager.export(),
       editorState:{autosaveEnabled:true,annotations:{...this.annotationManager.options},profileDrawToolVersion:7,featureSnapVersion:3,assemblySystemVersion:2,assemblyExplodedViewVersion:1,assemblyDiagnosticsVersion:1,connectorSystemVersion:3,slotCatalogVersion:1,hardwareBomVersion:2,bomReportVersion:1,profileCollisionCheckVersion:2,profileCatalogVersion:1,accessoryCatalogVersion:2,accessoryMountingVersion:2,placementSystemVersion:1,manufacturingIdentityVersion:1,assemblyInstructionVersion:2,taggedDrawingVersion:1,connectionInstallationDiagramVersion:4,contourFrameVersion:5,assemblyPlaybackVersion:2,interactionPolishVersion:5,contourRelationVisualizationVersion:2,assemblyGuideDocumentVersion:2,cadInteractionVersion:3,cadInteraction:{transformSpace:this.transformSpace,workPlane:this.workPlaneVisualizer.plane,workPlaneVisible:this.workPlaneVisualizer.visible,movementStepMm:this.movementStepMm,rotationStepDeg:this.rotationStepDeg,moveScope:this.transformMoveScope},autoConnectorRecommendation:true,autoConnectionSystemVersion:2,connectionQuickChangeVersion:1,panelDoorConfiguratorVersion:1,profileReplacementVersion:1,designModelVersion:1,manufacturingConfigurationVersion:1,connectionAnchorVersion:1,connectionPlacementVersion:2,machiningPlacementVersion:1,autoConnectionEnabled:this.autoConnectionEnabled,machiningFeatureSystemVersion:1,machiningReferenceVersion:1,machiningCollisionCheckVersion:1,machiningRectangularPatternVersion:1,dimensionSystemVersion:2,engineeringDrawingSystemVersion:2,engineeringDrawingDxfVersion:1,profileGripEditingVersion:1,profileGripDefaults:{...this.profileGripEditor.options},engineeringDrawing:{...this.drawingSettings},drawingDefaults:{...this.profileDrawTool.options}},
       metadata:{
         version:CURRENT_APP_VERSION,
@@ -1337,6 +1332,7 @@ export default class Editor {
     }
     this.parts = [];
     this.meshes = [];
+    this.materialListManager?.clear();
     this.userDimensions = [];
     this.dimensionStart = null;
     this.emitUserDimensions();
@@ -1497,6 +1493,19 @@ export default class Editor {
     this.axisClearanceManager?.hide();
   }
 
+  /** 轴标记只打开原移动量输入；不抢放置/评审/抓手/框选，也不绕过锁定。 */
+  canUseTranslationAxisInput(){
+    const s=this.sceneManager;
+    return this.selected?.userData.part?.type==='PROFILE'&&this.isSelectionTransformable()
+      &&s.transformControls.object===this.selected&&!s.transformControls.dragging&&!this.transformSelectionSnapshot
+      &&!this.isBuilderReviewActive()&&!this.wholeStretchManager.isActive()&&!this.profileDrawTool.isActive()
+      &&!this.profilePlacementManager.isActive()&&!this.connectionPlacementManager.isActive()
+      &&!this.accessoryPlacementManager.isActive()&&!this.machiningPlacementManager.isActive()&&!this.profileGripEditor.drag
+      &&!this.measureMode&&!this.dimensionMode&&!this.featureSelectionManager.enabled&&!s.marqueeMode&&!s.lassoMode
+      &&!this.contourFrameManager?.active&&!this.assemblyPlaybackManager.active&&!this.assemblyPresentationManager.isExploded()
+      &&!document.querySelector('.modal-backdrop,.engineering-center-backdrop');
+  }
+
   /** 在世界坐标与构件局部坐标之间切换 Gizmo。 */
   setTransformSpace(space = 'world') {
     this.transformSpace = this.sceneManager.setTransformSpace(space);
@@ -1563,6 +1572,26 @@ export default class Editor {
     this.profileGripEditor.applyCandidateLength(length,{allowFeatureSnap:false,gridSnap:false});
     this.profileGripEditor.commitDrag();
     return mesh.userData.part;
+  }
+
+  /** 就地长度框仍用原固定端/加工基准规则；失败不保留半次几何、连接或历史提交。 */
+  setSelectedProfileLengthFromDistanceInput(fixedEnd,lengthMm){
+    const source=this.selected,value=Number(lengthMm),part=source?.userData.part;
+    if(part?.type!=='PROFILE'||this.selectedMeshes.length!==1||!this.isMeshTransformable(source))throw new Error('请选择单根可编辑的直型材');
+    if(!Number.isFinite(value)||value<this.profileGripEditor.options.minLengthMm)throw new Error('长度必须 ≥ '+this.profileGripEditor.options.minLengthMm+' mm');
+    if(this.profileGripEditor.drag||this.transformSelectionSnapshot||this.isBuilderReviewActive()
+      ||this.assemblyPlaybackManager.active||this.assemblyPresentationManager.isExploded())throw new Error('请先结束当前拖动、播放或预览');
+    if(Math.abs(value-Number(part.dimensions.length))<1e-7)return false;
+    const before=this.exportProject(),states=[...this.historyManager.states],index=this.historyManager.index;
+    const mutating=this.selectionGraphMutation,orbitEnabled=this.sceneManager.orbitControls.enabled;
+    this.selectionGraphMutation=true;
+    try{
+      this.setSelectedProfileLengthFromEnd(fixedEnd==='END'?'START':'END',value);
+      this.selectionGraphMutation=mutating;this.emitProjectChanged();return true;
+    }catch(error){
+      this.profileGripEditor.cancelDrag();this.historyManager.states=states;this.historyManager.index=index;
+      this.restoreProject(before);this.select(this.getMeshByPartId(part.id));throw error;
+    }finally{this.selectionGraphMutation=mutating;this.sceneManager.orbitControls.enabled=orbitEnabled;this.selectedProfileDistanceManager?.requestRefresh();}
   }
 
   updateSelectedGeometry(options = {}) {

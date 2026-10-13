@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import ComponentGeometryFactory from './ComponentGeometryFactory.js';
+import {drawerSlideGeometry} from '../model/DrawerSlideGeometryModel.js';
 
 export default class PrimitiveGeometryFactory {
   static create(part) {
@@ -138,13 +139,11 @@ export default class PrimitiveGeometryFactory {
       const cap = new THREE.Mesh(new THREE.BoxGeometry(size,size,thickness),new THREE.MeshStandardMaterial({color:part.color || 0x2e3238,metalness:0.02,roughness:0.78}));
       group.add(cap);
     } else if (part.accessoryType === 'DRAWER_SLIDE') {
-      const length = Number(part.dimensions?.length || 450);
-      const width = Number(part.dimensions?.width || 12);
-      const height = Number(part.dimensions?.height || 45);
-      const outer = new THREE.Mesh(new THREE.BoxGeometry(width,height,length),material.clone());
-      const inner = new THREE.Mesh(new THREE.BoxGeometry(Math.max(3,width-3),Math.max(12,height*0.58),Math.max(30,length-22)),material.clone());
-      inner.position.x = width*0.48;
-      group.add(outer,inner);
+      for (const body of drawerSlideGeometry(part.dimensions).bodies) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(body.width,body.height,body.length),material.clone());
+        mesh.position.x = body.x;
+        group.add(mesh);
+      }
     } else if (part.accessoryType === 'HINGE') {
       const width=Number(part.dimensions?.width||40),height=Number(part.dimensions?.height||40),thickness=Number(part.dimensions?.thickness||4),pinDiameter=Number(part.dimensions?.pinDiameter||6);
       const leafWidth=Math.max(6,(width-pinDiameter)/2);

@@ -17,7 +17,10 @@ export function describeDistanceProfile(mesh){
   const scale=mesh.getWorldScale(new THREE.Vector3()),q=mesh.getWorldQuaternion(new THREE.Quaternion());
   if([scale.x,scale.y,scale.z].some(v=>Math.abs(v-1)>1e-7))return null;
   const axes=[new THREE.Vector3(1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,1)].map(v=>v.applyQuaternion(q));
-  if(axes.some(v=>Math.max(Math.abs(v.x),Math.abs(v.y),Math.abs(v.z))<1-1e-7))return null;
+  if(axes.some(v=>{
+    const components=v.toArray().map(Math.abs);
+    return Math.max(...components)<1-1e-7||components.filter(value=>value>1e-7).length!==1;
+  }))return null;
   const center=mesh.getWorldPosition(new THREE.Vector3()),euler=new THREE.Euler().setFromQuaternion(q,'XYZ');
   const obb=profileObb({...part,position:{...center},rotation:{x:euler.x,y:euler.y,z:euler.z}});
   if(!obb)return null;

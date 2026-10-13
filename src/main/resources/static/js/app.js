@@ -22,6 +22,9 @@ import {ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,Acces
   connectionSpecs,connectionDesignType,connectionPlacementMode,preferredConnectionSpec,shaftDiametersFor,shaftFixturePorts,fastenerThreads,fastenerLengths,closureFaces,connectionComponent,shaftComponent,accessoryComponent,componentPart} from './model/ComponentCatalog.js';
 import {PanelShapeFields,panelDefaults,panelDimensions} from './model/PanelShapeModel.js';
 import {panelNotchLabel} from './configurator/PanelReliefManager.js';
+import {MaterialListUnits} from './model/MaterialListManager.js';
+import {materialListSections,materialListCsv,materialListXlsx} from './export/MaterialListExporter.js';
+import BomExporter from './export/BomExporter.js';
 import {
   getSectionDefinition,
   getSectionInfo,
@@ -35,8 +38,9 @@ import {
 import {DesignConnectionList, DEFAULT_DESIGN_CONNECTION_TYPE, designConnectionLabel} from './model/DesignConnectionCatalog.js';
 import {HardwareCatalogList} from './model/HardwareCatalog.js';
 import DiyGenerator from './diy/DiyGenerator.js';
-import {DiyTemplateList, getDiyTemplate} from './diy/DiyTemplateCatalog.js';
+import {DEFAULT_DIY_TEMPLATE_ID, getDiyTemplate} from './diy/DiyTemplateCatalog.js';
 import {layeredRackLayout,RackProfileRoles,RackSideMountOptions,createRackRoleSettings,RACK_LAYOUT_VERSION} from './diy/LayeredRackModel.js';
+import {drawerGroupLayout} from './diy/DrawerGroupModel.js';
 import {rackLayerMeasurements,plannedRackLayerMeasurements,rackDistanceText,rackClearanceText} from './diy/RackLayerMeasurements.js';
 import {BatchConnectionComponentOptions} from './connection/ConnectionBatchManager.js';
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
@@ -144,7 +148,7 @@ createApp({
       const id=selectedParameterFrame.value?.id;if(!id)return;
       cancelPlacementTools();
       layoutManager?.expandSide('left');layoutManager?.expandSide('right');
-      try{const parameters=editor.frameParameterManager.begin(id);Object.assign(diyForm,{layoutVersion:1,bayCount:1,bayMode:'SHARED',topMount:'BETWEEN',bottomMount:'BETWEEN',sideMount:'FRAME',bottomClearance:0,centerDirection:'DEPTH',manualLevelHeights:false},parameters,{profileRoles:{...createRackRoleSettings(),...structuredClone(parameters.profileRoles||{})},levelSettings:structuredClone(parameters.levelSettings||[])});syncDiyLayers();diyTemplateId.value='CUSTOM';Object.assign(frameEdit,{active:true,assemblyId:id,ready:false,error:''});quickPanel.value='build';rightPanelMode.value='create';}
+      try{const parameters=editor.frameParameterManager.begin(id);Object.assign(diyForm,{layoutVersion:1,bayCount:1,bayMode:'SHARED',topMount:'BETWEEN',bottomMount:'BETWEEN',sideMount:'FRAME',bottomClearance:0,centerDirection:'DEPTH',manualLevelHeights:false},parameters,{profileRoles:{...createRackRoleSettings(),...structuredClone(parameters.profileRoles||{})},levelSettings:structuredClone(parameters.levelSettings||[])});syncDiyLayers();Object.assign(frameEdit,{active:true,assemblyId:id,ready:false,error:''});quickPanel.value='build';rightPanelMode.value='create';}
       catch(error){notify(error.message,'warning');}
     }
     function previewFrameEdit(){
@@ -293,6 +297,7 @@ createApp({
     const drawState = reactive({active:false,mode:'OFF',axisLock:null,start:null,hover:null,committed:null,lengthMm:null,typedLength:'',segmentCount:0,contourPointCount:0});
     const gripState = reactive({active:false,end:null,lengthMm:null,typed:'',snappedFeature:null,message:'',blocked:false,error:false});
     const profileLengthForm=reactive({partId:null,fixedEnd:'START',lengthMm:0});
+    watch(()=>profileLengthForm.fixedEnd,end=>editor?.selectedProfileDistanceManager.setFixedEnd(end),{flush:'sync'});
     const selectionFilter = ref('ALL');
     const curvedMachiningStage = ref('BEND_BEFORE');
     const machiningSelection = ref([]);
@@ -326,9 +331,34 @@ createApp({
     const pendingFactoryExport = ref(false);
     const engineeringCenterVisible = ref(false);
     const engineeringCenterTab = ref('materials');
+    const engineeringCenterTabs = [
+      {id:'materials',label:'材料清单'},
+      {id:'accessories',label:'配件清单'},
+      {id:'machining',label:'加工清单'},
+      {id:'drawing',label:'图纸与导出'}
+    ];
+    const materialListView = ref('cards');
+    const materialListExporting = ref(false);
+    const factoryStyleExporting = ref(false);
+    const materialVirtualFormVisible = ref(false);
+    const materialVirtualForm = reactive({id:'',name:'',spec:'',model:'',quantity:1,unit:'个',note:''});
+    const materialVirtualError = ref('');
+    const materialListModel = computed(()=>{
+      projectRevision.value;
+      return engineeringCenterVisible.value&&editor?editor.bomExporter.buildDesignMaterialList():{entries:[],categories:[],statistics:[],virtualItems:[],warnings:[],profileCount:0,totalLengthMm:0,modelCount:0,connectionKitCount:0,pendingConnectionCount:0};
+    });
+    // 切标签保留未保存补充项；只有关闭整个资料窗口才清理临时表单。
+    watch(engineeringCenterVisible,value=>{if(!value){materialVirtualFormVisible.value=false;materialVirtualError.value='';}});
     const manufacturingConfigVisible = ref(false);
     const manufacturingConfigTab = ref('profiles');
     const showShortcutHelp = ref(false);
+    watch([manufacturingConfigVisible,validationVisible],([configuration,validation],[previousConfiguration,previousValidation])=>{
+      if(!configuration&&!validation&&(previousConfiguration||previousValidation)&&engineeringCenterVisible.value){
+        nextTick(()=>{
+          if(engineeringCenterVisible.value&&!manufacturingConfigVisible.value&&!validationVisible.value)document.querySelector('.list-export-tabs button.active')?.focus();
+        });
+      }
+    });
     let editor = null;
     let profileRollHasWarning=false;
     const canRollProfileSection=computed(()=>{
@@ -410,9 +440,7 @@ createApp({
     const replacementSpecs=computed(()=>replacementChoice.value?.specs||[]);
     const doorForm = reactive({frameCatalogId:getDefaultDesignProfileId('2020'),gapMm:3,panelGapMm:2,panelThickness:5,panelMaterial:'亚克力',hingeSide:'LEFT',includeHinges:true,includeHandle:true});
     const profileReplaceForm = reactive({catalogId:getDefaultDesignProfileId('3030'),scope:'SELECTED',autoRepair:true});
-    const diyTemplates = DiyTemplateList;
-    const diyTemplateId = ref('TURTLE_TANK_RACK');
-    const diyInitialDefaults=structuredClone(getDiyTemplate(diyTemplateId.value).defaults);
+    const diyInitialDefaults=structuredClone(getDiyTemplate(DEFAULT_DIY_TEMPLATE_ID).defaults);
     const diyForm = reactive({
       layoutVersion:RACK_LAYOUT_VERSION,catalogId:getDefaultDesignProfileId('3030'),autoConnect:true,
       ...diyInitialDefaults,profileRoles:{...createRackRoleSettings(),...diyInitialDefaults.profileRoles}
@@ -421,7 +449,6 @@ createApp({
     const diySideMountOptions=RackSideMountOptions;
     watch(diyForm,()=>{if(frameEdit.active){editor?.frameParameterManager.clearPreview();frameEdit.ready=false;frameEdit.error='参数已改变，请重新预览';}},{deep:true});
     watch(()=>diyForm.levels,(_levels,previousLevels)=>syncDiyLayers(previousLevels),{immediate:true});
-    const selectedDiyTemplate = computed(() => getDiyTemplate(diyTemplateId.value));
     const diyLayoutInput=computed(()=>frameEdit.active?diyForm:{...diyForm,layoutVersion:RACK_LAYOUT_VERSION});
     const diyLayout=computed(()=>{sectionRevision.value;try{return {layout:layeredRackLayout(diyLayoutInput.value),error:''};}catch(error){return {layout:null,error:error.message};}});
     const diyAutomaticLayout=computed(()=>{sectionRevision.value;const input=diyLayoutInput.value;try{return layeredRackLayout({...input,layoutVersion:Number(input.layoutVersion)===1?2:input.layoutVersion,manualLevelHeights:false});}catch{return null;}});
@@ -459,7 +486,19 @@ createApp({
         catalogProfilePreview.setObject(previewSpec?PrimitiveGeometryFactory.create(previewSpec):null);
       }
     }
-    const drawerForm = reactive({width:500,depth:450,height:600,count:3,gap:3,frontMode:'INSET',includeSlides:true,slideLength:450});
+    // 仅新表单默认用能容纳的 400 mm；用户明确选择 450 mm 后只提示不足，不改回 400。
+    const drawerForm = reactive({width:500,depth:450,height:600,count:3,gap:3,frontMode:'INSET',includeSlides:true,slideLength:400});
+    const drawerLayoutState = computed(() => {
+      try { return {layout:drawerGroupLayout(drawerForm),error:''}; }
+      catch (error) { return {layout:null,error:error.message}; }
+    });
+    const drawerLayoutError = computed(() => drawerLayoutState.value.error);
+    const drawerLayoutSummary = computed(() => {
+      const layout = drawerLayoutState.value.layout;
+      if (!layout) return '';
+      const mm = value => Number(value.toFixed(2));
+      return `每个面板高 ${mm(layout.drawerHeight)} mm；箱体 ${mm(layout.boxWidth)} × ${mm(layout.boxDepth)} × ${mm(layout.boxHeight)} mm（宽 × 深 × 高）`;
+    });
     const arrayForm = reactive({axis:'X',count:3,spacing:100});
     const mirrorForm = reactive({axis:'X',copy:true,planeMode:'WORLD_ORIGIN'});
     const circularForm = reactive({axis:'Y',count:4,angleDeg:360,centerMode:'WORLD_ORIGIN'});
@@ -552,14 +591,13 @@ createApp({
     const manufacturingConfigStatus = computed(() => { projectRevision.value; return editor?.manufacturingConfigurator?.status?.() || {profilePartCount:0,configuredProfilePartCount:0,unconfiguredProfilePartCount:0,connectionCount:0,configuredConnectionCount:0,unconfiguredConnectionCount:0,ready:false}; });
     const engineeringCenterRows = computed(() => {
       projectRevision.value;
-      if (!editor) return [];
-      if (engineeringCenterTab.value === 'materials') return editor.bomExporter.buildMaterialRows();
-      if (engineeringCenterTab.value === 'accessories') return editor.bomExporter.buildAccessoryBomRows();
-      if (engineeringCenterTab.value === 'machining') return editor.bomExporter.buildMachiningDetailRows();
-      return [];
+      if (!engineeringCenterVisible.value||!editor) return {headers:[],rows:[]};
+      if (engineeringCenterTab.value === 'accessories') return editor.bomExporter.buildFactoryAccessoryList(materialListModel.value);
+      if (engineeringCenterTab.value === 'machining') return editor.bomExporter.buildFactoryMachiningList(editor.bomExporter.factoryMachiningGroups(materialListModel.value));
+      return {headers:[],rows:[]};
     });
-    const engineeringCenterHeaders = computed(() => engineeringCenterRows.value[0] || []);
-    const engineeringCenterBody = computed(() => engineeringCenterRows.value.slice(1));
+    const engineeringCenterHeaders = computed(() => engineeringCenterRows.value.headers);
+    const engineeringCenterBody = computed(() => engineeringCenterRows.value.rows);
     const assemblyInstructionSteps = computed(() => { projectRevision.value; return editor?.buildAssemblyInstructions?.() || []; });
     const assemblyGuidePageIndex = ref(0);
     const assemblyGuideCurrentStep = computed(() => assemblyInstructionSteps.value[assemblyGuidePageIndex.value] || null);
@@ -1318,6 +1356,8 @@ createApp({
       editor?.frameParameterManager.cancel();
       editor?.panelReliefManager.cancel();
       editor?.panelFillManager.cancel();
+      editor?.selectedProfileDistanceManager.dispose();
+      editor?.sceneManager.transformControls.disposeAnchorInput();
       editor?.connectionReplacementManager.cancel();
     });
 
@@ -1334,7 +1374,22 @@ createApp({
         if(showShortcutHelp.value){event.preventDefault();showShortcutHelp.value=false;return;}
         if(validationVisible.value){event.preventDefault();closeValidation();return;}
         if(manufacturingConfigVisible.value){event.preventDefault();manufacturingConfigVisible.value=false;return;}
-        if(engineeringCenterVisible.value){event.preventDefault();engineeringCenterVisible.value=false;return;}
+        if(engineeringCenterVisible.value){
+          event.preventDefault();
+          if(engineeringCenterTab.value==='materials'&&materialVirtualFormVisible.value){
+            materialVirtualFormVisible.value=false;materialVirtualError.value='';
+            nextTick(()=>document.querySelector('.material-list-add-virtual')?.focus());
+          }else engineeringCenterVisible.value=false;
+          return;
+        }
+      }
+      if(event.key==='Tab'&&engineeringCenterVisible.value&&!manufacturingConfigVisible.value&&!validationVisible.value&&!showShortcutHelp.value){
+        const modal=document.querySelector('.list-export-modal');
+        const focusable=[...(modal?.querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex]')||[])].filter(element=>!element.disabled&&element.tabIndex>=0&&element.getClientRects().length);
+        const index=focusable.indexOf(document.activeElement);
+        if(focusable.length&&(index<0||event.shiftKey&&index===0||!event.shiftKey&&index===focusable.length-1)){
+          event.preventDefault();focusable[event.shiftKey?focusable.length-1:0].focus();
+        }
       }
       // 模态窗口期间不能用背景快捷键创建、删除或变换工程构件。
       if(document.querySelector('.modal-backdrop'))return;
@@ -1397,6 +1452,7 @@ createApp({
         if(handled){event.preventDefault();return;}
       }
       if(!drawState.active&&!profilePlacementState.active&&!connectionPlacementState.active&&!accessoryPlacementState.active&&!machiningPlacementState.active&&!measureMode.value&&!dimensionMode.value&&!boxSelectMode.value&&!lassoSelectMode.value&&!featureSelectMode.value&&!contextMenu.visible&&!jointQuickMenu.visible&&!relationQuickMenu.visible){
+        if(editor?.selectedProfileDistanceManager.handleKey(event)){event.preventDefault();return;}
         if(editor?.axisClearanceManager.handleKey(event)){event.preventDefault();return;}
       }
       if (event.ctrlKey || event.metaKey) {
@@ -1732,21 +1788,7 @@ createApp({
       } catch(error) { notify(error.message,'warning'); }
     }
 
-    function selectDiyTemplate(templateId) {
-      if(templateId==='CUSTOM'){diyTemplateId.value='CUSTOM';return;}
-      const template = getDiyTemplate(templateId);
-      if (!template) return;
-      diyTemplateId.value = template.id;
-      const defaults=structuredClone(template.defaults);
-      Object.assign(diyForm, defaults, {
-        layoutVersion:RACK_LAYOUT_VERSION,catalogId:diyForm.catalogId || getDefaultDesignProfileId('3030'),
-        profileRoles:{...createRackRoleSettings(),...defaults.profileRoles}
-      });
-      syncDiyLayers();
-    }
-
-    function diyPresetEdited(){diyTemplateId.value='CUSTOM';}
-    function diyStructureEdited(){diyForm.layoutVersion=RACK_LAYOUT_VERSION;diyPresetEdited();}
+    function diyStructureEdited(){diyForm.layoutVersion=RACK_LAYOUT_VERSION;}
     function diyRoleOrientationLabel(role,turn){
       sectionRevision.value;
       const option=diyForm.profileRoles[role.id];
@@ -1790,7 +1832,7 @@ createApp({
       if(frameEdit.active){previewFrameEdit();return;}
       if (!diyGenerator) return;
       try {
-        const result = diyGenerator.generate(diyTemplateId.value==='CUSTOM'?'STORAGE_RACK':diyTemplateId.value,{...diyForm,name:diyTemplateId.value==='CUSTOM'?'自定义框架':selectedDiyTemplate.value.label});
+        const result = diyGenerator.generate(DEFAULT_DIY_TEMPLATE_ID,{...diyForm,name:'通用框架'});
         editor.selectMany(result.createdProfileIds.map(id=>editor.getMeshByPartId(id)));
         const connectionCount = Number(result.autoConnection?.createdCount || 0);
         const connectionFailures=Number(result.autoConnection?.failureCount||0);
@@ -1801,9 +1843,10 @@ createApp({
     }
 
     function generateDrawers() {
+      if (!editor) return;
       try {
         editor.addDrawerGroup(drawerForm);
-        notify(`已生成 ${drawerForm.count} 组抽屉`);
+        notify(`已生成 ${drawerForm.count} 个抽屉${drawerForm.count > 1 ? '，已组合为抽屉组' : ''}`);
       } catch (error) {
         notify(error.message,'error');
       }
@@ -1863,6 +1906,7 @@ createApp({
         profileLengthForm.fixedEnd=part&&editor?.profileGripEditor.isEndDrivenByConstraint(part.id,'END')?'END':'START';
       }
       profileLengthForm.lengthMm=Number(part?.dimensions?.length||0);
+      editor?.selectedProfileDistanceManager.setFixedEnd(profileLengthForm.fixedEnd);
     }
 
     function applyProfileLength(){
@@ -3753,6 +3797,7 @@ createApp({
       if (!item) return;
       if (!editor?.focusDiagnosticIssue(item)) return notify('该检查项没有可定位的构件','warning');
       validationVisible.value = false;
+      engineeringCenterVisible.value = false;
       notify(`已定位：${item.subject || item.code}`);
     }
 
@@ -3850,9 +3895,77 @@ createApp({
     }
 
     function openEngineeringCenter(tab = 'materials') {
-      engineeringCenterTab.value = tab;
+      closeCadMenus();
+      selectEngineeringCenterTab(tab);
       engineeringCenterVisible.value = true;
-      nextTick(()=>document.querySelector('.engineering-current-row')?.scrollIntoView({block:'center'}));
+      nextTick(()=>document.querySelector('.list-export-close')?.focus());
+    }
+
+    function selectEngineeringCenterTab(tab) {
+      engineeringCenterTab.value=engineeringCenterTabs.some(item=>item.id===tab)?tab:'materials';
+      nextTick(()=>document.querySelector('.list-export-modal .engineering-current-row')?.scrollIntoView({block:'center'}));
+    }
+
+    // 旧清单调用也进入同一窗口，不再维护第二个可见状态。
+    function openMaterialList() {openEngineeringCenter('materials');}
+
+    function materialEntrySelected(entry) {
+      return entry.connectionIds.includes(selectedConnectionId.value)||selectedMeshes.value.some(mesh=>entry.partIds.includes(mesh?.userData?.part?.id));
+    }
+
+    function focusMaterialEntry(entry) {
+      try{
+        if(entry.connectionIds.length&&entry.kind==='CONNECTION'){
+          editor.focusAssemblyConnection(entry.connectionIds[0]);
+          editor.selectConnection(entry.connectionIds[0]);
+        }else{
+          const meshes=entry.partIds.map(id=>editor.getMeshByPartId(id)).filter(Boolean);
+          if(!meshes.length)throw new Error('这项没有三维构件可定位');
+          editor.selectMany(meshes);editor.focusSelection();
+        }
+        engineeringCenterVisible.value=false;
+      }catch(error){notify(error.message,'warning');}
+    }
+
+    function changeMaterialSystem(entry,event) {
+      try{editor.materialListManager.setProfileSystem(entry.profileId,event.target.value);}
+      catch(error){event.target.value=entry.spec;notify(error.message,'warning');}
+    }
+
+    function editMaterialVirtualItem(item=null) {
+      Object.assign(materialVirtualForm,{id:'',name:'',spec:'',model:'',quantity:1,unit:'个',note:'',...(item||{})});
+      materialVirtualError.value='';materialVirtualFormVisible.value=true;
+      nextTick(()=>document.getElementById('material-virtual-name')?.focus());
+    }
+
+    function saveMaterialVirtualItem() {
+      try{
+        editor.materialListManager.saveVirtualItem({...materialVirtualForm});
+        materialVirtualFormVisible.value=false;materialVirtualError.value='';
+        notify('虚拟构件已加入清单，不会创建三维构件');
+      }catch(error){materialVirtualError.value=error.message;}
+    }
+
+    function deleteMaterialVirtualItem(item) {
+      try{editor.materialListManager.removeVirtualItem(item.id);notify('已移除清单补充项，可撤销恢复');}
+      catch(error){notify(error.message,'warning');}
+    }
+
+    async function exportMaterialList(format='csv') {
+      if(materialListExporting.value)return;
+      materialListExporting.value=true;
+      try{
+        // 下载前取fresh业务快照，与当前清单相同；不调用或放宽正式Factory Gate。
+        const model=editor.bomExporter.buildDesignMaterialList();
+        if(!model.entries.length&&!model.virtualItems.length)throw new Error('当前清单为空');
+        const name=engineeringDrawingForm.projectName||'未命名工程',document=materialListSections(model,name);
+        const blob=format==='xlsx'?await materialListXlsx(document):new Blob([materialListCsv(document)],{type:'text/csv;charset=utf-8'});
+        const url=URL.createObjectURL(blob),anchor=window.document.createElement('a');
+        anchor.href=url;anchor.download=`${name.replace(/[<>:"/\\|?*\u0000-\u001F]/g,'_').slice(0,100)}_材料清单_套装方案.${format==='xlsx'?'xlsx':'csv'}`;
+        anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+        notify(model.warnings.length?'清单已导出；存在待核实规格或失效连接，请查看清单提示':'材料清单已导出',model.warnings.length?'warning':'success');
+      }catch(error){notify(error.message||'清单导出失败','warning');}
+      finally{materialListExporting.value=false;}
     }
 
     function resetWorkbenchLayout() {
@@ -3860,32 +3973,60 @@ createApp({
       notify('工作台布局已复位');
     }
 
-    function engineeringRowDisplayIds(row) {
-      const text=(row||[]).map(value=>String(value??'')).join(' ');
-      return [...new Set(text.match(/(?:P|B|S|A|H|C|M|G)\d{3}|(?:P|S|B|A)-\d+/g)||[])];
-    }
-
     function engineeringRowHasParts(row) {
-      return engineeringRowDisplayIds(row).length>0;
+      return Boolean(row?.partIds?.length||row?.connectionIds?.length);
     }
 
     function engineeringRowSelected(row) {
-      const rowIds=new Set(engineeringRowDisplayIds(row));
-      if(!rowIds.size)return false;
-      return selectedMeshes.value.some(mesh=>rowIds.has(mesh?.userData?.part?.manufacturingCode)||rowIds.has(mesh?.userData?.part?.displayId));
+      return materialEntrySelected(row);
     }
 
     function focusEngineeringRow(row) {
-      if(!editor)return;
-      const displayIds=engineeringRowDisplayIds(row);
-      if(!displayIds.length){notify('这条清单没有可定位的三维构件','warning');return;}
-      const wanted=new Set(displayIds);
-      const meshes=editor.parts.filter(part=>wanted.has(part.manufacturingCode)||wanted.has(part.displayId)).map(part=>editor.getMeshByPartId(part.id)).filter(Boolean);
-      if(!meshes.length){notify('没有找到对应的三维构件','warning');return;}
-      editor.selectMany(meshes);
-      editor.focusSelection();
-      engineeringCenterVisible.value=false;
-      notify(`已定位 ${meshes.length} 个构件`);
+      if(!editor||!engineeringRowHasParts(row)){notify('这条清单没有可定位的三维构件','warning');return;}
+      focusMaterialEntry(row);
+    }
+
+    function downloadFactoryDocument(blob,filename) {
+      const url=URL.createObjectURL(blob),anchor=document.createElement('a');
+      anchor.href=url;anchor.download=filename.replace(/[<>:"/\\|?*\u0000-\u001F]/g,'_');
+      anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+
+    function exportFactorySummaryList() {
+      try{
+        const tab=engineeringCenterTab.value,bom=editor.bomExporter;
+        if(!['accessories','machining'].includes(tab))return;
+        const model=tab==='accessories'?bom.buildFactoryAccessoryList():bom.buildFactoryMachiningList();
+        if(!model.rows.length)throw new Error('当前清单为空');
+        const name=tab==='accessories'?'配件清单':'加工清单';
+        downloadFactoryDocument(new Blob([BomExporter.fileText(BomExporter.factoryListRows(model))],{type:'text/csv;charset=utf-8'}),`${engineeringDrawingForm.projectName||'未命名工程'}_${name}.csv`);
+        notify(`${name}已导出；普通清单不代替正式制造配置和检查`);
+      }catch(error){notify(error.message||'汇总清单导出失败','warning');}
+    }
+
+    async function exportFactoryStyle(row) {
+      if(factoryStyleExporting.value)return;
+      factoryStyleExporting.value=true;
+      try{
+        if(typeof JSZip==='undefined')throw new Error('未加载图纸打包组件');
+        // fresh分组用完整加工键核对，不能拿过期样式序号关联新的孔位。
+        const groups=editor.bomExporter.factoryMachiningGroups(),group=groups.find(item=>item.key===row.key);
+        if(!group)throw new Error('工程已变更，请从当前加工清单重新选择');
+        if(!group.drawingSupported)throw new Error('该加工样式暂不支持直料图，请在图纸与导出中核对');
+        const zip=new JSZip(),model=editor.bomExporter.buildFactoryMachiningList([group]);
+        zip.file('加工清单.csv',BomExporter.fileText(BomExporter.factoryListRows(model)));
+        const drawings=editor.drawingGenerator.buildFactoryStyleDrawings([group]);
+        if(drawings.length!==group.drawingIds.length)throw new Error('当前样式图未完整适配，未导出');
+        for(const drawing of drawings){
+          zip.file(`${drawing.drawingId}.svg`,drawing.kind==='CUT'?editor.drawingGenerator.exportCutSvg(drawing):editor.drawingGenerator.exportSvg(drawing));
+          zip.file(`${drawing.drawingId}.dxf`,drawing.kind==='CUT'?editor.dxfExporter.buildCutDrawing(drawing):editor.dxfExporter.buildDrawing(drawing));
+        }
+        zip.file('设计参考说明.txt','本包为设计参考，清单与同名STYLE图对应。正式生产请在图纸与导出中完成制造配置、检查并导出制造包；实际截面、材料、加工方向及公差须人工复核。工程变更后请重新导出清单和图纸。');
+        const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+        downloadFactoryDocument(blob,`${engineeringDrawingForm.projectName||'未命名工程'}_${group.label}_设计参考.zip`);
+        notify('已导出该加工样式的清单与 SVG/DXF；这是设计参考，不代替正式制造检查');
+      }catch(error){notify(error.message||'加工样式图导出失败','warning');}
+      finally{factoryStyleExporting.value=false;}
     }
 
     function focusAssemblyInstructionStep(step, explode = false) {
@@ -3995,13 +4136,14 @@ createApp({
       panelFillState,previewPanelFill,focusPanelFill,cancelPanelFill,confirmPanelFill,
       connectionReplacementState,connectionReplacementForm,replacementSpecs,beginConnectionReplacement,changeReplacementKind,previewConnectionReplacement,cancelConnectionReplacement,confirmConnectionReplacement,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,clipboardCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
-      selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
+      selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterTabs,selectEngineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,factoryStyleExporting,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,
+      materialListView,materialListModel,materialListExporting,materialVirtualFormVisible,materialVirtualForm,materialVirtualError,MaterialListUnits,openMaterialList,materialEntrySelected,focusMaterialEntry,changeMaterialSystem,editMaterialVirtualItem,saveMaterialVirtualItem,deleteMaterialVirtualItem,exportMaterialList,
       catalogProfileCanvas,selectedDesignProfile,newProject,renameProject,activeLibrary,connectionPlacementState,machiningPlacementState,accessoryPlacementState,inspectorTab,toolMode,snapEnabled,autoConnectionEnabled,featureSelectMode,selectedFeatures,featureMateOptions,gridEnabled,projection,profileSearch,profileAdvanced,profileCatalogLoading,accessoryCatalogLoading,accessorySearch,accessoryCategory,accessoryCatalogManagerVisible,accessoryCatalogManagerSearch,accessoryEditorVisible,accessoryEditorMode,accessoryForm,profileCatalogManagerVisible,profileCatalogManagerSearch,databaseProfileRows,customProfileVisible,customProfileMode,customProfileForm,profileSectionPreviewCanvas,profileSectionTemplateOptions,customProfilePreviewSvg,customProfilePreviewState,lastSnap,dragAsset,measureMode,measureResult,dimensionMode,dimensionState,userDimensions,dimensionChainAxis,annotationOptions,boxSelectMode,lassoSelectMode,drawState,gripState,selectionFilter,transformSpace,movementStepMm,transformMoveScope,workPlaneVisible,featureHover,contourPresetForm,curvedMachiningStage,machiningSelection,batchMachiningFace,contextMenu,jointQuickMenu,relationQuickMenu,interferenceState,projectParts,projectGroups,selectedAssemblyId,selectedContourAssembly,selectedContourEdges,selectedContourPoints,selectedContourConstraints,contourConstraintForm,contourEditState,activeContourConstraintId,activeConnectionDetail,assemblyDiagnostics,assemblyExplosionActive,assemblyExplodeDistance,dirty,autosaveInfo,hasAutosave,manufacturingSummary,
       designProfiles,profileCatalog,profileSystems,nominalOptions,newVariants,selectedVariants,visibleProfileVariants,frameProfileOptions,connectionRules,connectionRuleId,hardwareCatalog,databaseAccessories,databaseAccessoryRows,visibleAccessories,accessoryManagerRows,accessoryCategoryOptions,
-      newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyTemplates,diyTemplateId,diyForm,diyPartCount,diyProfileRoles,diySideMountOptions,diyFrameError,diyStructureSummary,diyLayerRows,selectedDiyTemplate,drawForm,drawerForm,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,catalogAccessoryId,selectedCatalogAccessory,selectedConnectionPreview,
+      newProfile,newProfileThicknessOptions,selectedThicknessOptions,selectedPathMetrics,newShaft,newPanel,panelFitForm,doorForm,profileReplaceForm,diyForm,diyPartCount,diyProfileRoles,diySideMountOptions,diyFrameError,diyStructureSummary,diyLayerRows,drawForm,drawerForm,drawerLayoutError,drawerLayoutSummary,arrayForm,mirrorForm,circularForm,engineeringDrawingForm,shaftDiameters,catalogAccessoryId,selectedCatalogAccessory,selectedConnectionPreview,
       sectionTargetVariant,sectionInfo,sectionSvg,sectionIsCustom,canSmartConnect,
       endLabel,faceLabel,mateKindLabel,constraintStatusLabel,assemblyStatusLabel,severityLabel,validationCategoryLabel,quickNominal,nominalChanged,newProfileModelChanged,toggleNewProfileFaceClosure,startProfileDrag,dropAsset,quickAddProfile,openInspectorForNewProfile,addConfiguredProfile,profileThumbSvg,profileManagerThumbSvg,openCustomProfileDialog,openProfileCatalogManager,closeProfileCatalogManager,editDatabaseProfile,duplicateDatabaseProfile,toggleDatabaseProfile,closeCustomProfileDialog,saveCustomProfile,loadDatabaseProfiles,removeDatabaseProfile,loadAccessoryCatalog,addCatalogAccessory,mountCatalogAccessory,cancelAccessoryPlacement,mountedTargetLabel,mountPositionLabel,detachSelectedAccessory,openAccessoryCatalogManager,closeAccessoryCatalogManager,openAccessoryEditor,saveAccessoryEditor,toggleAccessoryCatalog,removeAccessoryCatalog,accessoryCategoryLabel,startProfileDraw,stopProfileDraw,cancelProfileDrawStep,confirmProfileDraw,returnToSelection,showRightPanel,finishContourDraw,drawOptionsChanged,syncDrawProfile,beginContourFrameEdit,stopContourFrameEdit,setContourEdgeLength,toggleContourOrthogonal,addContourEdgeConstraint,addContourPointAlignment,focusContourConstraint,removeContourConstraint,applyQuickContourRelation,toggleQuickContourRelation,deleteQuickContourRelation,createContourPreset,showAssemblyConnectionDetail,focusAssemblyConnectionDetail,connectionDiagramSvg,
-      addShaft,addPanel,applyPanelPreset,createPanelFromOpening,refitSelectedPanel,createDoorFromOpening,refitSelectedDoor,replaceSelectedProfiles,selectDiyTemplate,diyPresetEdited,diyStructureEdited,diyRoleOrientationLabel,setDiyManualHeights,setDiyLayerHeight,generateDiyTemplate,generateDrawers,duplicateArray,mirrorSelection,circularArray,addHardware,
+      addShaft,addPanel,applyPanelPreset,createPanelFromOpening,refitSelectedPanel,createDoorFromOpening,refitSelectedDoor,replaceSelectedProfiles,diyStructureEdited,diyRoleOrientationLabel,setDiyManualHeights,setDiyLayerHeight,generateDiyTemplate,generateDrawers,duplicateArray,mirrorSelection,circularArray,addHardware,
       selectedNominalChanged,selectedProfileModelChanged,profileMetaChanged,toggleSelectedFaceClosure,selectedPathChanged,primitiveChanged,
       profileLengthForm,profileLengthEditable,profileLengthEndBlocked,syncProfileLengthForm,applyProfileLength,
       importSectionDxf,handleSectionDxf,restoreReferenceSection,
@@ -4010,7 +4152,7 @@ createApp({
       importJson,handleFile,exportJson,loadSample,saveAutosave,restoreAutosave,clearAutosave,downloadLocalDraft,autosaveError,selectProjectPart,selectProjectGroup,toggleProjectPartVisibility,showAllParts,updateEndCuts,
       addThroughHole,addCountersink,addStartTap,addEndTap,addSlot,addObroundSlot,addMillingRegion,addStartEndHole,addEndEndHole,machiningChanged,machiningMmText,beginMachiningMmEdit,inputMachiningMm,commitMachiningMm,endMachiningMmEdit,deleteMachining,machiningTypeName,machiningLinearPattern,machiningRectangularPattern,machiningEditPattern,machiningDissolvePattern,machiningCopy,machiningPaste,machiningMirrorOffset,machiningMirrorFace,machiningMirrorEnd,toggleMachiningSelection,applyMachiningBatchFace,clearMachiningSelection,
       renameProjectGroup,makeSubassembly,moveAssemblyStep,editAssemblyNote,isolateProjectGroup,explodeAssemblyView,collapseAssemblyView,runAssemblyDiagnostics,focusAssemblyIssue,toggleAssemblyVisibility,toggleAssemblyLock,dissolveProjectGroup,focusConstraintIssue,setConnectionSource,createEndScrewConnection,smartConnect,autoSmartConnect,removeConnection,connectionRuleLabel,connectionSwitchOptions,switchConnectionRule,switchConnectionRecommended,changeSelectionFilter,createConstraintFromSnap,removeConstraint,toggleConstraintSuppressed,applyConstraintSuppressionSuggestion,isolateSelectedParts,toggleFeatureSelectMode,clearFeatureSelection,createFeatureMate,featureLabel,
-      openManufacturingConfig,configureManufacturingProfile,clearManufacturingProfile,configureManufacturingConnection,clearManufacturingConnection,recommendManufacturingConfig,clearManufacturingConfig,openEngineeringCenter,resetWorkbenchLayout,engineeringRowHasParts,engineeringRowSelected,focusEngineeringRow,focusAssemblyInstructionStep,startAssemblyPlayback,toggleAssemblyPlayback,previousAssemblyPlaybackStep,nextAssemblyPlaybackStep,showAssemblyPlaybackStep,previousAssemblyGuidePage,nextAssemblyGuidePage,selectAssemblyGuidePage,printAssemblyGuide,restoreAssemblyInstructionView,engineeringDrawingChanged,exportEngineeringDrawing,exportEngineeringDrawingDxf,runFactoryValidation,closeValidation,focusValidationIssue,exportFactoryPackage,confirmFactoryExport
+      openManufacturingConfig,configureManufacturingProfile,clearManufacturingProfile,configureManufacturingConnection,clearManufacturingConnection,recommendManufacturingConfig,clearManufacturingConfig,openEngineeringCenter,resetWorkbenchLayout,engineeringRowHasParts,engineeringRowSelected,focusEngineeringRow,exportFactorySummaryList,exportFactoryStyle,focusAssemblyInstructionStep,startAssemblyPlayback,toggleAssemblyPlayback,previousAssemblyPlaybackStep,nextAssemblyPlaybackStep,showAssemblyPlaybackStep,previousAssemblyGuidePage,nextAssemblyGuidePage,selectAssemblyGuidePage,printAssemblyGuide,restoreAssemblyInstructionView,engineeringDrawingChanged,exportEngineeringDrawing,exportEngineeringDrawingDxf,runFactoryValidation,closeValidation,focusValidationIssue,exportFactoryPackage,confirmFactoryExport
     };
   }
 }).mount('#app');

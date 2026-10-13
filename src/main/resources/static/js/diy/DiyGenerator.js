@@ -23,7 +23,7 @@ export default class DiyGenerator {
     let assemblyId = null;
 
     try {
-      // 用途只是预设，不再用“基础/高级”切换不同生成器，避免修改层数却被基础模板忽略。
+      // 通用框架与兼容旧ID共用同一生成器，真实结构只由传入参数决定。
       if (template.generator === 'LAYERED_RACK') {
         assemblyId = this.editor.addLayeredRack({
           ...parameters,
@@ -70,7 +70,7 @@ function normalizeParameters(template, input) {
   if (!catalogId) throw new Error('请选择设计型材截面');
 
   const autoConnect = input.autoConnect !== false;
-  // 深拷贝预设，逐层数据与角色不共享可编辑引用；显式传入的结构参数仍优先。
+  // 深拷贝默认值，逐层数据与角色不共享可编辑引用；显式结构参数仍优先。
   const defaultParameters=structuredClone({...defaults,levelSettings:createQuickFrameDefaults(levels,centerBeamCount).levelSettings});
   const parameters={...defaultParameters,...input,layoutVersion:RACK_LAYOUT_VERSION,catalogId,width,depth,height,levels,centerBeamCount,autoConnect};
   return layeredRackLayout(parameters).parameters;

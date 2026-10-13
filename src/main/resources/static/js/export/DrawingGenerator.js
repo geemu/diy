@@ -7,9 +7,9 @@ import {profileDisplayName,profileNominal} from '../model/DesignProfileCatalog.j
 export default class DrawingGenerator {
   constructor(editor){this.editor=editor;}
 
-  buildMachiningDrawings(){
+  buildMachiningDrawings(groups=null){
     let idx=1;
-    return this.editor.bomExporter.groups(true).filter(g=>g.parts[0]?.profilePath?.type!=='ARC').map(g=>{
+    return (groups??this.editor.bomExporter.groups(true)).filter(g=>g.parts[0]?.profilePath?.type!=='ARC').map(g=>{
       const p=g.parts[0],s=p.dimensions.sectionSize,items=p.machiningItems||[],section=getSectionDefinition(p.designProfile?.profileId),views=[];
       for(const face of ['FRONT','BACK','LEFT','RIGHT']){
         const fis=items.filter(i=>i.face===face&&!isEndMachiningFeature(i));
@@ -20,13 +20,24 @@ export default class DrawingGenerator {
         const e=items.filter(i=>isEndMachiningFeature(i)&&i.end===end);
         if(e.length)endViews.push({end,name:end==='START'?'A端':'B端',width:s[0],height:s[1],units:MachiningUnitBuilder.build(e)});
       }
-      return {drawingId:`M-${String(idx++).padStart(3,'0')}`,profile:profileDisplayName(p),nominal:profileNominal(p),slotWidth:Number(p.designProfile?.slotWidth||0),material:p.manufacturingProfile?.name||'制造材料待配置',length:Number(p.dimensions.length),quantity:g.parts.length,partIds:g.parts.map(x=>x.displayId),views,endViews,section,endCuts:structuredClone(p.endCuts||{})};
+      return {drawingId:g.drawingId||`M-${String(idx++).padStart(3,'0')}`,profile:profileDisplayName(p),nominal:profileNominal(p),slotWidth:Number(p.designProfile?.slotWidth||0),wallThickness:p.manufacturingProfile?.wallThickness??'',material:p.manufacturingProfile?.name||'制造材料待配置',length:Number(p.dimensions.length),quantity:g.parts.length,partIds:g.parts.map(x=>x.displayId),views,endViews,section,endCuts:structuredClone(p.endCuts||{})};
     });
   }
 
-  buildCutDrawings(){let idx=1,result=[];for(const g of this.editor.bomExporter.groups(false)){const p=g.parts[0];if(p.profilePath?.type==='ARC')continue;const cuts=p.endCuts||{},a=Number(cuts.START?.angleDeg||0),b=Number(cuts.END?.angleDeg||0);if(Math.abs(a)<.001&&Math.abs(b)<.001)continue;result.push({drawingId:`C-${String(idx++).padStart(3,'0')}`,profile:profileDisplayName(p),sectionSize:[...(p.dimensions.sectionSize||[30,30])],length:Number(p.dimensions.length),endCuts:structuredClone(p.endCuts),quantity:g.parts.length,partIds:g.parts.map(x=>x.displayId)});}return result;}
+  buildCutDrawings(groups=null){let idx=1,result=[];for(const g of (groups??this.editor.bomExporter.groups(false))){const p=g.parts[0];if(p.profilePath?.type==='ARC')continue;const cuts=p.endCuts||{},a=Number(cuts.START?.angleDeg||0),b=Number(cuts.END?.angleDeg||0);if(groups?(a===0&&b===0):(Math.abs(a)<.001&&Math.abs(b)<.001))continue;result.push({drawingId:g.drawingId||`C-${String(idx++).padStart(3,'0')}`,profile:profileDisplayName(p),sectionSize:[...(p.dimensions.sectionSize||[30,30])],length:Number(p.dimensions.length),endCuts:structuredClone(p.endCuts),quantity:g.parts.length,partIds:g.parts.map(x=>x.displayId)});}return result;}
 
-  exportCutSvg(d){const W=980,H=360,m=80,scale=Math.min(.9,780/Math.max(d.length,1)),L=d.length*scale,section=Math.max(30,Math.max(...d.sectionSize)*scale),y=155,half=section/2,a=d.endCuts?.START||{angleDeg:0,axis:'X'},b=d.endCuts?.END||{angleDeg:0,axis:'X'},startShift=Math.tan(Number(a.angleDeg||0)*Math.PI/180)*half,endShift=Math.tan(Number(b.angleDeg||0)*Math.PI/180)*half,x0=m,x1=m+L,poly=[[x0-startShift,y-half],[x1-endShift,y-half],[x1+endShift,y+half],[x0+startShift,y+half]].map(p=>p.join(',')).join(' ');return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="white"/><text x="40" y="40" font-size="22" font-weight="bold">${d.drawingId} - ${this.xml(d.profile)} 端部斜切图</text><text x="40" y="68" font-size="13">L=${d.length}mm · 截面 ${d.sectionSize[0]}×${d.sectionSize[1]} · 数量 ${d.quantity}</text><polygon points="${poly}" fill="none" stroke="black" stroke-width="1.5"/><line x1="${x0}" y1="${y-half-35}" x2="${x1}" y2="${y-half-35}" stroke="black"/><text x="${(x0+x1)/2}" y="${y-half-42}" text-anchor="middle" font-size="12">${d.length}</text><text x="${x0-5}" y="${y+half+42}" font-size="12">A端 ${this.cutLabel(a)}</text><text x="${x1-145}" y="${y+half+42}" font-size="12">B端 ${this.cutLabel(b)}</text><text x="40" y="330" font-size="12">构件：${this.xml(d.partIds.join(' / '))}</text></svg>`;}
+  buildFactoryStyleDrawings(groups=this.editor.bomExporter.factoryMachiningGroups()) {
+    const supported=groups.filter(group=>group.drawingSupported);
+    const machining=this.buildMachiningDrawings(supported.filter(group=>group.hasMachining).map(group=>({...group,drawingId:group.styleId})))
+      .map(drawing=>({...drawing,kind:'MACHINING'}));
+    const cuts=this.buildCutDrawings(supported.filter(group=>group.hasEndCuts).map(group=>({...group,drawingId:`${group.styleId}-CUT`})))
+      .map(drawing=>({...drawing,kind:'CUT'}));
+    // 工厂汇总以加工样式关联图纸；不把首件编号当成整组的加工要求。
+    return [...machining,...cuts].map(drawing=>({...drawing,partIds:[],
+      footerNote:'加工样式图 · 设计参考；请结合清单、制造配置和实际截面复核。'}));
+  }
+
+  exportCutSvg(d){const W=980,H=360,m=80,scale=Math.min(.9,780/Math.max(d.length,1)),L=d.length*scale,section=Math.max(30,Math.max(...d.sectionSize)*scale),y=155,half=section/2,a=d.endCuts?.START||{angleDeg:0,axis:'X'},b=d.endCuts?.END||{angleDeg:0,axis:'X'},startShift=Math.tan(Number(a.angleDeg||0)*Math.PI/180)*half,endShift=Math.tan(Number(b.angleDeg||0)*Math.PI/180)*half,x0=m,x1=m+L,poly=[[x0-startShift,y-half],[x1-endShift,y-half],[x1+endShift,y+half],[x0+startShift,y+half]].map(p=>p.join(',')).join(' ');return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="white"/><text x="40" y="40" font-size="22" font-weight="bold">${d.drawingId} - ${this.xml(d.profile)} 端部斜切图</text><text x="40" y="68" font-size="13">L=${d.length}mm · 截面 ${d.sectionSize[0]}×${d.sectionSize[1]} · 数量 ${d.quantity}</text><polygon points="${poly}" fill="none" stroke="black" stroke-width="1.5"/><line x1="${x0}" y1="${y-half-35}" x2="${x1}" y2="${y-half-35}" stroke="black"/><text x="${(x0+x1)/2}" y="${y-half-42}" text-anchor="middle" font-size="12">${d.length}</text><text x="${x0-5}" y="${y+half+42}" font-size="12">A端 ${this.cutLabel(a)}</text><text x="${x1-145}" y="${y+half+42}" font-size="12">B端 ${this.cutLabel(b)}</text><text x="40" y="330" font-size="12">${this.xml(d.footerNote??`构件：${d.partIds.join(' / ')}`)}</text></svg>`;}
   cutLabel(cut){return `${Number(cut?.angleDeg||0)}° / ${cut?.axis==='Y'?'Y':'X'}`;}
 
   buildBendDrawings(){let idx=1,map=new Map();for(const part of this.editor.parts.filter(item=>item.type==='PROFILE'&&item.profilePath?.type==='ARC')){const key=this.editor.bomExporter.sig(part,true);if(!map.has(key))map.set(key,{parts:[]});map.get(key).parts.push(part);}const result=[];for(const group of map.values()){const p=group.parts[0],m=getPathMetrics(p),sec=p.dimensions.sectionSize;result.push({drawingId:`B-${String(idx++).padStart(3,'0')}`,profile:profileDisplayName(p),nominal:profileNominal(p),slotWidth:Number(p.designProfile?.slotWidth||0),material:p.manufacturingProfile?.name||'制造材料待配置',sectionSize:[...sec],radius:m.radius,angleDeg:m.angleDeg,plane:m.plane,developedLength:m.developedLength,chord:m.chord,sagitta:m.sagitta,innerRadius:m.innerRadius,outerRadius:m.outerRadius,quantity:group.parts.length,partIds:group.parts.map(x=>x.displayId),machiningItems:structuredClone(p.machiningItems||[])});}return result;}
@@ -51,7 +62,8 @@ export default class DrawingGenerator {
       const ty=y+vh+78;els.push(`<line x1="${m}" y1="${ty}" x2="${m+L}" y2="${ty}" stroke="black"/><text x="${m+L/2}" y="${ty-5}" font-size="12" text-anchor="middle">${d.length}</text>`);y+=vh+125;
     }
     for(const ev of d.endViews){const sectionBounds=d.section?getSectionBounds(d.section):null,sw=sectionBounds?.width||ev.width,sh=sectionBounds?.height||ev.height,w=Math.max(45,sw*scale),h=Math.max(45,sh*scale),cx=m+w/2,cy=y+h/2;els.push(`<text x="${m}" y="${y-12}" font-size="16" font-weight="bold">${ev.name}端面</text>`);if(d.section)els.push(`<path d="${this.sectionPath(d.section,cx,cy,scale)}" fill="none" stroke="black" stroke-width="1.5" fill-rule="evenodd"/>`);else els.push(`<rect x="${m}" y="${y}" width="${w}" height="${h}" fill="none" stroke="black" stroke-width="1.5"/>`);for(const u of ev.units){const px=cx+Number(u.offsetX||0)*scale,py=cy-Number(u.offsetY||0)*scale;els.push(`<circle cx="${px}" cy="${py}" r="6" fill="none" stroke="black"/><text x="${px+12}" y="${py+4}" font-size="12">${this.xml(MachiningUnitBuilder.label(u))}</text>`);}y+=h+80;}
-    const W=L+m*2,H=y+30;return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="white"/>${els.join('')}</svg>`;
+    if(d.footerNote){els.push(`<text x="${m}" y="${y+10}" font-size="12">${this.xml(d.footerNote)}</text>`);y+=20;}
+    const W=d.footerNote?Math.max(980,L+m*2):L+m*2,H=y+30;return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="white"/>${els.join('')}</svg>`;
   }
 
   slotSvg(cx,cy,length,width,orientation){const l=orientation==='CROSS_PROFILE'?width:length,w=orientation==='CROSS_PROFILE'?length:width,r=Math.max(2,w/2),straight=Math.max(0,l-w),x=cx-l/2,y=cy-w/2;return `<rect x="${x}" y="${y}" width="${l}" height="${w}" rx="${r}" ry="${r}" fill="none" stroke="black"/>`;}

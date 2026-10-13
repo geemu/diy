@@ -43,10 +43,8 @@ export default class InterferenceFeedbackManager {
     });
   }
 
-  refresh(options = {}) {
-    if (!this.enabled) return this.clear();
-    const focusIds = options.focusIds instanceof Set ? options.focusIds : null;
-    const live = options.live === true;
+  /** 只读物理检查快照，供实时反馈和插入前检查共用；不依赖着色开关。 */
+  physicalItems() {
     const items = (this.editor.meshes || []).filter(mesh => this.isPhysicalMesh(mesh)).map(mesh => ({
       mesh,
       part:mesh.userData.part,
@@ -66,6 +64,29 @@ export default class InterferenceFeedbackManager {
           box:new THREE.Box3().setFromObject(mesh),obb:connectorEnvelope(mesh)});
       }
     }
+    return items;
+  }
+
+  /** 新构件只在场景外建网格；检查新件之间及可见旧构件/目录连接件，不检查旧件彼此。 */
+  findInsertionInterference(meshes = []) {
+    const incoming = meshes.map(mesh => ({mesh,part:mesh.userData.part,box:new THREE.Box3().setFromObject(mesh),obb:null}));
+    const existing = this.physicalItems();
+    for (let index = 0; index < incoming.length; index++) {
+      const a = incoming[index];
+      for (const b of [...incoming.slice(0,index),...existing]) {
+        if (!a.box.intersectsBox(b.box) || this.isIntentionalContact(a.part,b.part)) continue;
+        const relation = this.classify(a,b);
+        if (relation.kind === 'INTERFERENCE') return {part:a.part,other:b.part,relation};
+      }
+    }
+    return null;
+  }
+
+  refresh(options = {}) {
+    if (!this.enabled) return this.clear();
+    const focusIds = options.focusIds instanceof Set ? options.focusIds : null;
+    const live = options.live === true;
+    const items = this.physicalItems();
     const issues = [];
     const contacts = [];
     const nearContacts = [];

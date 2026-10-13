@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {TransformControls} from 'three/addons/controls/TransformControls.js';
+import ClickAnchoredTransformControls from '../interaction/ClickAnchoredTransformControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import InfiniteGround from './InfiniteGround.js';
 import {createSurfaceFeedback,disposeFeedback,surfaceGeometryKey} from '../interaction/SurfaceFeedback.js';
@@ -128,7 +128,7 @@ export default class SceneManager {
     this.orbitControls = this.configureOrbitControls(new OrbitControls(this.camera, this.renderer.domElement));
     this.orbitControls.target.set(0, 0, 0);
 
-    this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
+    this.transformControls = new ClickAnchoredTransformControls(this.camera, this.renderer.domElement);
     this.compactTranslationGizmo();
     this.transformControls.setSize(0.8);
     this.transformControls.addEventListener('mouseDown',()=>{this.transformPointerActive=this.transformControls.dragging===true;});
@@ -263,7 +263,7 @@ export default class SceneManager {
         if(center[handle.name.toLowerCase()]<0) {
           group.remove(handle);handle.geometry.dispose();
         } else if(group===gizmo.gizmo.translate && handle.isMesh) {
-          // 只细化显示几何，拾取区和正反向拖动事务完全沿用本地工具。
+          // 细化显示几何，正反向拖动事务沿用本地工具；拾取区在下方单独扩展。
           const axis=handle.name.toLowerCase();
           const tip=center[axis]>0.5;
           const geometry=tip?new THREE.CylinderGeometry(0,0.032,0.12,24):new THREE.CylinderGeometry(0.006,0.006,0.5,12);
@@ -271,6 +271,10 @@ export default class SceneManager {
           if(axis==='x')geometry.rotateZ(-Math.PI/2);
           if(axis==='z')geometry.rotateX(Math.PI/2);
           handle.geometry.dispose();handle.geometry=geometry;
+        } else if(group===gizmo.picker.translate) {
+          // 仅扩正轴横向拾取区25%，不放大显示箭头，不改变轴向长度或平面手柄。
+          const axis=handle.name.toLowerCase();
+          handle.geometry.scale(axis==='x'?1:1.25,axis==='y'?1:1.25,axis==='z'?1:1.25);
         }
       }
     }
