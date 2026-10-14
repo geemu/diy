@@ -1,4 +1,15 @@
-# 项目交接文档 — v0.75.80
+# 项目交接文档 — v0.75.81
+
+## v0.75.81 内置角槽件适配与缺上槽定向补件
+
+- 用户要求以最新鱼缸架示例 (1).json为准并确认修正；只读该工程39根/128关系、124角码/4抽象关系/0隐藏件，没有保存批量类型选项。此前源码/数值诊断发现30系列宽脚在深6.8mm处半宽6.6超过槽6.34，不能从此判定实物都不能装；原用户文件和浏览器工程不直接修改。
+- ConnectionComponentPorts只改新选配30系列bevel=0.7，保持hiddenGeometryVersion2、宽13.2/深7.2/孔位/腿长；40系列仍0.4。新宽脚角点深6.5处槽半宽6.64，留0.04横向参考余量；ComponentGeometryFactory和HiddenConnectionPlacement共用原layout。显式保存bevel不重写，既有已知旧薄板规范化条件未扩大，没有精确供应商图档或实际安装证明。
+- HiddenConnectionPlacement保留hiddenConnectorFits布尔调用约定，新增同源hiddenConnectorFit结构化原因；原0.0001mm外包/1e-12共轴/真实多边形材料检查不放宽。完整两端支撑先查宿主A/B越界，给实际超出毫米数；ConnectionManager逐孔/槽宽/实际面/完整材料判断不跳过，具体hidden错误在端口错误中优先显示。
+- ConnectionBatchManager缺上槽只由AUTO、存在真实向下安装面、相反上面未占用且未封槽确定。优先合法上槽HIDDEN_CORNER；已有两件允许这一件定向补件，其他方向仍旧数量规则。源/目标锁定、失效/制造保护、现有件占位和reserved包络、fresh确认/原事务保持，无自动替换或模型位置修改。
+- SideMountConnection按真实sideMountJoints和轴向解释侧贴/外侧内置件不适配，ConnectionManager切换同一说明；未新增可跨30mm错台的内置件。批量SIDE_MOUNT隐藏选项不再先过滤使位置无原因，失败候选只含临时消息、不携有效transform/envelope、不会进入确认。外侧OUTER_CORNER单面安装停止假报另一侧，梁下侧贴上下候选仍原规则。
+- unavailableSideReasons读取当前相反侧/未占用侧，优先隐藏件具体错误，再承托面政策/第三方空间；上/下标签取当前世界法向，最多三条原因。sideFailures只本轮rows，diagnostics不覆盖具体消息，原app报告签名/过期/定位/Esc保持，无Project/历史显示字段。
+- 最新工程顶梁顶与柱顶1800mm，当前朝上立腿长23.8会到1823.8；该侧继续拒绝并说明，不抬梁/延柱。此前默认1060×610×1800、层高、板材、材料/图纸和Factory边界保持。
+- 0.75.81 / Schema62 / 141模块，无新模块/依赖/持久字段；入口/importmap/pom/仓库样例及59份verifier仅机械身份同步。人工源码/差异阅读与资源交付，未新增/运行测试/语法检查/编译/启动/HTTP/浏览器或补件数量/Undo/实际存储验收，参见VALIDATION/ROADMAP与reference/hidden-corner-fit-2026-10-13-v07581.md。
 
 ## v0.75.80 贴边层高与对应层编辑入口
 

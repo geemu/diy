@@ -31,7 +31,9 @@ export function hiddenCornerDimensions(size) {
   if(![30,40].includes(series))return null;
   return {geometryKind:'HIDDEN_CORNER',hiddenGeometryVersion:2,size:series,width:13.2,neckWidth:7.6,
     height:series===30?31:32,length:38,thickness:series===30?7.2:8,slotWidth:8,recess:.25,
-    shoulderDepth:series===30?2.05:2.65,bevel:.4,sourceHoleStation:25,targetHoleStation:22,
+    // 30系列一体参考槽的斜壁从深4.9mm开始；0.7mm倒角使宽脚角点留在槽腔内。
+    // 只影响新选配参考件，已保存件仍按其显式bevel建模，不把参考轮廓当供应商实测尺寸。
+    shoulderDepth:series===30?2.05:2.65,bevel:series===30?0.7:0.4,sourceHoleStation:25,targetHoleStation:22,
     holeRadius:3.05,holeCount:2,angle:90};
 }
 

@@ -15,11 +15,11 @@ import {profileSeries as designProfileSeries,profileSlotWidth,isProfileFaceClose
 import {DesignConnectionList,DEFAULT_DESIGN_CONNECTION_TYPE,designConnectionLabel,getDesignConnectionDefinition} from '../model/DesignConnectionCatalog.js';
 import {connectorFootprintFits} from './ConnectionPlacementManager.js';
 import {angleBracketLayout,hiddenCornerLayout,flatConnectionPlateLayout} from '../model/ConnectionComponentPorts.js';
-import {hiddenConnectorFits} from './HiddenConnectionPlacement.js';
+import {hiddenConnectorFit} from './HiddenConnectionPlacement.js';
 import {ConnectionComponentOptions,connectionSpecs,connectionComponent,connectionDesignType} from '../model/ComponentCatalog.js';
 import {profileEndContact} from '../model/ProfileEndContact.js';
 import {normalizeDesignAnchor,sameDesignAnchor,isCenteredDesignAnchor,componentAnchorOffsets} from '../model/ConnectionAnchor.js';
-import {normalizeSideMount,sideMountKey,sideMountContexts,sideMountTransform,sideMountContactErrors} from './SideMountConnection.js';
+import {normalizeSideMount,sideMountKey,sideMountContexts,sideMountTransform,sideMountContactErrors,hiddenSideMountReason} from './SideMountConnection.js';
 import {normalizeSideSlot,sideSlotKey,sideSlotContexts,sideSlotTransform,sideSlotGeometry} from './SideSlotConnection.js';
 import {profileQuarterRolls,rolledConnectionReferences} from './ProfileRollConnection.js';
 
@@ -259,6 +259,7 @@ export default class ConnectionManager {
 
   /** 切换只重新检查这一件。恢复保存的具体型号，不用抽象两片板冒充目录角码。 */
   designSwitchCandidate(connection,source,target,designType,options={}) {
+    if(connection.jointKind==='SIDE_MOUNT'&&designType==='INTERNAL_CONNECTOR')return {type:designType,label:designConnectionLabel(designType),score:0,valid:false,error:hiddenSideMountReason(source,target,{targetFace:connection.targetFace,sourceMountFace:connection.sourceMountFace,sideMount:connection.sideMount})+'；原件保持不变'};
     const saved=connection.designComponentVariants?.[designType];
     const remembered=options.componentDefinition||(connection.designType===designType?connection.designComponent:null)||saved?.designComponent;
     const component=designType==='INTERNAL_CONNECTOR'&&remembered?.dimensions?.geometryKind==='INNER_BRACKET'?null:remembered;
@@ -746,7 +747,10 @@ export default class ConnectionManager {
         if(match)slots.push({...slotReference(match),holeId:port.id,errorMm:match.errorMm,matched:match.matched});
       }
     }
-    if(hidden&&!hiddenConnectorFits(source,target,transform,hidden,sourceFace))errors.push({code:'HIDDEN_COMPONENT_OUT_OF_SLOT',message:'隐藏连接件的两条腿不能完整装入开放槽腔，或槽内站位/截面/端部不支持'});
+    if(hidden){
+      const fit=hiddenConnectorFit(source,target,transform,hidden,sourceFace);
+      if(!fit.ok)errors.unshift(...fit.errors);
+    }
     return {ok:!errors.length,errors,sourceSlots,targetSlots};
   }
 

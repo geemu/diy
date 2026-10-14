@@ -64,7 +64,7 @@ for(const visibleEnglish of ['>Warning<','>Error<','>Connection<','>Profile<','>
 
 console.log(JSON.stringify({
   ok:true,
-  version:'0.75.80',
+  version:'0.75.81',
   schema:62,
   currentOnly:true,
   designManufacturingSeparated:true,

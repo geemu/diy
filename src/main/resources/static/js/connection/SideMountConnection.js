@@ -72,6 +72,18 @@ export function sideMountJoints(source,target){
   return result;
 }
 
+/** 侧贴柱与普通梁端接柱不是同一槽内直角；从真实轴向解释未适配，不伪造跨错台的隐藏件。 */
+export function hiddenSideMountReason(source,target,options={}){
+  const side=normalizeSideMount(options.sideMount);
+  const joint=side&&sideMountJoints(source,target).find(value=>value.targetFace===options.targetFace&&value.sourceContactFace===side.sourceContactFace&&(value.sideMount.mode||'')===(side.mode||''));
+  if(!joint)return '内收侧梁与柱没有可确认的侧面贴合接头，请重新扫描实际安装位置';
+  const normal=slotWorldNormal(target,options.targetFace);
+  if(Math.abs(axisWorld(source).dot(normal))<.99999)return '此处是内收梁侧面贴柱，不是梁端对接；普通内置角槽件的横腿不能沿真实梁槽插入，请使用梁侧角码或90°直角件';
+  const face=options.sourceMountFace||side.sourceContactFace;
+  if(Math.abs(axisWorld(target).dot(slotWorldNormal(source,face)))<.99999)return '内收侧梁外侧槽与柱槽没有形成这款内置件可安装的两槽直角交汇，立腿不能沿柱槽插入；请检查外侧90°直角件或角码';
+  return '当前内收侧贴接头没有适配此内置角槽件的槽内定位，不能用外置角码的安装位替代；请使用已适配的90°直角件或角码';
+}
+
 /** 梁侧参考规格显式派生腿深和孔站位。保持原目录件不变，不把改孔后的设计件称作采购同型号。 */
 export function sideMountComponent(definition,source,sourceMountFace,reference){
   const layout=angleBracketLayout(definition?.dimensions),part=source.userData.part,side=normalizeSideMount(reference);
