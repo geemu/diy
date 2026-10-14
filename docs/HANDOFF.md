@@ -1,4 +1,57 @@
-# 项目交接文档 — v0.75.81
+# 项目交接文档 — v0.75.87
+
+## v0.75.87 自动生成只反馈新增数量，未适配静默跳过
+
+- 用户最新明确所有不适配情况都跳过安装，不需要告知，覆盖原自动生成三类报告/失败定位的呈现要求。最新鱼缸架示例 (1).json为512423字节/v86/29根/108关系、0保存失效，底部12枚隐藏件均上側，没有朝下件记录；保存状态不是完整实物合法性或浏览器验收。
+- 本次只读Node局部诊断使用临时逻辑根/原Manager候选校验，不调用scan/plan/confirm/生成/历史/存储或浏览器：P008→P004与P006→P004下侧各3锚点、P028→P004上侧1锚点。真实槽±15mm为零剩余槽长、超端23.8mm并已正常跳过；默认中心0锚点先报源槽壁相交，v86错误码条件没剔除它，留下红色未生成预览。不是剩余几毫米或实际非法安装。
+- app.confirmConnectionBatch不取diagnostics或保存分类报告；已装件保留，原可生成候选走原confirm，结果只有实际新增数/可撤销或本次未新增/已有不变。clearConnectionBatchReport在入口/提交前/完成清rows、打开状态、签名/原因索引和临时定位，原条件渲染报告无入口，旧红色Ghost清理；保留内部诊断/历史模板与手动检查，不做无关删除。
+- 不改变目录选型/孔槽/完整脚长/真实槽腔/空间或SINGLE/补件/原件/制造/失效/锁定保护，fresh和一次提交/回滚保持。真正扫描/工程变化/事务错误仍提示，不将不适配件当已装或声明全部成功；制造/干涉/手动连接提示不全局关闭。
+- 0.75.87 / Schema62 / 141模块，无新模块/依赖/持久字段；默认/层高/板材/清单/Factory与v85多槽/v86原政策保持。63份身份文件含59份verifier仅同步，无新测试/断言修改；只执行本次局部只读诊断及源码/资源交付，未运行测试/独立语法检查/编译/启动/HTTP/浏览器或修改后生成/存储验收，见VALIDATION/ROADMAP及reference/quiet-connection-generation-2026-10-14-v07587.md。
+
+## v0.75.86 顶 / 底端齐平零槽长正常跳过
+
+- 用户提供底部朝下/顶部朝上的红色内置件候选截图，明确无槽长方向本不需要生成或提醒。本轮直接实现该报告/政策规则，不执行截图工程扫描或修改原用户JSON/真实Chrome；截图无当前保存工程，不能据此写死编号或减少数量。
+- AutoPolicy.emptyEndSlotChoice复用checked.transform、原目录槽定义、Section与目标柱局部Z和源面槽向，识别水平梁/竖直柱方切/单位缩放端齐平朝外可用长度为零（0.0001mm原数值边界）。只认现有端部/孔站位/支撑范围失败，未知/封槽/斜切/缩放、真实方向/贴合/穿透优先；有正槽長但不足或安装点已在柱端外不跳过。不改HiddenConnectionPlacement/孔槽/完整脚长/材料/包络合法性。
+- 内置件、角码与90度候选附SLOT_END_NO_AVAILABLE_LENGTH/expectedSkip且valid=false；legalChoices在原合法过滤前标政策，原因提取再同源读取并排除。已有一侧且相反侧确认为零槽长时，原因仅审阅实际待补相反侧，避免无关安装面轴向错误被当缺侧；仍保留同方向自己的真实失败。承托面政策继续仅AUTO，零槽长用于批量目录选型，不改变手动安装拒绝。
+- isExpectedConnectionSkip共享报告/定位正常政策码；缺侧数量/失败姿态不包含正常候选，提交后实际分类丢弃有效件纯跳过。实际整处未装/已有失效或缺实体继续处理，失效优先；不静默所有端距错误或整个顶/底层，临时政策不持久化。
+- 0.75.86 / Schema62 / 141模块，无新模块/依赖/字段；v85逐槽选型/fresh槽对及原事务、默认1060×610×1800/层高/板材/清单/Factory保持。63份身份文件机械85→86同步，59份verifier无新测试/断言修改；人工源码/资源交付，默认未语法检查/测试/编译/启动/HTTP/浏览器或实际用户工程计数/生成/存储验收，见VALIDATION/ROADMAP及reference/zero-end-slot-expected-skip-2026-10-14-v07586.md。
+
+## v0.75.85 同面多槽内置件与已有空槽补充
+
+- 用户确认同一面每组合法梁槽/柱槽各装一枚。最新桌面鱼缸架示例.json只读为v84/29根/104关系：P006→P004接柱宽面有两组槽仅C046，P008→P004接柱窄面仅一组对齐C100，另一梁槽错位30mm。这里只是保存数据/姿态与源码证据，不能将后者强装两枚或声称前者实际空间已经运行通过。
+- ConnectionBatchManager.hiddenSlotPair只读原componentPorts.ok及单一匹配sourceSlots/targetSlots，以面+槽ID去重。legalChoices排除已装同槽对；selectHiddenSlots沿原合法/政策排序，在已有或本次选中隐藏件的面挑所有不重叠独立槽，首次生成原相反侧选型后调用，原件补充即使existing≥2也可调用。不新造槽、型号、脚长或安装姿态，不改其他面的数量策略。
+- SINGLE、supplement=false、锁定/制造/失效/缺实体与原侧贴/单面外角/侧槽边界保持；指定类型仍原规格候选，不混入AUTO型号。多件保留原row+面+局部锚点ID、排除与预览生命周期，空闲位文案附源/目标槽序号。
+- confirm逐件fresh原安装检查，并比较预览槽对/已装及本批槽对占用，再检查原新旧包络；原create/install/编号/历史一次提交和异常整批回滚保持，无新工程/自动保存字段。v84正常留平统计、默认1060×610×1800及层高/板材/清单/Factory不改。
+- 0.75.85 / Schema62 / 141模块，无新模块/依赖；63份身份文件含59份verifier仅机械84→85同步，无新测试或断言修改。人工源码与资源交付，默认未语法检查/测试/编译/启动/HTTP/浏览器或实际工程生成/存储验收，见VALIDATION/ROADMAP及reference/hidden-multislot-placement-2026-10-14-v07585.md。
+
+## v0.75.84 正常承托面留平不报缺另一侧
+
+- 用户确认只修异常报告：上侧外置候选按承托面规则主动排除，不是安装失败；保持原候选/槽位/支撑/空间/承托面判据、排序、上槽合法隐藏补件及fresh提交和原件保护，不执行用户工程扫描或直接修改文件/真实Chrome。
+- AutoPolicy在原SUPPORT_PLANE_OBSTRUCTED结果附expectedSkip=true并说明主动跳过，原valid=false/阈值不变。unavailableSideReasons只在AUTO过滤该明确政策，UNKNOWN和真实孔槽/端部等失败保持；相关候选全为跳过才设policySkippedOnly，失败详情为空，不存被跳过外置件红色Ghost。缺侧计数只在真实原因非空时为1，原安装分支/placements不改。
+- diagnostics附临时policySkippedOnly，正常跳过行仍进入只读实际安装/失效分类，不直接当问题。classifyDiagnostics先按实际同源连接判失效/已装，再丢弃已有有效件的纯跳过行；提交后再读仍沿用。完全未装保留但只提示需其他允许接法/无禁用候选预览，失效原件优先并读取真实错误/空实体原因，不用正常留平掩盖其他失效记录。
+- app成功/无新增提示用save后实际report.rows.length，而非提交前issues数量；全消除时不留下空计数/异常入口。showDiagnostic对旧/直接传入正常跳过候选不创建红色Ghost/点标；SUPPORT_PLANE_UNKNOWN独立说明，其他原因/姿态、三类聚合/定位和状态清理保持。所有新标识只报告快照，不进Project/历史/BOM/自动保存。
+- 0.75.84 / Schema62 / 141模块，无新模块/依赖/持久字段，默认/层高/板材/清单/Factory保持；入口/importmap/pom/样例及59份verifier仅身份同步，未新增测试/改断言。只人工源码与资源阶段，默认未测试/语法检查/编译/启动/HTTP/浏览器或实际计数/生成/存储验收，详见VALIDATION/ROADMAP及reference/support-plane-expected-skip-2026-10-14-v07584.md。
+
+## v0.75.83 紧凑结果区、结构化原因与实际失败对象定位
+
+- 用户确认同时修复截图中的结果卡/分类重叠、原因聚合与精准定位、AUTO尝试90度直角件；先前v82只改结果分类，本版扩展自动候选而不放宽安装条件。原用户工程和浏览器存储不直接操作，已有修改保留。
+- index将结果入口收为紧凑标题/三类小计数；connection-report-entry不参与flex压缩，library-resource-scroll独立滚动，原创建/修改tabs及builder-review独立滚动保持。详情三类筛选继续，按主要失败原因分组（一个接头只计一次）、本组上一处/下一处与每个有真实姿态的失败候选预览；无新模态或持久UI字段。
+- ConnectionPlacementManager.evaluateCandidate只附failureCode，原判断与消息优先级保持；AUTO政策失败也附code。unavailableSideReasons保留最多三种当前候选失败（同类型/面/代码去重），按可解析姿态及当前上槽/侧贴偏好排序，不按毫米数/ID拆组。diagnostics保存failures与目录定义/Vector及Quaternion数组副本，confirm后分类保留这些失败快照并重新取得失效记录ID；既有缺安装实体情况也归失效。
+- app按connectionFailureGroup(code)的稳定原因类聚合，其他失败保留详情，不把多个候选当多个接头统计。临时索引/焦点/说明仅当前页面；过期工程/截面不能定位，操作前检查原宿主存在/可见与进行中工具/手势/播放/爆炸/模态，不取消半完成工具来强行定位。
+- ConnectionBatchManager.showDiagnostic/clearDiagnosticPreview拥有独立临时Group：失效记录若有实际可见几何走原selectConnection，没实体则点标；其他类只显示实际失败候选红色Ghost或接头点，未选择/染红有效原角码，不进interactionMeshes/Part/Project/历史/BOM。关闭/类别切换、选择/工程/截面变化、cancel和卸载释放几何。定位后保留结果页，失效件“检查/替换”再进原修改页，沿原ConnectionReplacementManager预览/确认，不自动替换。
+- AUTO类型为ANGLE_BRACKET/CORNER_CUBE/HIDDEN_CORNER，共用原目录安装映射。合法SIDE_MOUNT直角件评分优先同侧角码；普通端接维持原梁下角码/其他角码顺序，直角件备用，隐藏件及空闲上槽定向补件保持。unknownSupport/上表面凸出仍拒绝所有外置件，所有候选继续原孔槽/完整支撑/真实材料/已装和第三方空间检查，fresh确认再次同源政策复验；显式类型/旧有效或制造件不替换。
+- 侧贴隐藏件提示不再把外置推荐当已适配。没有新增供应商实物数据、跨错台隐藏模型、自动移柱/抬梁或制造豁免，不能承诺原44全部解决。
+- 0.75.83 / Schema62 / 141模块，无新模块/依赖/持久字段；入口/importmap/pom/样例及59份verifier仅机械版本同步，原默认/层高/板材/清单/Factory保持。只人工源码阅读/差异和资源交付，未测试/语法检查/编译/启动/HTTP/浏览器或实际生成/存储验收，待验见VALIDATION/ROADMAP及reference/connection-reason-auto-right-angle-2026-10-14-v07583.md。
+
+## v0.75.82 连接件报告三类数量与提交后真实分类
+
+- 用户确认前轮建议，只调整报告分类、数量与文字。最新来源鱼缸架示例 (2).json为Schema62/v0.75.81、39根/144条（124角码/20内置件），前轮已只读所有已保存安装槽匹配/宿主/状态；44对应已装接头的另一侧候选，不将源码分组当原页面报告逐条复现。本轮不运行生成或改用户JSON/真实Chrome。
+- 原ConnectionBatchManager导出ConnectionReportCategories统一ID/短标题/完整说明；app分组/计数与模板共用，不另造数值源。UNINSTALLED、PARTIAL、INVALID仅临时报告状态，不进Schema62、Project/历史/草稿/BOM，不替换原blockedCount或原READY/确认条件。
+- diagnostics原筛选未变，保留尚未贴合/失效/真实接触未安装/缺另一侧行；增加sourceEnd/targetFace/scanStatus/blockedSide/jointKind/侧贴/侧槽局部引用副本及原reason，用于confirm清rows之后仍能找同一物理接头。旧ID/实际点/宿主定位保持，消息不再先套“一侧已有或可以生成”。
+- classifyDiagnostics只读ConnectionManager.connectionsAtJoint：失效记录/INVALID_EXISTING优先，其次有效designComponent或actualPartIds中存在的generatedHardwareIds；纯抽象关系不算已装。前一快照可以在扫描时分类，app.saveConnectionBatchReport在实际提交后再分类，READY不当事实；成功与无ready两路共用，没有额外扫描、几何检查或安装/替换操作。
+- 创建面板有需处理快照时显示三类计数（零类也显示0），点击有数据的类进同一结果详情；详情原生按钮/aria-pressed切换所有类，零类有说明，不显示合计失败。默认选第一个有数据的类，关闭保留当前类、重扫重选，空工程清数据/类别；新增computed/类别UI无额外监听或领域写入。
+- 未新增/成功消息只列实际非零分类数，原错误/取消不冒充完成；原进行中工具/模态保护、Esc/关闭、签名/截面变化过期及过期禁止定位保持。只能说明本次识别范围，不保证未知接头完整、实物装配/承载或制造合格；不写死44，不自动打开结果。
+- 0.75.82 / Schema62 / 141模块，无新模块/依赖/持久字段。v81参考件适配、空闲上槽补件与所有安装/事务、默认/层高/板材/清单/Factory均保持；入口/importmap/pom/仓库样例及59份verifier只机械身份同步。默认未测试/语法检查/编译/启动/HTTP/浏览器或实际报告/生成/存储验收，资源与待验见VALIDATION/ROADMAP及reference/connection-result-categories-2026-10-14-v07582.md。
 
 ## v0.75.81 内置角槽件适配与缺上槽定向补件
 

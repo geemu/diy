@@ -7,7 +7,7 @@ import {ConnectionComponentOptions,connectionSpecs,connectionComponent,connectio
 import ProfileGeometryFactory from '../geometry/ProfileGeometryFactory.js';
 import {profileObb} from '../validation/PartCollisionDetector.js';
 import {connectorGhost,connectorEnvelope,envelopesOverlap} from './ConnectionPlacementManager.js';
-import {connectionSupportPlanes,automaticConnectionChoice} from './ConnectionAutoPolicy.js';
+import {connectionSupportPlanes,automaticConnectionChoice,emptyEndSlotChoice,isExpectedConnectionSkip} from './ConnectionAutoPolicy.js';
 import {profileEndContact} from '../model/ProfileEndContact.js';
 import {designAnchorKey} from '../model/ConnectionAnchor.js';
 import {slotWorldNormal} from '../model/SlotMatcher.js';
@@ -17,12 +17,34 @@ import {flatConnectionPlateLayout} from '../model/ConnectionComponentPorts.js';
 
 // 目录与已有安装映射共用，不用 UI 再维护一个只有三项的清单。
 export const BatchConnectionComponentOptions=ConnectionComponentOptions.filter(option=>connectionSpecs(option.value).some(spec=>!spec.disabled&&connectionDesignType(connectionComponent({type:option.value,spec:spec.value}))));
-const autoTypes=['CORNER_CUBE','HIDDEN_CORNER'];
+// 结果分类只说明本次扫描的安装状态，不作装配/承载认证，也不写入工程。
+export const ConnectionReportCategories=[
+  {id:'UNINSTALLED',label:'完全未安装',shortLabel:'完全未安装',description:'本次扫描识别到、尚未安装连接件的接头，包含尚未贴合和所选类型未适配的位置。'},
+  {id:'PARTIAL',label:'已安装但另一侧未适配',shortLabel:'另一侧未适配',description:'这些接头已有连接件，只是另一安装侧未能补件，不等于整个接头未安装。'},
+  {id:'INVALID',label:'已有连接失效',shortLabel:'已有连接失效',description:'已有连接记录失效，需要定位检查；本次保留原件，没有自动替换。'}
+];
+const autoTypes=['ANGLE_BRACKET','CORNER_CUBE','HIDDEN_CORNER'];
 const oppositeFace={FRONT:'BACK',BACK:'FRONT',LEFT:'RIGHT',RIGHT:'LEFT'};
+
+/** 按结构化失败类型聚合；端距/编号留在详情，不用变化的错误文字拆出重复分组。 */
+export function connectionFailureGroup(code='INSTALLATION_INVALID'){
+  if(code==='SUPPORT_PLANE_UNKNOWN')return {id:'SUPPORT_PLANE_UNKNOWN',label:'承托面无法确认'};
+  if(/SUPPORT_PLANE/.test(code))return {id:'SUPPORT_PLANE',label:'承托面被凸出的连接件占用 / 无法确认'};
+  if(/FOOTPRINT|END_OUT_OF_RANGE/.test(code))return {id:'END_SUPPORT',label:'端部长度 / 安装支撑面不足'};
+  if(/AXIS|DIRECTION|ORIENTATION/.test(code))return {id:'SLOT_DIRECTION',label:'槽向 / 安装方向不满足'};
+  if(/CAVITY_INTERFERENCE|SECTION_OUT_OF_BOUNDS/.test(code))return {id:'SLOT_CAVITY',label:'槽腔不能容纳连接件轮廓'};
+  if(/PORT_NOT_ALIGNED|SLOT_NOT_ALIGNED|SLOT_MISMATCH|ANCHOR_INVALID/.test(code))return {id:'HOLE_SLOT',label:'孔位 / 槽位未匹配'};
+  if(/OCCUPIED|HOST_INTERFERENCE/.test(code))return {id:'INSTALLATION_SPACE',label:'安装空间被构件或其他连接件占用'};
+  if(code==='JOINT_NOT_CONTACT')return {id:'NOT_CONTACT',label:'型材尚未贴合'};
+  if(/LOCKED|PROTECTED/.test(code))return {id:'PROTECTED',label:'构件锁定 / 已配置制造方案'};
+  if(/EXISTING_|DANGLING/.test(code))return {id:'EXISTING_INVALID',label:'已有连接记录失效 / 缺少安装实体'};
+  if(/UNSUPPORTED|NOT_SUPPORTED|MISMATCH|UNKNOWN|MISSING|REFERENCE_REQUIRED/.test(code))return {id:'UNSUPPORTED',label:'当前型号 / 接法尚无适配安装规则'};
+  return {id:'OTHER',label:'其他安装条件不满足'};
+}
 
 /** 只读接头扫描 -> 共用目录几何预览 -> 一次提交；每个设计组件独立保存，不是假制造认证。 */
 export default class ConnectionBatchManager {
-  constructor(editor){this.editor=editor;this.active=false;this.busy=false;this.rows=[];this.previewGroup=null;this.previewMeshes=new Map();this.onChanged=null;this.runRevision=0;}
+  constructor(editor){this.editor=editor;this.active=false;this.busy=false;this.rows=[];this.previewGroup=null;this.previewMeshes=new Map();this.diagnosticGroup=null;this.onChanged=null;this.runRevision=0;}
   isActive(){return this.active;}
   begin(options={}, {interactive=false,scanImmediately=true}={}){
     this.cancel();this.active=true;this.options={type:'AUTO',spec:'AUTO',sides:'BOTH',supplement:true,profileIds:null,...options};this.excludedIds=new Set();
@@ -247,7 +269,7 @@ export default class ConnectionBatchManager {
           const faces=snap.sideMount.mode==='OUTER_CORNER'?[contactFace]:['FRONT','BACK'].includes(contactFace)?['LEFT','RIGHT']:['FRONT','BACK'];
           for(const mountFace of faces.filter(face=>!requestedFaces||requestedFaces.includes(face))){
             const message=hiddenSideMountReason(source,target,{targetFace:snap.targetFace,sourceMountFace:mountFace,sideMount:snap.sideMount});
-            result.push({definition,mountFace,sideMount:snap.sideMount,checked:{valid:false,message},envelope:null});yield;
+            result.push({definition,mountFace,sideMount:snap.sideMount,checked:{valid:false,message,failureCode:'HIDDEN_SIDE_MOUNT_UNSUPPORTED'},envelope:null});yield;
           }
           continue;
         }
@@ -285,12 +307,19 @@ export default class ConnectionBatchManager {
   /** 自动模式逐安装侧选型；指定目录类型仍只按原安装守卫，不私自换成推荐型号。 */
   legalChoices(row,solutions){
     const planes=row.supportPlanes??(row.supportPlanes=connectionSupportPlanes(row.source,row.target));
+    const existing=this.editor.connectionManager.connectionsAtJoint(row.source.userData.part.id,row.target.userData.part.id,row.end,row.face,undefined,row.candidate.snap);
+    const installedSlots=new Set(existing.map(connection=>hiddenSlotPair(connection.designComponent,connection.validation)?.key).filter(Boolean));
     const legal=[];
     for(const solution of solutions){
+      const emptyEnd=emptyEndSlotChoice(solution,row.source,row.target);
+      if(emptyEnd){solution.policy=emptyEnd;continue;}
       if(!solution.checked?.valid||Number(solution.checked.item.geometry?.contactGapMm)>.1)continue;
+      const slots=hiddenSlotPair(solution.definition,solution.checked.item.geometry);
+      // 槽内件按真实匹配的两槽去重；不同锚点也不能在同一组槽重复安装。
+      if(solution.definition.dimensions.geometryKind==='HIDDEN_CORNER'&&(!slots||installedSlots.has(slots.key)))continue;
       const joint=this.editor.connectionManager.connectionsAtJoint(row.source.userData.part.id,row.target.userData.part.id,row.end,row.face,solution.designAnchorOffset,{jointKind:row.jointKind,sideMount:solution.sideMount,sideSlot:solution.sideSlot});
       if(joint.some(connection=>connection.designComponent&&this.editor.connectionManager.mountFaces(connection).includes(solution.mountFace)))continue;
-      const policy=this.options.type==='AUTO'?automaticConnectionChoice(solution,row.source,planes):{valid:true,score:0};
+      const policy=this.options.type==='AUTO'?automaticConnectionChoice(solution,row.source,planes,row.target):{valid:true,score:0};
       solution.policy=policy;if(policy.valid)legal.push(solution);
     }
     return legal.sort((a,b)=>a.policy.score-b.policy.score);
@@ -306,36 +335,76 @@ export default class ConnectionBatchManager {
     }
     return result;
   }
-  /** 已有下侧件不代表上槽已装；只允许补一件真实空闲上槽隐藏件，不把其余侧面加满。 */
+  /** 已有下侧件不代表上槽已装；先找缺失上面，再逐槽检查，不把其余侧面加满。 */
   missingUpperFace(row,existing){
     if(this.options.type!=='AUTO'||this.options.sides==='SINGLE'||singleMountSide(row))return null;
     const faces=new Set(existing.flatMap(connection=>this.editor.connectionManager.mountFaces(connection)));
     const lower=[...faces].find(face=>slotWorldNormal(row.source,face).y<-.99999),upper=lower&&oppositeFace[lower];
     return upper&&!faces.has(upper)&&!isProfileFaceClosed(row.source.userData.part,upper)?upper:null;
   }
-  /** 从当前候选保留具体失败原因，优先期望的相反侧/隐藏件；这是扫描快照，不新建连接。 */
+  /** 已选 / 已装隐藏件的同一面逐槽补齐；不因总件数或一个面已装就吞掉另一条槽，也不把其他面加满。 */
+  selectHiddenSlots(row,legal,selected,existing,reserved,tolerance){
+    if(this.options.sides==='SINGLE'||singleMountSide(row)||['SIDE_MOUNT','SIDE_SLOT'].includes(row.jointKind))return selected;
+    if(existing.some(connection=>connection.manufacturingRuleId||connection.status==='INVALID'||connection.validation?.ok===false||
+      (connection.designComponent&&!this.editor.connectionManager.helperMeshes.get(connection.id)?.children.length)))return selected;
+    const faces=new Set(),occupied=new Set(),result=[...selected];
+    for(const connection of existing){
+      if(connection.designComponent?.dimensions?.geometryKind!=='HIDDEN_CORNER')continue;
+      for(const face of this.editor.connectionManager.mountFaces(connection))faces.add(face);
+      const slots=hiddenSlotPair(connection.designComponent,connection.validation);if(slots)occupied.add(slots.key);
+    }
+    for(const solution of selected){
+      const slots=hiddenSlotPair(solution.definition,solution.checked.item.geometry);
+      if(slots){faces.add(solution.mountFace);occupied.add(slots.key);}
+    }
+    for(const solution of legal){
+      const slots=hiddenSlotPair(solution.definition,solution.checked.item.geometry);
+      if(!slots||!faces.has(solution.mountFace)||occupied.has(slots.key))continue;
+      if(this.options.type!=='AUTO'&&selected.length&&solution.definition.id!==selected[0].definition.id)continue;
+      if(reserved.some(other=>envelopesOverlap(solution.envelope,other.envelope,tolerance))||result.some(other=>envelopesOverlap(solution.envelope,other.envelope,tolerance)))continue;
+      result.push(solution);occupied.add(slots.key);
+    }
+    return result;
+  }
+  /** 保留具体类型、候选姿态和原因副本；只有确有安装姿态才允许展示红色候选，不新建连接。 */
   unavailableSideReasons(row,reserved,tolerance,{faces=null,excludedFaces=[]}={}){
-    const candidates=row.solutions.filter(solution=>!excludedFaces.includes(solution.mountFace)&&(!faces||faces.includes(solution.mountFace)));
-    candidates.sort((a,b)=>Number(b.definition?.dimensions?.geometryKind==='HIDDEN_CORNER')-Number(a.definition?.dimensions?.geometryKind==='HIDDEN_CORNER'));
-    const messages=[];
+    const relevant=row.solutions.filter(solution=>!excludedFaces.includes(solution.mountFace)&&(!faces||faces.includes(solution.mountFace)));
+    // 端齐平朝外零槽长适用于批量选型；承托面留平仍只用于AUTO。正槽长不足或其他真实失败不吞掉。
+    const expectedSkip=solution=>{
+      const emptyEnd=emptyEndSlotChoice(solution,row.source,row.target);if(emptyEnd)solution.policy=emptyEnd;
+      return solution.policy?.expectedSkip===true&&(solution.policy.code==='SLOT_END_NO_AVAILABLE_LENGTH'||this.options.type==='AUTO'&&solution.policy.code==='SUPPORT_PLANE_OBSTRUCTED');
+    };
+    const candidates=relevant.filter(solution=>!expectedSkip(solution));
+    row.policySkippedOnly=relevant.length>0&&candidates.length===0;
+    const preferHidden=faces?.some(face=>slotWorldNormal(row.source,face).y>.99999);
+    const priority=solution=>solution.checked?.valid?0:solution.checked?.transform?1:2;
+    const preferred=solution=>solution.definition?.dimensions?.geometryKind===(preferHidden?'HIDDEN_CORNER':row.jointKind==='SIDE_MOUNT'?'ANGLE_BRACKET':'HIDDEN_CORNER');
+    candidates.sort((a,b)=>priority(a)-priority(b)||Number(preferred(b))-Number(preferred(a)));
+    const failures=[],keys=new Set();
     for(const solution of candidates){
       const geometry=solution.checked?.item?.geometry;
       const hiddenError=geometry?.componentPorts?.errors?.find(error=>error.code?.startsWith('HIDDEN_COMPONENT_'));
+      let code=hiddenError?.code||solution.policy?.code||solution.checked?.failureCode||'INSTALLATION_INVALID';
       let reason=hiddenError?.message||solution.policy?.message||solution.checked?.message;
-      if(solution.checked?.valid&&solution.policy?.valid!==false){
-        const occupied=reserved.find(other=>envelopesOverlap(solution.envelope,other.envelope,tolerance));
-        if(occupied)reason='安装空间与 '+occupied.label+' 重叠，不能补件';
+      if(solution.checked?.valid){
+        if(solution.policy?.valid!==false){
+          const occupied=reserved.find(other=>envelopesOverlap(solution.envelope,other.envelope,tolerance));
+          if(!occupied)continue;
+          code='INSTALLATION_SPACE_OCCUPIED';reason='安装空间与 '+occupied.label+' 重叠，不能补件';
+        }
       }
       if(reason){
         const label=solution.definition?.dimensions?.geometryKind==='HIDDEN_CORNER'?'内置角槽件':solution.definition?.label||'连接件';
         const normal=solution.mountFace&&slotWorldNormal(row.source,solution.mountFace);
         const side=normal?.y>.99999?'上侧':normal?.y<-.99999?'下侧':faceLabel(solution.mountFace);
         const message=side+' '+label+'：'+reason;
-        if(!messages.includes(message))messages.push(message);
+        const key=[solution.definition?.dimensions?.geometryKind,solution.mountFace,code].join('|');
+        if(!keys.has(key)){keys.add(key);failures.push({code,message:humanMessage(message),componentLabel:label,mountFace:solution.mountFace,preview:diagnosticPreview(solution)});}
       }
-      if(messages.length>=3)break;
+      if(failures.length>=3)break;
     }
-    return messages.length?messages:['所选类型没有适配该空闲安装侧的候选；不会替换已有件或强行生成'];
+    row.failureDetails=failures.length?failures:row.policySkippedOnly?[]:[{code:'INSTALLATION_RULE_UNSUPPORTED',message:'所选类型没有适配该空闲安装侧的候选；不会替换已有件或强行生成',preview:null}];
+    return row.failureDetails.map(failure=>failure.message);
   }
   plan(){return this.active&&!this.busy?this.run(this.planSteps(),'正在更新预览'):null;}
   *planSteps(){
@@ -344,7 +413,7 @@ export default class ConnectionBatchManager {
     for(let index=0;index<this.rows.length;index++){
       const row=this.rows[index];this.progressStep('正在检查安装空间',75+15*index/this.rows.length,index,this.rows.length);yield;
       const {source,target,old}=row;row.status='SKIPPED';row.preserved=false;row.placements=[];row.enabled=false;
-      row.supplement=false;row.blockedSideCount=0;row.sideFailures=[];
+      row.supplement=false;row.blockedSideCount=0;row.sideFailures=[];row.failureDetails=[];row.policySkippedOnly=false;
       if(old&&(old.status==='INVALID'||old.validation?.ok===false||(old.designComponent&&!old.manufacturingRuleId&&!e.connectionManager.helperMeshes.get(old.id)?.children.length))){row.status='INVALID_EXISTING';row.message='已有连接已失效：'+(old.validation?.errors?.[0]?.message||'连接件缺少有效安装实体')+'；请定位检查，原记录保留';}
       else if(!row.touch){row.status='NEEDS_ALIGNMENT';row.message='附近但尚未贴合：间距 '+round(row.candidate.delta.length())+' mm，请先吸附型材';}
       else if(old?.designComponent&&!old.manufacturingRuleId){
@@ -352,19 +421,27 @@ export default class ConnectionBatchManager {
         const existing=e.connectionManager.connectionsAtJoint(source.userData.part.id,target.userData.part.id,row.end,row.face,undefined,row.candidate.snap).filter(connection=>connection.designComponent);
         const missingUpper=this.missingUpperFace(row,existing);
         // 保留手工件也能补独立的空闲侧；不修改原件的型号、编号、安装面或人工状态。
-        if(!singleMountSide(row)&&this.options.supplement!==false&&this.options.sides!=='SINGLE'&&(existing.length<2||missingUpper)&&row.matchesOld&&e.isMeshTransformable(source)&&e.isMeshTransformable(target)){
+        if(!singleMountSide(row)&&this.options.supplement!==false&&this.options.sides!=='SINGLE'&&row.matchesOld&&e.isMeshTransformable(source)&&e.isMeshTransformable(target)){
           const legal=this.legalChoices(row,row.solutions),available=item=>!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance));
           const upper=missingUpper&&legal.find(item=>item.mountFace===missingUpper&&item.definition.dimensions.geometryKind==='HIDDEN_CORNER'&&available(item));
           const choice=upper||(existing.length<2?legal.find(available):null);
-          if(choice){
-            const id=row.id+'|'+choice.mountFace+'|'+designAnchorKey(choice.designAnchorOffset),enabled=!this.excludedIds.has(id);
-            row.status='READY';row.supplement=true;row.placements=[{...choice,id,enabled}];row.enabled=enabled;
-            if(enabled)reserved.push({envelope:choice.envelope,label:row.sourceLabel+' → '+row.targetLabel+' 补侧'});
-          }else{
-            row.blockedSideCount=1;
+          const selected=this.selectHiddenSlots(row,legal,choice?[choice]:[],existing,reserved,tolerance);
+          if(selected.length){
+            row.status='READY';row.supplement=true;
+            for(const solution of selected){
+              const id=row.id+'|'+solution.mountFace+'|'+designAnchorKey(solution.designAnchorOffset),enabled=!this.excludedIds.has(id);
+              row.placements.push({...solution,id,enabled});
+              if(enabled)reserved.push({envelope:solution.envelope,label:row.sourceLabel+' → '+row.targetLabel+' 补空闲安装位'});
+            }
+            row.enabled=row.placements.some(item=>item.enabled);
+          }else if(existing.length<2||missingUpper){
             const occupiedFaces=existing.flatMap(connection=>e.connectionManager.mountFaces(connection));
-            row.sideFailures=this.unavailableSideReasons(row,reserved,tolerance,{faces:missingUpper?[missingUpper]:null,excludedFaces:occupiedFaces});
-            row.message+='；'+row.sideFailures.join('；');
+            const oppositeFaces=[...new Set(occupiedFaces.map(face=>oppositeFace[face]).filter(face=>face&&!occupiedFaces.includes(face)))];
+            // 端齐平朝外侧无需补件时，只审阅真正待补的相反侧，不把其他无关槽向当替代失败。
+            const emptyEnd=oppositeFaces.some(face=>row.solutions.some(solution=>solution.mountFace===face&&emptyEndSlotChoice(solution,source,target)));
+            row.sideFailures=this.unavailableSideReasons(row,reserved,tolerance,{faces:missingUpper?[missingUpper]:emptyEnd?oppositeFaces:null,excludedFaces:occupiedFaces});
+            row.blockedSideCount=row.sideFailures.length?1:0;
+            if(row.sideFailures.length)row.message+='；'+row.sideFailures.join('；');
           }
         }
       }
@@ -380,18 +457,19 @@ export default class ConnectionBatchManager {
         if(!first){
           const blocked=legal[0]&&reserved.find(other=>envelopesOverlap(legal[0].envelope,other.envelope,tolerance));
           const reasons=this.unavailableSideReasons(row,reserved,tolerance);
-          row.message=blocked?'连接件安装包络与 '+blocked.label+' 重叠，请改用其他连接方式':reasons.join('；')||'当前位置没有合法安装面，请调整接头或连接件';
+          row.message=blocked?'连接件安装包络与 '+blocked.label+' 重叠，请改用其他连接方式':reasons.join('；')||(row.policySkippedOnly?'该接头尚未安装连接件；无需安装的端部方向 / 承托面候选已按规则跳过，请选择其他允许的连接方式':'当前位置没有合法安装面，请调整接头或连接件');
         }else{
-          // 自动模式允许梁下角码 + 另一侧隐藏件；明确指定类型仍保持同型号相反侧。
+          // 外置件仍走原相反侧选型；隐藏件再按已选安装面的各组真实槽位补齐。
           const paired=!singleMountSide(row)&&this.options.sides!=='SINGLE'&&(this.options.type==='AUTO'||first.checked.item.type==='ANGLE_BRACKET');
           const alternatives=paired?legal.filter(item=>(this.options.type==='AUTO'||item.definition.id===first.definition.id)&&item.mountFace!==first.mountFace&&!reserved.some(other=>envelopesOverlap(item.envelope,other.envelope,tolerance))&&!envelopesOverlap(item.envelope,first.envelope,tolerance)):[];
           const second=alternatives.find(item=>item.mountFace===oppositeFace[first.mountFace])||alternatives[0]||null;
           if(paired&&!second){
-            row.blockedSideCount=1;
             row.sideFailures=this.unavailableSideReasons(row,[...reserved,{envelope:first.envelope,label:'本次另一侧连接件'}],tolerance,{faces:[oppositeFace[first.mountFace]],excludedFaces:[first.mountFace]});
+            row.blockedSideCount=row.sideFailures.length?1:0;
           }
           row.status='READY';row.definition=first.definition;row.checked=first.checked;
-          for(const solution of [first,second].filter(Boolean)){
+          const selected=this.selectHiddenSlots(row,legal,[first,second].filter(Boolean),[],reserved,tolerance);
+          for(const solution of selected){
             const id=row.id+'|'+solution.mountFace+'|'+designAnchorKey(solution.designAnchorOffset),enabled=!this.excludedIds.has(id);
             row.placements.push({...solution,id,enabled});
             if(enabled)reserved.push({envelope:solution.envelope,label:row.sourceLabel+' → '+row.targetLabel+' '+faceLabel(solution.mountFace)});
@@ -414,13 +492,23 @@ export default class ConnectionBatchManager {
     if(!chosen.length)throw new Error('请先勾选可生成的接头');
     if(JSON.stringify(e.exportProject())!==this.signature)throw new Error('工程已变化，请重新扫描；不会使用旧预览生成连接件');
     const reserved=this.reservedEnvelopes();
-    // 重验每一个实际安装面，再一次提交；不能刷新后把两侧都挤回默认面。
+    const slotPairs=new Map();
+    for(const row of chosen){
+      const existing=e.connectionManager.connectionsAtJoint(row.source.userData.part.id,row.target.userData.part.id,row.end,row.face,undefined,row.candidate.snap);
+      slotPairs.set(row.id,new Set(existing.map(connection=>hiddenSlotPair(connection.designComponent,connection.validation)?.key).filter(Boolean)));
+    }
+    // 重验每个实际面和槽对，再一次提交；不能把多槽件挤回默认锚点或重复占同一组槽。
     for(const row of chosen)for(const placement of row.placements.filter(item=>item.enabled)){
       const context=row.jointKind==='SIDE_SLOT'?sideSlotContexts(row.source,row.target,placement.definition,{sourceEnd:row.end,targetFace:row.face,sourceMountFace:placement.mountFace,sideSlot:placement.sideSlot})[0]:row.jointKind==='SIDE_MOUNT'?sideMountContexts(row.source,row.target,placement.definition,{targetFace:row.face,sourceMountFace:placement.mountFace,sideMount:placement.sideMount})[0]:this.context(row.source,row.target,row.candidate.snap,placement.mountFace,false,placement.designAnchorOffset);
       const fresh=e.connectionPlacementManager.evaluateCandidate(context,{mode:placement.checked.item.type,componentDefinition:placement.definition,preserveExisting:true});
       if(!fresh?.valid||Number(fresh.item.geometry.contactGapMm)>.1||(['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(row.jointKind)&&fresh.item.geometry.jointKind!==row.jointKind))throw new Error(row.sourceLabel+' → '+row.targetLabel+' 已变化，请重新扫描');
+      if(placement.definition.dimensions.geometryKind==='HIDDEN_CORNER'){
+        const planned=hiddenSlotPair(placement.definition,placement.checked.item.geometry),current=hiddenSlotPair(placement.definition,fresh.item.geometry),occupied=slotPairs.get(row.id);
+        if(!current||current.key!==planned?.key||occupied.has(current.key))throw new Error('内置连接件的槽位已变化或已占用，请重新扫描');
+        occupied.add(current.key);
+      }
       const envelope=fresh.envelope;
-      if(this.options.type==='AUTO'&&!automaticConnectionChoice({...placement,checked:fresh,envelope},row.source,connectionSupportPlanes(row.source,row.target)).valid)throw new Error('当前层承托面已变化，请重新扫描');
+      if(this.options.type==='AUTO'&&!automaticConnectionChoice({...placement,checked:fresh,envelope},row.source,connectionSupportPlanes(row.source,row.target),row.target).valid)throw new Error('当前层承托面已变化，请重新扫描');
       if(reserved.some(other=>envelopesOverlap(envelope,other.envelope,Number(e.projectSettings.collisionToleranceMm??.5))))throw new Error('所选连接件的安装空间冲突，请重新扫描');
       reserved.push({envelope});
     }
@@ -491,17 +579,20 @@ export default class ConnectionBatchManager {
       skippedCount:rows.filter(row=>row.status!=='READY').length,freeEndCount:this.freeEndCount||0,
       rows:rows.flatMap(row=>{
         const base={jointId:row.id,sourceId:row.source.userData.part.id,targetId:row.target.userData.part.id,connectionId:row.old?.id||null,sourceLabel:row.sourceLabel,targetLabel:row.targetLabel,end:row.end,face:row.face,jointKind:row.jointKind||'END_TO_FACE',status:row.status,preserved:row.preserved};
-        return row.status==='READY'?row.placements.map(item=>({...base,id:item.id,enabled:item.enabled,mountFace:item.mountFace,componentLabel:item.definition.label,message:(row.supplement?'仅补另一侧，保留原件 · ':'')+(row.jointKind==='SIDE_CORNER'?'两梁内角 · ':'')+item.definition.label+' · '+faceLabel(item.mountFace)+'安装 · 自动定位与转向'}))
+        return row.status==='READY'?row.placements.map(item=>{
+          const slots=hiddenSlotPair(item.definition,item.checked.item.geometry),slotLabel=slots?' · 源槽'+(slots.source.index+1)+' → 目标槽'+(slots.target.index+1):'';
+          return {...base,id:item.id,enabled:item.enabled,mountFace:item.mountFace,componentLabel:item.definition.label,message:(row.supplement?'仅补空闲安装位，保留原件 · ':'')+(row.jointKind==='SIDE_CORNER'?'两梁内角 · ':'')+item.definition.label+' · '+faceLabel(item.mountFace)+'安装'+slotLabel+' · 自动定位与转向'};
+        })
           :[{...base,id:row.id,enabled:false,message:humanMessage(row.message)}];
       })};
     this.onChanged?.(state);return state;
   }
   clearPreview(){if(this.previewGroup){this.editor.sceneManager.scene.remove(this.previewGroup);ProfileGeometryFactory.disposeObject(this.previewGroup);this.previewGroup=null;}this.previewMeshes.clear();}
-  /** 本次扫描的需处理位置快照；保留既有合法件/自由端不等于失败，不在这里猜漏件。 */
+  /** 本次扫描快照；正常留平行仅供实际安装/失效再分类，不能直接当缺另一侧问题。 */
   diagnostics(){
     if(this.busy)return [];
-    return this.rows.filter(row=>row.status==='INVALID_EXISTING'||row.status==='NEEDS_ALIGNMENT'||
-      (row.touch&&row.status==='SKIPPED'&&!row.preserved)||row.blockedSideCount>0).map(row=>{
+    const issues=this.rows.filter(row=>row.status==='INVALID_EXISTING'||row.status==='NEEDS_ALIGNMENT'||
+      (row.touch&&row.status==='SKIPPED'&&!row.preserved)||row.blockedSideCount>0||row.policySkippedOnly).map(row=>{
       let point=row.candidate.targetPoint||row.checked?.target?.point||row.checked?.source?.point;
       if(!point&&row.candidate.snap.sideMount){
         const reference=row.candidate.snap.sideMount;
@@ -509,18 +600,106 @@ export default class ConnectionBatchManager {
           stationS:reference.sourceStationS,faceOffset:reference.sourceSlotOffset||0});
       }
       const partial=row.blockedSideCount>0;
+      const code=row.status==='INVALID_EXISTING'?row.old?.validation?.errors?.[0]?.code||'EXISTING_COMPONENT_MISSING':row.status==='NEEDS_ALIGNMENT'?'JOINT_NOT_CONTACT':
+        !this.editor.isMeshTransformable(row.source)||!this.editor.isMeshTransformable(row.target)?'HOST_LOCKED':!row.solutions.length||row.policySkippedOnly?'INSTALLATION_RULE_UNSUPPORTED':'INSTALLATION_INVALID';
+      const failures=row.failureDetails.length?structuredClone(row.failureDetails):[{code,message:humanMessage(row.message||'没有合法安装方案'),preview:null}];
       return {id:row.id,sourceId:row.source.userData.part.id,targetId:row.target.userData.part.id,
         sourceLabel:row.sourceLabel,targetLabel:row.targetLabel,end:row.end,face:row.face,
+        sourceEnd:row.end,targetFace:row.face,scanStatus:row.status,blockedSide:partial,
+        jointKind:row.jointKind||row.candidate.snap.jointKind||null,
+        sideMount:structuredClone(row.candidate.snap.sideMount||null),sideSlot:structuredClone(row.candidate.snap.sideSlot||null),
+        failures,policySkippedOnly:row.policySkippedOnly===true,
         title:row.status==='INVALID_EXISTING'?'已有连接失效':row.status==='NEEDS_ALIGNMENT'?'尚未贴合':partial?'另一侧未适配':'未能安装',
-        message:humanMessage(partial?'一侧已有或可以生成；未补件原因：'+(row.sideFailures?.length?row.sideFailures.join('；'):row.message||'没有合法安装方案'):row.message||'没有合法安装方案'),
+        reason:humanMessage(partial?(row.sideFailures?.length?row.sideFailures.join('；'):row.message||'没有合法安装方案'):row.message||'没有合法安装方案'),
         point:point&&[point.x,point.y,point.z].every(Number.isFinite)?{x:point.x,y:point.y,z:point.z}:null};
     });
+    return this.classifyDiagnostics(issues);
+  }
+  /** 按实际已保存安装记录分类；提交完成后再调用，不能把“本次可以生成”误当已经安装。 */
+  classifyDiagnostics(rows){
+    const partIds=new Set(this.editor.parts.map(part=>part.id));
+    return rows.map(row=>{
+      const related=this.editor.connectionManager.connectionsAtJoint(row.sourceId,row.targetId,row.sourceEnd,row.targetFace,undefined,row);
+      const invalidConnections=related.filter(connection=>connection.status==='INVALID'||connection.validation?.ok===false||
+        (connection.designComponent&&!connection.manufacturingRuleId&&!this.editor.connectionManager.helperMeshes.get(connection.id)?.children.length));
+      const invalid=row.scanStatus==='INVALID_EXISTING'||invalidConnections.length>0;
+      const installed=related.filter(connection=>connection.status!=='INVALID'&&connection.validation?.ok!==false&&
+        (connection.designComponent||connection.generatedHardwareIds?.some(id=>partIds.has(id))));
+      const category=invalid?'INVALID':installed.length?'PARTIAL':'UNINSTALLED';
+      let failures=category==='INVALID'?(row.failures||[]):(row.failures||[]).filter(failure=>!isExpectedConnectionSkip(failure.code));
+      const policySkippedOnly=row.policySkippedOnly===true||category!=='INVALID'&&row.failures?.length>0&&!failures.length;
+      // 提交后再次读实际安装：正常留平不当缺另一侧；完全未装和失效原件仍须处理。
+      if(category==='PARTIAL'&&policySkippedOnly)return null;
+      let reason=row.reason||row.message||'没有合法安装方案';
+      if(category==='INVALID'&&row.policySkippedOnly){
+        const error=invalidConnections[0]?.validation?.errors?.[0];
+        reason=humanMessage(error?.message||'已有连接缺少有效安装实体，请检查原件；正常安装规则跳过不能掩盖失效记录');
+        failures=[{code:error?.code||'EXISTING_COMPONENT_MISSING',message:reason,preview:null}];
+      }else if(category==='UNINSTALLED'&&policySkippedOnly){
+        reason='该接头尚未安装连接件；无需安装的端部方向 / 承托面候选已按规则跳过，需要其他允许的连接方式';
+        failures=[{code:'INSTALLATION_RULE_UNSUPPORTED',message:reason,preview:null}];
+      }else if(row.failures?.length>failures.length&&failures.length)reason=failures.map(failure=>failure.message).join('；');
+      const title=category==='INVALID'?'已有连接失效':category==='PARTIAL'?'已安装，但另一侧未适配':row.scanStatus==='NEEDS_ALIGNMENT'?'尚未贴合':'完全未安装';
+      const message=category==='PARTIAL'?'该接头已有连接件；未补另一侧的原因：'+reason:
+        category==='UNINSTALLED'&&row.blockedSide&&!policySkippedOnly?'该接头尚未安装连接件；另一侧候选也未适配：'+reason:reason;
+      return {...row,category,title,message,failures,policySkippedOnly,invalidConnectionIds:invalidConnections.map(connection=>connection.id),installedConnectionCount:installed.length};
+    }).filter(Boolean);
+  }
+  /** 只读定位：失效原件走原连接选择；未生成候选用临时红色副本/点标，不把有效角码当失败对象。 */
+  showDiagnostic(row,failure=row.failures?.[0]){
+    this.clearDiagnosticPreview();
+    if(row.category!=='INVALID'&&isExpectedConnectionSkip(failure?.code))return '该方向已按端部槽长 / 承托面留平规则跳过，无需处理。';
+    if(row.category==='INVALID'){
+      for(const id of row.invalidConnectionIds||[]){
+        const connection=this.editor.connectionManager.connections.find(value=>value.id===id);
+        const visible=connection&&this.editor.connectionSelectionMeshes(connection).some(root=>{
+          let hasGeometry=false;root.traverse(child=>{if(child.isMesh&&child.visible!==false&&child.geometry)hasGeometry=true;});return hasGeometry;
+        });
+        if(visible&&this.editor.selectConnection(id))return '已高亮失效连接件；原件未修改，可到“修改”检查或替换。';
+      }
+    }
+    this.editor.select(null);
+    const group=new THREE.Group();group.name='__connection_issue_preview__';
+    try{
+      const preview=row.category==='INVALID'?null:failure?.preview;
+      if(preview){
+        const transform={position:new THREE.Vector3().fromArray(preview.position),quaternion:new THREE.Quaternion().fromArray(preview.quaternion)};
+        group.add(connectorGhost(preview.mode,transform.position,0xd9534f,preview.definition,transform));
+      }
+      const point=row.point||preview&&{x:preview.position[0],y:preview.position[1],z:preview.position[2]};
+      if(point){
+        const marker=new THREE.Mesh(new THREE.SphereGeometry(3,12,8),new THREE.MeshBasicMaterial({color:0xd9534f,transparent:true,opacity:.9,depthTest:false,depthWrite:false}));
+        marker.position.set(point.x,point.y,point.z);marker.renderOrder=1400;group.add(marker);
+      }
+      if(!group.children.length){ProfileGeometryFactory.disposeObject(group);return '当前没有可显示的配件或安装点，只能查看原因；请重新扫描。';}
+      this.editor.sceneManager.scene.add(group);this.diagnosticGroup=group;
+      return row.category==='INVALID'?'失效记录没有可见安装实体，已标记原接头位置；没有选中旁边的有效件。':preview?'红色为未生成的候选及接头位置，仅供查看；不是已经安装的配件。':'已标记未适配接头位置；当前没有可确认姿态的候选实体。';
+    }catch(error){ProfileGeometryFactory.disposeObject(group);throw error;}
+  }
+  clearDiagnosticPreview(){
+    if(!this.diagnosticGroup)return;
+    this.editor.sceneManager.scene.remove(this.diagnosticGroup);ProfileGeometryFactory.disposeObject(this.diagnosticGroup);this.diagnosticGroup=null;
   }
   cancel(){
     this.runRevision++;this.currentJob?.return();this.currentJob=null;this.busy=false;this.progressStep('',0,0,0);this.evaluationCache=null;this.definitionCache=null;this.existingEnvelopes=null;
-    this.clearPreview();if(!this.active)return;this.active=false;this.rows=[];this.profileCount=0;this.freeEndCount=0;
+    this.clearDiagnosticPreview();this.clearPreview();if(!this.active)return;this.active=false;this.rows=[];this.profileCount=0;this.freeEndCount=0;
     const e=this.editor,s=e.sceneManager;s.transformControls.enabled=true;if(e.isMeshTransformable(e.selected))s.transformControls.attach(e.selected);e.profileGripEditor.refresh(true);this.emit();
   }
+}
+/** 只使用原孔槽校验已匹配的单腿槽对，不由锚点、截图或世界坐标猜一个可安装的槽。 */
+function hiddenSlotPair(component,geometry){
+  const ports=geometry?.componentPorts;
+  if(component?.dimensions?.geometryKind!=='HIDDEN_CORNER'||ports?.ok!==true||ports.sourceSlots?.length!==1||ports.targetSlots?.length!==1)return null;
+  const source=ports.sourceSlots[0],target=ports.targetSlots[0];
+  if(source?.matched!==true||target?.matched!==true||!source.slotId||!target.slotId||!source.face||!target.face)return null;
+  return {source,target,key:JSON.stringify([source.face,source.slotId,target.face,target.slotId])};
+}
+function diagnosticPreview(solution){
+  const transform=solution.checked?.transform,definition=solution.definition;
+  if(!transform||!definition)return null;
+  const position=transform.position.toArray(),quaternion=transform.quaternion.toArray();
+  if(![...position,...quaternion].every(Number.isFinite)||quaternion.reduce((sum,value)=>sum+value*value,0)<1e-12)return null;
+  return {mode:solution.checked.item.type,definition:structuredClone(definition),position,quaternion};
 }
 function drain(job){let step;do{step=job.next();}while(!step.done);return step.value;}
 function preserveConnection(old){return !!old&&(old.status==='INVALID'||old.validation?.ok===false||old.designComponent||old.manufacturingRuleId||!old.autoGenerated||old.userOverridden);}

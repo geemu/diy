@@ -284,28 +284,30 @@ export default class ConnectionPlacementManager {
     const mountFace=geometry?.sourceMountFace||context.sourceMountFace;
     const key=context.jointKind==='SIDE_SLOT'?sideSlotKey(source.mesh.userData.part.id,target.mesh.userData.part.id,source.feature.end,target.feature.face,context.sideSlot):context.jointKind==='SIDE_MOUNT'?`${sideMountKey(source.mesh.userData.part.id,target.mesh.userData.part.id,target.feature.face,context.sideMount)}|${mountFace}|${context.sideMount.sourceStationS}|${context.sideMount.sourceSlotOffset}`:`${source.mesh.userData.part.id}|${source.feature.end}|${target.mesh.userData.part.id}|${target.feature.face}|${mountFace||''}|${designAnchorKey(context.designAnchorOffset)}`;
     let message=item.error||'',valid=item.valid===true;
-    const fail=reason=>{valid=false;message=reason;};
-    if(componentDefinition&&Number(componentDefinition.dimensions?.size)!==Number(profileSeries(source.mesh.userData.part)))fail('连接件规格与型材系列不匹配，请调整适用规格');
+    let failureCode=valid?null:geometry?.componentPorts?.errors?.[0]?.code||geometry?.errors?.[0]?.code||'INSTALLATION_INVALID';
+    // 只附失败类型供结果聚合；原条件、错误文字及安装合法性不变。
+    const fail=(reason,code)=>{valid=false;message=reason;failureCode=code;};
+    if(componentDefinition&&Number(componentDefinition.dimensions?.size)!==Number(profileSeries(source.mesh.userData.part)))fail('连接件规格与型材系列不匹配，请调整适用规格','COMPONENT_SERIES_MISMATCH');
     const outward=new THREE.Vector3(0,0,source.feature.end==='START'?-1:1).transformDirection(source.mesh.matrixWorld);
-    if(!['SIDE_MOUNT','SIDE_SLOT'].includes(context.jointKind)&&outward.dot(slotWorldNormal(target.mesh,target.feature.face))>-.99)fail('端面方向不相对，请先把两根型材正确贴合');
-    if(Number(geometry?.contactGapMm)>.10001)fail('两根型材还没有贴合，请先吸附型材后安装连接件');
-    if(intersectObb(profileObb(source.mesh.userData.part),profileObb(target.mesh.userData.part),Number(this.editor.projectSettings?.collisionToleranceMm??.5)).intersects)fail('两根型材发生干涉，请先移开穿透位置');
-    if(valid&&this.editor.isMeshTransformable&&(!this.editor.isMeshTransformable(source.mesh)||!this.editor.isMeshTransformable(target.mesh)))fail('安装位置包含锁定构件，请先解锁');
+    if(!['SIDE_MOUNT','SIDE_SLOT'].includes(context.jointKind)&&outward.dot(slotWorldNormal(target.mesh,target.feature.face))>-.99)fail('端面方向不相对，请先把两根型材正确贴合','JOINT_DIRECTION_INVALID');
+    if(Number(geometry?.contactGapMm)>.10001)fail('两根型材还没有贴合，请先吸附型材后安装连接件','JOINT_NOT_CONTACT');
+    if(intersectObb(profileObb(source.mesh.userData.part),profileObb(target.mesh.userData.part),Number(this.editor.projectSettings?.collisionToleranceMm??.5)).intersects)fail('两根型材发生干涉，请先移开穿透位置','HOST_INTERFERENCE');
+    if(valid&&this.editor.isMeshTransformable&&(!this.editor.isMeshTransformable(source.mesh)||!this.editor.isMeshTransformable(target.mesh)))fail('安装位置包含锁定构件，请先解锁','HOST_LOCKED');
     const occupied=this.editor.connectionManager.connections.find(c=>c.id!==ignoreConnectionId&&!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(c.jointKind)&&c.sourceProfileId===source.mesh.userData.part.id&&c.sourceEnd===source.feature.end&&c.targetProfileId!==target.mesh.userData.part.id);
-    if(!componentDefinition&&!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(geometry?.jointKind)&&occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接');
+    if(!componentDefinition&&!['SIDE_CORNER','SIDE_MOUNT','SIDE_SLOT'].includes(geometry?.jointKind)&&occupied&&occupied.targetProfileId!==target.mesh.userData.part.id)fail('这一端已连接其他型材，请先解除原连接','JOINT_ALREADY_OCCUPIED');
     const joint=this.editor.connectionManager.connectionsAtJoint(source.mesh.userData.part.id,target.mesh.userData.part.id,source.feature.end,target.feature.face,context.designAnchorOffset,context).filter(c=>c.id!==ignoreConnectionId);
     const same=joint.find(c=>this.editor.connectionManager.mountFaces(c).includes(mountFace))||joint.find(c=>!c.designComponent&&!c.designComponentVariants);
-    if(valid&&same?.manufacturingRuleId)fail('接头已配置制造方案，请到连接页修改');
-    if(valid&&preserveExisting&&same&&(same.status==='INVALID'||same.validation?.ok===false))fail('这个接头已有失效连接，请先在连接页检查；原记录保持不变');
-    if(valid&&preserveExisting&&same&&(same.designComponent||same.designComponentVariants))fail('这一侧已经安装连接件，请切换到空闲侧；修改请选中这一件');
+    if(valid&&same?.manufacturingRuleId)fail('接头已配置制造方案，请到连接页修改','MANUFACTURING_CONNECTION_PROTECTED');
+    if(valid&&preserveExisting&&same&&(same.status==='INVALID'||same.validation?.ok===false))fail('这个接头已有失效连接，请先在连接页检查；原记录保持不变','EXISTING_CONNECTION_INVALID');
+    if(valid&&preserveExisting&&same&&(same.designComponent||same.designComponentVariants))fail('这一侧已经安装连接件，请切换到空闲侧；修改请选中这一件','INSTALLATION_SIDE_OCCUPIED');
     const descriptor={designType:mode,designComponent:componentDefinition,sourceEnd:source.feature.end,targetFace:target.feature.face,validation:geometry,sourceMountFace:geometry?.sourceMountFace,designAnchorOffset:context.designAnchorOffset,targetSlot:geometry?.targetSlot,jointKind:context.jointKind,sideMount:context.sideMount,sideSlot:context.sideSlot};
     const transform=geometry&&this.editor.connectionManager.resolveDesignComponentTransform(descriptor,source.mesh,target.mesh);
-    if(!transform)fail('无法确定连接件安装方向');
+    if(!transform)fail('无法确定连接件安装方向','COMPONENT_ORIENTATION_UNKNOWN');
     let envelope=null;
     if(valid&&componentDefinition){
       // 批量扫描只复用本轮实际目录几何的局部包络，不缓存安装合法性或提交结果。
       envelope=componentEnvelope(mode,componentDefinition,transform,options.evaluationCache?.componentBounds);
-      if(mode==='ANGLE_BRACKET'&&!connectorFootprintFits(null,source.mesh,target.mesh,geometry.sourceMountFace,target.feature.face,envelope))fail('所选方向没有足够的型材安装面，请换另一面或更小的连接件');
+      if(mode==='ANGLE_BRACKET'&&!connectorFootprintFits(null,source.mesh,target.mesh,geometry.sourceMountFace,target.feature.face,envelope))fail('所选方向没有足够的型材安装面，请换另一面或更小的连接件','COMPONENT_FOOTPRINT_OUT_OF_RANGE');
       // 复杂配件只承诺安装包络检查，不将包络重叠当成精确实体布尔。
       for(const mesh of this.editor.meshes){
         const part=mesh.userData?.part;
@@ -320,17 +322,17 @@ export default class ConnectionPlacementManager {
             finally{disposePreview(ghost);}
             if(relation&&!relation.intersects)continue;
           }
-          fail(`安装空间与 ${part.displayId||part.name} 重叠，请移开障碍或切换候选`);break;
+          fail(`安装空间与 ${part.displayId||part.name} 重叠，请移开障碍或切换候选`,'INSTALLATION_SPACE_OCCUPIED');break;
         }
       }
       if(preserveExisting)for(const connection of this.editor.connectionManager.connections){
         if(connection.id===ignoreConnectionId)continue;
         const helper=this.editor.connectionManager.helperMeshes.get(connection.id);
         if(!connection.designComponent||connection.manufacturingRuleId||!helper||helper.visible===false)continue;
-        if(helper.children.some(child=>envelopesOverlap(envelope,connectorEnvelope(child),Number(this.editor.projectSettings?.collisionToleranceMm??.5)))){fail('这个位置已有连接件占用，请切换空闲安装侧');break;}
+        if(helper.children.some(child=>envelopesOverlap(envelope,connectorEnvelope(child),Number(this.editor.projectSettings?.collisionToleranceMm??.5)))){fail('这个位置已有连接件占用，请切换空闲安装侧','INSTALLATION_SPACE_OCCUPIED');break;}
       }
     }
-    return {...context,componentDefinition,item,key,valid,message,transform,envelope};
+    return {...context,componentDefinition,item,key,valid,message,failureCode,transform,envelope};
   }
 
   /**

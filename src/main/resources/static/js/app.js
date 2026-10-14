@@ -43,7 +43,7 @@ import QuickFramePresetStore from './diy/QuickFramePresetStore.js';
 import {layeredRackLayout,RackProfileRoles,RackSideMountOptions,createRackRoleSettings,RACK_LAYOUT_VERSION} from './diy/LayeredRackModel.js';
 import {drawerGroupLayout} from './diy/DrawerGroupModel.js';
 import {rackLayerMeasurements,plannedRackLayerMeasurements,rackDistanceText,rackClearanceText} from './diy/RackLayerMeasurements.js';
-import {BatchConnectionComponentOptions} from './connection/ConnectionBatchManager.js';
+import {BatchConnectionComponentOptions,ConnectionReportCategories,connectionFailureGroup} from './connection/ConnectionBatchManager.js';
 import WorkbenchLayoutManager from './ui/WorkbenchLayoutManager.js';
 import {workbenchIcon} from './ui/WorkbenchIcons.js';
 import ProfileSelector from './ui/ProfileSelector.js';
@@ -142,8 +142,26 @@ createApp({
     const connectionBatchState=reactive({active:false,busy:false,phase:'',progress:0,processedCount:0,totalCount:0,profileCount:0,contactCount:0,readyCount:0,existingCount:0,blockedCount:0,invalidCount:0,uncheckedCount:0,nearbyCount:0,skippedCount:0,freeEndCount:0,rows:[]});
     const connectionBatchForm=reactive({type:'AUTO',spec:'AUTO'});
     const connectionBatchNotice=ref('');
-    const connectionBatchReport=reactive({open:false,rows:[],stale:false,signature:'',createdCount:0,type:''});
-    watch(sectionRevision,()=>{if(connectionBatchReport.rows.length)connectionBatchReport.stale=true;});
+    const connectionBatchReport=reactive({open:false,rows:[],stale:false,signature:'',createdCount:0,type:'',category:'UNINSTALLED',reasonIndices:{},focusedId:null,focusNote:''});
+    const connectionBatchReportGroups=computed(()=>ConnectionReportCategories.map(category=>{
+      const rows=connectionBatchReport.rows.filter(row=>row.category===category.id);
+      return {...category,rows,count:rows.length};
+    }));
+    const activeConnectionReportGroup=computed(()=>connectionBatchReportGroups.value.find(group=>group.id===connectionBatchReport.category)||connectionBatchReportGroups.value[0]);
+    const connectionReportReasonGroups=computed(()=>{
+      const groups=new Map();
+      for(const row of activeConnectionReportGroup.value.rows){
+        const reason=connectionFailureGroup(row.failures?.[0]?.code),id=connectionBatchReport.category+'|'+reason.id;
+        if(!groups.has(id))groups.set(id,{id,label:reason.label,rows:[]});
+        groups.get(id).rows.push(row);
+      }
+      return [...groups.values()].sort((a,b)=>b.rows.length-a.rows.length).map(group=>{
+        const index=Math.max(0,Math.min(group.rows.length-1,connectionBatchReport.reasonIndices[group.id]||0));
+        return {...group,index,count:group.rows.length,row:group.rows[index]};
+      });
+    });
+    watch(()=>[connectionBatchReport.open,connectionBatchReport.category],clearConnectionIssueFocus,{flush:'sync'});
+    watch(sectionRevision,()=>{clearConnectionIssueFocus();if(connectionBatchReport.rows.length)connectionBatchReport.stale=true;});
     const frameEdit=reactive({active:false,assemblyId:null,ready:false,memberCount:0,addedCount:0,removedCount:0,panelCount:0,collisionCount:0,error:''});
     const rackLayerSelection=ref(null),rackLayerDetailMode=ref(false),rackLayerDetailCard=ref(null),frameLayerOptions=ref(null),frameLayerEditIndex=ref(null);
     const selectedParameterFrame=computed(()=>{projectRevision.value;const id=selectedPart.value?.assemblyId;return id&&selectedMeshes.value.every(mesh=>mesh.userData.part.assemblyId===id)?editor?.assemblyManager.get(id)?.configurator==='LAYERED_RACK'?editor.assemblyManager.get(id):null:null;});
@@ -256,41 +274,63 @@ createApp({
     function cancelConnectionBatch(){editor?.connectionBatchManager.cancel();}
     async function confirmConnectionBatch(){
       if(!editor?.connectionBatchManager.isActive()||connectionBatchState.busy)return;
-      connectionBatchNotice.value='';
+      connectionBatchNotice.value='';clearConnectionBatchReport();
       const manager=editor.connectionBatchManager,pending=scanConnectionComponents(),revision=manager.runRevision;
       const state=await pending;if(!state||!manager.isActive()||manager.busy||revision!==manager.runRevision)return;
-      const issues=manager.diagnostics();
-      if(!state.readyCount){saveConnectionBatchReport(issues,0);connectionBatchNotice.value=state.blockedCount||state.blockedSideCount?'暂无适配且不影响放东西的位置；已有连接件保留，可换类型或调整型材。':state.existingCount?'未发现需要新增的位置，已有连接件已保留。':'暂无可安装的位置，请先把型材吸附贴合。';return;}
-      try{const result=editor.connectionBatchManager.confirm();saveConnectionBatchReport(issues,result.createdCount);notify('已生成 '+result.createdCount+' 个连接件，可撤销'+(issues.length?'；可在创建面板查看未成功位置':''));}
+      // 只提交原扫描中通过全部安装检查的件；其他候选静默跳过，不生成失败清单或红色候选。
+      if(!state.readyCount){connectionBatchNotice.value='本次未新增连接件，已有件保持不变。';return;}
+      try{const result=editor.connectionBatchManager.confirm();clearConnectionBatchReport(result.createdCount);notify('已生成 '+result.createdCount+' 个连接件，可撤销');}
       catch(error){notify(error.message,'warning');}
     }
-    function saveConnectionBatchReport(rows,createdCount){
-      Object.assign(connectionBatchReport,{open:false,rows,createdCount,stale:false,signature:JSON.stringify(editor.exportProject()),
-        type:(connectionBatchForm.type==='AUTO'?'自动适配':connectionBatchTypes.find(item=>item.value===connectionBatchForm.type)?.label||'所选类型')+
-          (connectionBatchForm.spec==='AUTO'?' · 自动规格':' · '+(connectionBatchSpecs.value.find(item=>item.value===connectionBatchForm.spec)?.label||'所选规格'))});
+    /** 自动生成不再展示未适配报告；开始 / 完成时清旧报告及其临时定位，领域校验和实际旧件保持。 */
+    function clearConnectionBatchReport(createdCount=0){
+      clearConnectionIssueFocus();
+      Object.assign(connectionBatchReport,{open:false,rows:[],stale:false,signature:'',createdCount,type:'',category:'UNINSTALLED',reasonIndices:{},focusedId:null,focusNote:''});
     }
-    function openConnectionBatchReport(){
+    function connectionReportCountText(){return connectionBatchReportGroups.value.filter(group=>group.count).map(group=>group.shortLabel+' '+group.count+' 处').join('；');}
+    function openConnectionBatchReport(category=null){
       if(connectionBatchState.busy||!connectionBatchReport.rows.length)return;
+      if(ConnectionReportCategories.some(group=>group.id===category))connectionBatchReport.category=category;
       returnToSelection();layoutManager?.expandSide('right');rightPanelMode.value='create';quickPanel.value='';connectionBatchReport.open=true;
       if(connectionBatchReport.signature!==JSON.stringify(editor.exportProject()))connectionBatchReport.stale=true;
     }
-    function focusConnectionBatchIssue(row){
+    function clearConnectionIssueFocus(){
+      editor?.connectionBatchManager.clearDiagnosticPreview();connectionBatchReport.focusedId=null;connectionBatchReport.focusNote='';
+    }
+    function stepConnectionBatchIssue(group,delta){
+      const index=Math.max(0,Math.min(group.count-1,group.index+delta));
+      connectionBatchReport.reasonIndices[group.id]=index;focusConnectionBatchIssue(group.rows[index]);
+    }
+    function inspectInvalidConnection(row){
+      if(focusConnectionBatchIssue(row)&&editor?.selectedConnectionId)rightPanelMode.value='modify';
+    }
+    function focusConnectionBatchIssue(row,failure=row.failures?.[0]){
       if(!editor)return;
-      returnToSelection();
-      if(!editor||connectionBatchReport.stale||connectionBatchReport.signature!==JSON.stringify(editor.exportProject())){
+      const scene=editor.sceneManager,gesture=editor.selectionGestureManager;
+      if(!gesture.available()||scene.transformControls.dragging||gesture.drag||gesture.marqueeGesture||scene.marqueeStart||assemblyPlaybackState.active||assemblyExplosionActive.value||document.querySelector('.modal-backdrop,.engineering-center-backdrop')){
+        notify('请先结束当前工具、播放或预览，再定位连接件结果','warning');return;
+      }
+      if(connectionBatchReport.stale||connectionBatchReport.signature!==JSON.stringify(editor.exportProject())){
+        clearConnectionIssueFocus();
         connectionBatchReport.stale=true;notify('工程已变化，请重新生成扫描后查看当前位置','warning');return;
       }
       const meshes=[row.sourceId,row.targetId].map(id=>editor.getMeshByPartId(id));
       if(meshes.some(mesh=>!mesh||mesh.visible===false||mesh.userData.part.hidden)){notify('这处宿主已不可见或不存在，请重新扫描','warning');return;}
-      editor.selectMany(meshes);
-      if(row.point){
+      returnToSelection();
+      try{connectionBatchReport.focusNote=editor.connectionBatchManager.showDiagnostic(row,failure);}
+      catch(error){clearConnectionIssueFocus();notify(error.message||'无法显示当前候选，请重新扫描','warning');return;}
+      connectionBatchReport.focusedId=row.id;rightPanelMode.value='create';
+      const preview=row.category==='INVALID'?null:failure?.preview;
+      const point=preview?{x:preview.position[0],y:preview.position[1],z:preview.position[2]}:row.point;
+      if(point){
         const manager=editor.sceneManager,direction=manager.camera.position.clone().sub(manager.orbitControls.target);
         const extent=Math.max(...meshes.flatMap(mesh=>mesh.userData.part.dimensions.sectionSize));
         const radius=Math.max(80,extent*2),aspect=Math.max(.1,manager.container.clientWidth/Math.max(1,manager.container.clientHeight));
         const halfFov=THREE.MathUtils.degToRad(manager.perspectiveCamera.fov/2),effectiveFov=Math.min(halfFov,Math.atan(Math.tan(halfFov)*aspect));
         if(manager.camera.isOrthographicCamera){manager.camera.zoom=Math.min(manager.camera.right-manager.camera.left,manager.camera.top-manager.camera.bottom)/(radius*2);manager.camera.updateProjectionMatrix();}
-        manager.setView(direction.lengthSq()>1e-8?direction.normalize():'iso',new THREE.Vector3(row.point.x,row.point.y,row.point.z),radius/Math.sin(effectiveFov));
-      }else editor.focusSelection();
+        manager.setView(direction.lengthSq()>1e-8?direction.normalize():'iso',new THREE.Vector3(point.x,point.y,point.z),radius/Math.sin(effectiveFov));
+      }else if(editor.selectedConnectionId)editor.focusSelection();
+      return true;
     }
     function openShaftSmart(){
       const part=selectedPart.value;
@@ -1208,6 +1248,7 @@ createApp({
       layoutManager = new WorkbenchLayoutManager().init();
       viewCube = new ViewCube(viewCubeViewport.value,editor.sceneManager,direction=>editor.viewDirection(direction));
       editor.onSelectionChanged = (object,selection = []) => {
+        clearConnectionIssueFocus();
         clearRackLayerSelection();
         if(panelFillState.active)cancelPanelFill();
         if(panelReliefState.active&&object?.userData?.part?.id!==panelReliefState.partId)cancelPanelRelief();
@@ -1283,9 +1324,10 @@ createApp({
         if(state?.notify && state?.message) notify(state.message,state.message.includes('失败')||state.message.includes('不能')||state.message.includes('干涉')?'warning':'success');
       };
       editor.onProjectChanged = () => {
+        clearConnectionIssueFocus();
         clearRackLayerSelection();
         if(connectionBatchReport.rows.length)connectionBatchReport.stale=true;
-        if(!editor.parts.length)Object.assign(connectionBatchReport,{open:false,rows:[],stale:false,signature:''});
+        if(!editor.parts.length)Object.assign(connectionBatchReport,{open:false,rows:[],stale:false,signature:'',category:'UNINSTALLED'});
         if(panelFillState.active)cancelPanelFill();
         editor.annotationManager.requestRefresh();
         if(panelReliefState.active)cancelPanelRelief();
@@ -1449,6 +1491,7 @@ createApp({
     });
 
     onBeforeUnmount(() => {
+      clearConnectionIssueFocus();
       editor?.annotationManager.dispose();
       hideFooterTip();
       closeFooterRotation();
@@ -3201,7 +3244,7 @@ createApp({
     async function completeExistingConnections() {
       if (!editor) return;
       returnToSelection();
-      connectionBatchReport.open=false;
+      clearConnectionBatchReport();
       layoutManager?.expandSide('right');
       rightPanelMode.value='create';quickPanel.value='';connectionBatchNotice.value='';
       try {
@@ -4265,7 +4308,7 @@ createApp({
     return {
       workbenchConfirm,finishWorkbenchConfirm,contextLengthEditable,
       wholeStretchState,startWholeStretch,confirmWholeStretch,cancelWholeStretch,stretchRangeMode,
-      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchReport,openConnectionBatchReport,focusConnectionBatchIssue,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,selectedRackMeasurements,selectedRackLayerDetail,rackLayerSelection,rackLayerDetailMode,rackLayerDetailCard,frameLayerOptions,frameLayerEditIndex,focusRackLayer,editRackLayer,updateRackLayerDetailMode,rackDistanceText,rackClearanceText,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
+      profilePlacementState,quickAlignmentVisible,quickAlignmentForm,quickAlignmentPreview,alignmentReferences,toggleQuickAlignment,applyQuickAlignment,previewQuickAlignment,confirmQuickAlignment,closeQuickAlignment,connectionBatchState,connectionBatchForm,connectionBatchNotice,connectionBatchReport,connectionBatchReportGroups,activeConnectionReportGroup,openConnectionBatchReport,focusConnectionBatchIssue,connectionBatchTypes,connectionBatchSpecs,connectionBatchTypeChanged,selectedProfileIds,scanConnectionComponents,cancelConnectionBatch,confirmConnectionBatch,frameEdit,selectedParameterFrame,selectedRackMeasurements,selectedRackLayerDetail,rackLayerSelection,rackLayerDetailMode,rackLayerDetailCard,frameLayerOptions,frameLayerEditIndex,focusRackLayer,editRackLayer,updateRackLayerDetailMode,rackDistanceText,rackClearanceText,beginFrameEdit,previewFrameEdit,cancelFrameEdit,confirmFrameEdit,openShaftSmart,cancelPlacementTools,
       shaftSmart,shaftSmartTypes,shaftSmartDefinition,shaftSmartPorts,shaftSmartBaseLabel,shaftSmartAvailable,createShaftSmartFixture,
       hasHiddenParts,toggleSelectionVisibility,mirrorAlong,clearAllConnections,
       footerElement,footerScroll,footerTransformBar,footerDisplayBar,footerMeasureBar,footerMoreMenu,footerRotateMenu,activateFooterRotation,footerActions,footerInlineActions,footerOverflowActions,footerActionTip,
@@ -4273,6 +4316,7 @@ createApp({
       ConnectionComponentOptions,ShaftComponentOptions,PanelShapeOptions,AccessoryComponentOptions,ProfileClosureOptions,FastenerHeadOptions,FootCupOptions,SlideTypeOptions,SlideLengthOptions,EndCapMaterialOptions,APillarLengthOptions,APillarSideOptions,
       catalogConnectionForm,catalogAccessoryForm,profileClosure,profileChoices,referenceProfiles,extensionProfiles,connectionSpecOptions,currentConnectionComponent,selectedConnectionInstallable,snapSelectedConnection,editorCycleConnectionCandidate,currentShaftComponent,currentAccessoryComponent,secondShaftDiameters,fastenerThreadOptions,fastenerLengthOptions,panelFields,panelShapeLabel,panelPreviewLabel,currentPanelDimensions,
       placeShaftComponent,placePanelComponent,placeConnectionComponent,placeAccessoryComponent,
+      connectionReportReasonGroups,stepConnectionBatchIssue,inspectInvalidConnection,
       PanelShapeFields,updatePanelShapeParameter,
       panelProfileCount,panelReliefState,panelReliefForm,beginPanelRelief,previewPanelRelief,rescanPanelRelief,invalidatePanelRelief,removePanelReliefNotch,addPanelReliefNotch,reliefNotchLabel,cancelPanelRelief,confirmPanelRelief,
       panelFillState,previewPanelFill,focusPanelFill,cancelPanelFill,confirmPanelFill,
