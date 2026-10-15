@@ -11,12 +11,12 @@ export default class PanelFillManager {
     this.cancel();
     const e=this.editor;
     this.sourcePartIds=[...new Set(options.sourcePartIds||e.panelDoorConfigurator.openingResolver.selectedProfileIds())];
-    if(this.sourcePartIds.length<4||this.sourcePartIds.length>64)throw new Error('请选择当前框面的四条边，可连同中间分隔梁一起选');
+    if(this.sourcePartIds.length<4||this.sourcePartIds.length>64)throw new Error('请选择一个或多个框面的完整四边，可连同中间分隔梁一起选（最多64根）');
     this.signature=JSON.stringify(e.exportProject());this.active=true;this.focusIndex=-1;
     this.transformEnabled=e.sceneManager.transformControls.enabled;
     e.sceneManager.transformControls.detach();e.sceneManager.transformControls.enabled=false;
     e.profileGripEditor.refresh(true);
-    this.emit({ready:false,error:'',note:'先按实际框口计算分格与裁角；预览不修改工程。',rows:[],panelCount:0,focusIndex:-1});
+    this.emit({ready:false,error:'',note:'先按实际框面分组，再计算各框口分格与裁角；预览不修改工程。',rows:[],panelCount:0,frameCount:0,focusIndex:-1});
     this.preview(options);
   }
 
@@ -43,12 +43,15 @@ export default class PanelFillManager {
       this.pending={plans,options:effective,signature:this.signature};
       this.editor.sceneManager.scene.add(group);this.editor.interferenceFeedbackManager.clear();this.tint();
       const invalid=plans.filter(p=>p.errors.length);
+      const frameCount=new Set(plans.map(plan=>plan.frameIndex)).size,unusedCount=plans[0]?.unusedPartIds?.length||0;
       const rows=plans.map((p,index)=>({index,width:p.draft.dimensions.width,height:p.draft.dimensions.height,
-        notchCount:p.draft.dimensions.edgeNotches?.length||0,ready:!p.errors.length,error:p.errors.join('；'),sourceDisplayIds:p.opening.sourceDisplayIds}));
+        frameLabel:p.frameLabel,notchCount:p.draft.dimensions.edgeNotches?.length||0,ready:!p.errors.length,error:p.errors.join('；'),sourceDisplayIds:p.opening.sourceDisplayIds}));
       this.emit({ready:plans.length>0&&!invalid.length,error:invalid.length?invalid.length+' 块尚不能适配；请查看下方每块原因':'',
-        rows,panelCount:plans.length,focusIndex:this.focusIndex,note:'黄色为可适配板，红色为冲突或未适配框口示意；确认前不创建板材。点击下方一块可突出对应预览。'});
+        rows,panelCount:plans.length,frameCount,focusIndex:this.focusIndex,
+        note:'已按实际框面分别适配。黄色为可适配板，红色为冲突或未适配框口示意；确认前不创建板材。点击下方一块可突出对应预览。'
+          +(unusedCount?' 另有 '+unusedCount+' 根所选型材未组成完整框面或不在板面内，未纳入本次填板。':'')});
       return this.pending;
-    }catch(error){this.clearPreview();this.emit({ready:false,error:error.message,rows:[],panelCount:0,focusIndex:-1});return null;}
+    }catch(error){this.clearPreview();this.emit({ready:false,error:error.message,rows:[],panelCount:0,frameCount:0,focusIndex:-1});return null;}
   }
 
   focus(index){this.focusIndex=Number(index);this.tint();this.emit({focusIndex:this.focusIndex});}
@@ -63,7 +66,7 @@ export default class PanelFillManager {
     }));
   }
 
-  invalidate(){this.clearPreview();this.focusIndex=-1;this.emit({ready:false,error:'参数已改变，请更新分格和裁角预览',rows:[],panelCount:0,focusIndex:-1});}
+  invalidate(){this.clearPreview();this.focusIndex=-1;this.emit({ready:false,error:'参数已改变，请更新分格和裁角预览',rows:[],panelCount:0,frameCount:0,focusIndex:-1});}
 
   confirm(){
     const e=this.editor,plan=this.pending;
@@ -83,7 +86,7 @@ export default class PanelFillManager {
   }
   cancel(){
     this.clearPreview();if(!this.active)return;
-    this.active=false;this.emit({active:false,ready:false,error:'',rows:[],panelCount:0,focusIndex:-1});
+    this.active=false;this.emit({active:false,ready:false,error:'',rows:[],panelCount:0,frameCount:0,focusIndex:-1});
     const e=this.editor;e.sceneManager.transformControls.enabled=this.transformEnabled;
     if(e.isSelectionTransformable())e.sceneManager.transformControls.attach(e.selected);
     e.profileGripEditor.refresh(true);e.interferenceFeedbackManager.requestRefresh();

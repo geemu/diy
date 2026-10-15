@@ -547,7 +547,7 @@ createApp({
     watch(profileClosure,value=>{newProfile.faceClosures=[...new Set([...(selectedDesignProfile.value.defaultFaceClosures||[]),...closureFaces(value,selectedDesignProfile.value)])];editor?.profileDrawTool.configure({faceClosures:[...newProfile.faceClosures]});});
     const panelMaterialColors=Object.freeze({'木饰面板':'#d7b889','亚克力':'#b4d7e9','铝板':'#8491a5','钢板':'#8b959f'});
     const panelFitForm = reactive({clearanceMm:2,thickness:5,material:'亚克力',placement:'T_SLOT',normalOffsetMm:0,connectorGapMm:1});
-    const panelFillState=reactive({active:false,ready:false,error:'',note:'',rows:[],panelCount:0,focusIndex:-1});
+    const panelFillState=reactive({active:false,ready:false,error:'',note:'',rows:[],panelCount:0,frameCount:0,focusIndex:-1});
     watch(panelFitForm,()=>{if(panelFillState.active)editor?.panelFillManager.invalidate();},{deep:true,flush:'sync'});
     const panelReliefState=reactive({active:false,partId:null,ready:false,error:'',note:'',notchCount:0,adaptation:false,dimensions:null});
     const panelReliefForm=reactive({gapMm:1,notches:[]});
@@ -644,17 +644,26 @@ createApp({
       }
     }
     // 仅新表单默认用能容纳的 400 mm；用户明确选择 450 mm 后只提示不足，不改回 400。
-    const drawerForm = reactive({width:500,depth:450,height:600,count:3,gap:3,frontMode:'INSET',includeSlides:true,slideLength:400});
+    const drawerForm = reactive({width:500,depth:450,height:600,levels:3,columns:1,gap:3,columnGapMm:3,dividerThicknessMm:12,
+      sizeMode:'AUTO',frontMode:'INSET',includeSlides:true,slideLength:400,frontAxis:'Z',frontSide:'POSITIVE',edgeClearanceMm:2,connectorGapMm:1});
+    const drawerPlacementState = reactive({active:false,ready:false,error:'',note:'',rows:[],frameCount:0,count:0,dividerCount:0,focusIndex:-1});
+    watch(drawerForm,()=>{if(drawerPlacementState.active)editor?.drawerPlacementManager.invalidate();},{deep:true,flush:'sync'});
+    const drawerTargetSummary = computed(() => {
+      if(!drawerPlacementState.frameCount)return '';
+      return `识别 ${drawerPlacementState.frameCount} 个实际框口 · ${drawerPlacementState.count} 个抽屉 · 新增 ${drawerPlacementState.dividerCount} 块固定中隔板`;
+    });
     const drawerLayoutState = computed(() => {
+      if(drawerForm.sizeMode==='AUTO')return {layout:null,error:''};
       try { return {layout:drawerGroupLayout(drawerForm),error:''}; }
       catch (error) { return {layout:null,error:error.message}; }
     });
     const drawerLayoutError = computed(() => drawerLayoutState.value.error);
     const drawerLayoutSummary = computed(() => {
+      if(drawerForm.sizeMode==='AUTO')return `每个实际框口设置 ${drawerForm.levels} 层 × ${drawerForm.columns} 排；宽高深分别自动适配，预览显示实际尺寸和数量。`;
       const layout = drawerLayoutState.value.layout;
       if (!layout) return '';
       const mm = value => Number(value.toFixed(2));
-      return `每个面板高 ${mm(layout.drawerHeight)} mm；箱体 ${mm(layout.boxWidth)} × ${mm(layout.boxDepth)} × ${mm(layout.boxHeight)} mm（宽 × 深 × 高）`;
+      return `每个框口 ${layout.parameters.levels} 层 × ${layout.parameters.columns} 排；每个箱体 ${mm(layout.boxWidth)} × ${mm(layout.boxDepth)} × ${mm(layout.boxHeight)} mm（宽 × 深 × 高）`;
     });
     const arrayForm = reactive({axis:'X',count:3,spacing:100});
     const mirrorForm = reactive({axis:'X',copy:true,planeMode:'WORLD_ORIGIN'});
@@ -1251,6 +1260,7 @@ createApp({
         clearConnectionIssueFocus();
         clearRackLayerSelection();
         if(panelFillState.active)cancelPanelFill();
+        if(drawerPlacementState.active)cancelDrawerPlacement();
         if(panelReliefState.active&&object?.userData?.part?.id!==panelReliefState.partId)cancelPanelRelief();
         if(connectionReplacementState.active)cancelConnectionReplacement();
         selectedConnectionId.value=null;
@@ -1279,6 +1289,7 @@ createApp({
       editor.frameParameterManager.onChanged=state=>Object.assign(frameEdit,state);
       editor.panelReliefManager.onChanged=state=>Object.assign(panelReliefState,state);
       editor.panelFillManager.onChanged=state=>Object.assign(panelFillState,state);
+      editor.drawerPlacementManager.onChanged=state=>Object.assign(drawerPlacementState,state);
       editor.connectionReplacementManager.onChanged=state=>Object.assign(connectionReplacementState,state);
       editor.wholeStretchManager.onChanged=state=>Object.assign(wholeStretchState,state);
       editor.onInteractionError=message=>notify(message,'warning');
@@ -1329,6 +1340,7 @@ createApp({
         if(connectionBatchReport.rows.length)connectionBatchReport.stale=true;
         if(!editor.parts.length)Object.assign(connectionBatchReport,{open:false,rows:[],stale:false,signature:'',category:'UNINSTALLED'});
         if(panelFillState.active)cancelPanelFill();
+        if(drawerPlacementState.active)cancelDrawerPlacement();
         editor.annotationManager.requestRefresh();
         if(panelReliefState.active)cancelPanelRelief();
         if(connectionReplacementState.active)cancelConnectionReplacement();
@@ -1523,6 +1535,7 @@ createApp({
       editor?.frameParameterManager.cancel();
       editor?.panelReliefManager.cancel();
       editor?.panelFillManager.cancel();
+      editor?.drawerPlacementManager.cancel();
       editor?.selectedProfileDistanceManager.dispose();
       editor?.sceneManager.transformControls.disposeAnchorInput();
       editor?.connectionReplacementManager.cancel();
@@ -1560,8 +1573,8 @@ createApp({
       }
       // 模态窗口期间不能用背景快捷键创建、删除或变换工程构件。
       if(document.querySelector('.modal-backdrop'))return;
-      if(panelReliefState.active||connectionReplacementState.active||panelFillState.active){
-        if(event.key==='Escape'){event.preventDefault();cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();return;}
+      if(panelReliefState.active||connectionReplacementState.active||panelFillState.active||drawerPlacementState.active){
+        if(event.key==='Escape'){event.preventDefault();cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();cancelDrawerPlacement();return;}
         const input=event.target?.matches('input,select,textarea')||event.target?.isContentEditable;
         const nativeNavigation=event.key==='Tab'||event.target?.closest?.('button,summary,a')&&['Enter',' '].includes(event.key);
         if(!input&&!nativeNavigation){event.preventDefault();return;}
@@ -2013,11 +2026,34 @@ createApp({
     function generateDrawers() {
       if (!editor) return;
       try {
-        editor.addDrawerGroup(drawerForm);
-        notify(`已生成 ${drawerForm.count} 个抽屉${drawerForm.count > 1 ? '，已组合为抽屉组' : ''}`);
+        if(drawerPlacementState.active)editor.drawerPlacementManager.preview({...drawerForm});
+        else editor.drawerPlacementManager.begin({...drawerForm});
+        layoutManager?.expandSide('right');rightPanelMode.value='create';
       } catch (error) {
-        notify(error.message,'error');
+        drawerPlacementState.error=error.message;notify(error.message,'warning');
       }
+    }
+
+    function fitDrawerToOpening() {
+      if(!editor)return;
+      try {
+        const available=editor.drawerPlacementManager.suggest({...drawerForm});
+        // 自动模式逐格适配不同净空间；仅单格时同步手动参考值，不把所有格压成同一最小尺寸。
+        const fit=value=>Math.floor((value+1e-7)*100)/100;
+        if(available.length===1)Object.assign(drawerForm,{width:fit(available[0].width),height:fit(available[0].height),depth:fit(available[0].depth)});
+        drawerForm.sizeMode='AUTO';
+        generateDrawers();
+      }catch(error){if(drawerPlacementState.active)editor.drawerPlacementManager.invalidate();drawerPlacementState.error=error.message;notify(error.message,'warning');}
+    }
+
+    function cancelDrawerPlacement(){editor?.drawerPlacementManager.cancel();}
+    function focusDrawerPlacement(index){editor?.drawerPlacementManager.focus(index);}
+    function confirmDrawerPlacement(){
+      if(!editor)return;
+      try {
+        const result=editor.drawerPlacementManager.confirm();
+        notify(`已在 ${result.frameCount} 个框口生成 ${result.drawerCount} 个抽屉${result.dividerCount?'、'+result.dividerCount+' 块固定中隔板':''} · 可一次撤销`,'success');
+      }catch(error){drawerPlacementState.ready=false;drawerPlacementState.error=error.message;notify(error.message,'warning');}
     }
 
     function selectedNominalChanged() {
@@ -3139,7 +3175,7 @@ createApp({
 
     function cancelPlacementTools() {
       closeFooterRotation();
-      cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();
+      cancelPanelRelief();cancelConnectionReplacement();cancelPanelFill();cancelDrawerPlacement();
       cancelFrameEdit();
       closeQuickAlignment();cancelConnectionBatch();
       editor?.wholeStretchManager.cancel();
@@ -4320,6 +4356,7 @@ createApp({
       PanelShapeFields,updatePanelShapeParameter,
       panelProfileCount,panelReliefState,panelReliefForm,beginPanelRelief,previewPanelRelief,rescanPanelRelief,invalidatePanelRelief,removePanelReliefNotch,addPanelReliefNotch,reliefNotchLabel,cancelPanelRelief,confirmPanelRelief,
       panelFillState,previewPanelFill,focusPanelFill,cancelPanelFill,confirmPanelFill,
+      drawerPlacementState,drawerTargetSummary,fitDrawerToOpening,cancelDrawerPlacement,focusDrawerPlacement,confirmDrawerPlacement,
       connectionReplacementState,connectionReplacementForm,replacementSpecs,beginConnectionReplacement,changeReplacementKind,previewConnectionReplacement,cancelConnectionReplacement,confirmConnectionReplacement,
       viewport,fileInput,sectionDxfInput,selected,selectedMeshes,selectionCount,clipboardCount,selectedPart,selectedIsProfile,selectedMachiningItems,selectedIsCurved,selectedTypeName,
       selectedConnectionId,selectedConnection,selectedConnectionLabel,relatedConnections,connectionOverview,relatedConstraints,constraintDiagnostics,selectedMobility,connectionSource,dimensions,stats,toast,validationVisible,validationReport,pendingFactoryExport,engineeringCenterVisible,engineeringCenterTab,engineeringCenterTabs,selectEngineeringCenterTab,engineeringCenterHeaders,engineeringCenterBody,factoryStyleExporting,panelDrawingGroups,panelDrawingExporting,assemblyInstructionSteps,assemblyGuidePageIndex,assemblyGuideCurrentStep,assemblyGuidePageCount,activeAssemblyInstructionStepId,assemblyPlaybackState,manufacturingConfigVisible,manufacturingConfigTab,manufacturingProfileGroups,manufacturingConnectionRows,manufacturingConfigStatus,showShortcutHelp,

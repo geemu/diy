@@ -70,7 +70,9 @@ export default class InterferenceFeedbackManager {
   /** 新构件只在场景外建网格；检查新件之间及可见旧构件/目录连接件，不检查旧件彼此。 */
   findInsertionInterference(meshes = []) {
     const incoming = meshes.map(mesh => ({mesh,part:mesh.userData.part,box:new THREE.Box3().setFromObject(mesh),obb:null}));
-    const existing = this.physicalItems();
+    // 正式插入后复验时，同一稳定ID已在场景中；只去掉自检，仍逐对检查所有不同的新旧实体。
+    const ids=new Set(incoming.map(item=>item.part.id));
+    const existing = this.physicalItems().filter(item=>!ids.has(item.part.id));
     for (let index = 0; index < incoming.length; index++) {
       const a = incoming[index];
       for (const b of [...incoming.slice(0,index),...existing]) {

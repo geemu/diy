@@ -41,7 +41,14 @@ export function resolvePanelSlots(opening,boundary,options={}){
     }catch(error){fits.push({plane,error});}
   }
   const fit=fits.filter(value=>!value.error).sort((a,b)=>Math.abs(a.plane-center[n])-Math.abs(b.plane-center[n])||a.plane-b.plane)[0];
-  if(!fit)throw fits.find(value=>value.error)?.error||new Error('四条向内 T 槽不在同一平面；请调整外框截面朝向或槽位，不会把板材抬到梁顶');
+  if(!fit){
+    const insertionError=fits.find(value=>value.error)?.error;
+    if(insertionError)throw insertionError;
+    const error=new Error('四条向内 T 槽不在同一平面；请调整外框截面朝向或槽位，不会把板材抬到梁顶');
+    // 只标识确实没有共同槽面的组合；板厚/槽深等实际安装失败不能被自动分面过滤掉。
+    error.code='PANEL_SLOT_PLANES_MISMATCH';
+    throw error;
+  }
   const byEdge=Object.fromEntries(fit.edges.map(value=>[value.edge,value]));
   const widthBounds={min:opening.bounds.width.min-byEdge.LEFT.insertionMm,max:opening.bounds.width.max+byEdge.RIGHT.insertionMm};
   const heightBounds={min:opening.bounds.height.min-byEdge.BOTTOM.insertionMm,max:opening.bounds.height.max+byEdge.TOP.insertionMm};

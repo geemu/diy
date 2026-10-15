@@ -60,9 +60,10 @@ export default class AssemblyManager {
     this.normalizeAllSiblingSteps();
   }
 
-  create(partIds, name = '新组件', parentId = null) {
+  create(partIds, name = '新组件', parentId = null, options = {}) {
     const ids = new Set(partIds || []);
-    if (ids.size < 2) throw new Error('至少选择两个构件才能创建组件');
+    // 固定中隔板可只有一块；仅内部明确调用允许单件，普通组合仍要求两个构件。
+    if (ids.size < (options.allowSingle === true ? 1 : 2)) throw new Error('至少选择两个构件才能创建组件');
     if (parentId && !this.get(parentId)) throw new Error('父组件不存在');
     const id = crypto.randomUUID();
     const assembly = this.normalizeAssembly({

@@ -33,7 +33,7 @@ export const DiyTemplateList = Object.freeze([Object.freeze({
   category:'框架',
   summary:'按实际尺寸、层数和承托梁配置框架，不区分用途；不代表承重已验算。',
   generator:'LAYERED_RACK',
-  defaults:Object.freeze(createQuickFrameDefaults(5,1))
+  defaults:Object.freeze(createQuickFrameDefaults(5,3))
 })]);
 
 // 仅兼容已有示例和旧ID的直接调用，不在新建界面展示，也不迁移保存工程。

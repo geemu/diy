@@ -12,6 +12,7 @@ import FrameParameterManager from '../diy/FrameParameterManager.js';
 import ConnectionReplacementManager from '../connection/ConnectionReplacementManager.js';
 import PanelReliefManager from '../configurator/PanelReliefManager.js';
 import PanelFillManager from '../configurator/PanelFillManager.js';
+import DrawerPlacementManager from '../configurator/DrawerPlacementManager.js';
 import SelectedProfileDistanceManager from '../interaction/SelectedProfileDistanceManager.js';
 import {profileDistanceRelation} from '../model/ProfileNeighbourDistances.js';
 import {layeredRackLayout,RACK_LAYOUT_VERSION} from '../diy/LayeredRackModel.js';
@@ -160,6 +161,7 @@ export default class Editor {
     this.connectionReplacementManager = new ConnectionReplacementManager(this);
     this.panelReliefManager = new PanelReliefManager(this);
     this.panelFillManager = new PanelFillManager(this);
+    this.drawerPlacementManager = new DrawerPlacementManager(this);
     this.machiningPlacementManager = new MachiningPlacementManager(this);
     this.manufacturingConfigurator = new ManufacturingConfigurator(this);
     this.interferenceFeedbackManager = new InterferenceFeedbackManager(this);
@@ -189,6 +191,7 @@ export default class Editor {
       this.axisClearanceManager.update(axis);this.axisClearanceManager.focusDistance();
     };
     this.sceneManager.secondaryClickHandler = () => {
+      if(this.drawerPlacementManager.isActive()){this.drawerPlacementManager.cancel();return true;}
       if(this.panelFillManager.isActive()){this.panelFillManager.cancel();return true;}
       if(this.frameParameterManager.isActive()){this.frameParameterManager.cancel();return true;}
       // 短右键统一退出放置；右键拖动仍由 SceneManager / OrbitControls 处理平移。
@@ -1145,15 +1148,28 @@ export default class Editor {
     }catch(error){this.restoreProject(before);throw error;}
   }
 
-  addDrawerGroup(options = {}) {
+  assertCanAddDrawerGroup() {
     const scene = this.sceneManager;
     if (!this.selectionGestureManager.available() || scene.transformControls.dragging || this.selectionGestureManager.drag || this.selectionGestureManager.marqueeGesture || scene.marqueeStart || scene.lassoPoints.length || this.assemblyPresentationManager.isExploded() || this.assemblyPlaybackManager.active || this.selectionGraphMutation) {
       throw new Error('请先结束当前绘制、放置、拖动、预览或播放，再生成抽屉组');
     }
-    const layout = drawerGroupLayout(options);
+  }
+
+  addDrawerGroup(options = {}) {
+    this.assertCanAddDrawerGroup();
+    return this.commitDrawerPlans([{layout:drawerGroupLayout(options),errors:[]}],options).assemblyId;
+  }
+
+  /** 多框口、裁角板与固定中隔板一起走原整组事务，不逐框口提交一半工程。 */
+  commitDrawerPlans(plans,options={}) {
+    this.assertCanAddDrawerGroup();
+    if(!plans.length||plans.some(plan=>!plan.layout||plan.errors?.length))throw new Error('请先得到全部可适配的抽屉框口预览');
+    const layouts=plans.map(plan=>plan.layout),drawerCount=layouts.reduce((sum,layout)=>sum+layout.parameters.count,0);
+    if(drawerCount>64)throw new Error('本次最多生成64个抽屉，请分区域生成');
+    const members=layouts.flatMap(layout=>layout.members);
     const previewMeshes = [];
     try {
-      for (const member of layout.members) {
+      for (const member of members) {
         const part = {...member,id:crypto.randomUUID(),hidden:false,locked:false};
         previewMeshes.push(this.createPartMesh(part));
       }
@@ -1161,7 +1177,7 @@ export default class Editor {
       if (conflict) {
         const other = conflict.other.displayId || conflict.other.name || '现有构件';
         const check = conflict.relation.materialChecked ? '板材材料检查' : '安装包络检查';
-        throw new Error(`${conflict.part.name} 与 ${other} 冲突（${check}），整组未生成；请调整尺寸，或先移开该位置的现有构件`);
+        throw new Error(`${conflict.part.name} 与 ${other} 冲突（${check}），整组未生成；请调整尺寸或安装位置，不会移开现有构件`);
       }
     } finally {
       for (const mesh of previewMeshes) PrimitiveGeometryFactory.dispose(mesh);
@@ -1175,16 +1191,32 @@ export default class Editor {
     let assemblyId;
     try {
       this.selectionGraphMutation = true;
-      const drawerPartIds = Array.from({length:layout.parameters.count},() => []);
-      for (const member of layout.members) {
-        const common = {select:false,captureHistory:false,name:member.name,position:member.position,rotation:member.rotation,color:member.color};
-        const d = member.dimensions;
-        const mesh = member.type === 'PANEL' ? this.addPanel(d.width,d.height,d.thickness,common) : this.addHardware(member.hardwareSku,common);
-        drawerPartIds[member.drawerIndex].push(mesh.userData.part.id);
+      const frameIds=[],inserted=[];
+      for(const [frameIndex,layout] of layouts.entries()) {
+        const drawerPartIds=Array.from({length:layout.parameters.count},()=>[]),fixedPartIds=[];
+        for(const member of layout.members) {
+          const common={select:false,captureHistory:false,name:member.name,position:member.position,rotation:member.rotation,color:member.color},d=member.dimensions;
+          const mesh=member.type==='PANEL'?this.addPanel(d.width,d.height,d.thickness,{...common,shapeDimensions:d}):this.addHardware(member.hardwareSku,common);
+          inserted.push(mesh);
+          if(member.drawerIndex<0)fixedPartIds.push(mesh.userData.part.id);else drawerPartIds[member.drawerIndex].push(mesh.userData.part.id);
+        }
+        const childIds=drawerPartIds.map((ids,index)=>{
+          const level=Math.floor(index/layout.parameters.columns)+1,column=index%layout.parameters.columns+1;
+          const id=this.assemblyManager.create(ids,`框口${frameIndex+1}·第${level}层第${column}排抽屉`);
+          this.assemblyManager.get(id).kind='DRAWER';return id;
+        });
+        if(fixedPartIds.length) {
+          const id=this.assemblyManager.create(fixedPartIds,`框口${frameIndex+1}固定中隔板`,null,{allowSingle:true});
+          this.assemblyManager.get(id).kind='DRAWER_SUPPORT';childIds.push(id);
+        }
+        const frameId=childIds.length>1?this.assemblyManager.createParent(childIds,`框口${frameIndex+1}抽屉组`):childIds[0];
+        if(childIds.length>1)this.assemblyManager.get(frameId).kind='DRAWER_GROUP';frameIds.push(frameId);
       }
-      const drawerIds = drawerPartIds.map((ids,index) => this.assemblyManager.create(ids,`抽屉${index + 1}`));
-      // 每个抽屉保留独立组件；多抽屉再组成真实父总成，不返回原来的悬空总成 ID。
-      assemblyId = drawerIds.length > 1 ? this.assemblyManager.createParent(drawerIds,String(options.name || '抽屉组')) : drawerIds[0];
+      assemblyId=frameIds.length>1?this.assemblyManager.createParent(frameIds,String(options.name||'多框口抽屉组')):frameIds[0];
+      if(frameIds.length>1)this.assemblyManager.get(assemblyId).kind='DRAWER_GROUP';
+      // 正式网格再次复验，裁角尺寸或派生资源变化不能靠临时预览豁免。
+      const conflict=this.interferenceFeedbackManager.findInsertionInterference(inserted);
+      if(conflict)throw new Error(`${conflict.part.name} 与 ${conflict.other.displayId||conflict.other.name||'构件'} 冲突，本批抽屉已回滚`);
       this.updateDimensions();this.emitStats();
       this.historyManager.capture();
     } catch (error) {
@@ -1199,7 +1231,7 @@ export default class Editor {
     }
     this.emitProjectChanged();
     this.fitView();
-    return assemblyId;
+    return {assemblyId,drawerCount,frameCount:layouts.length,dividerCount:members.filter(member=>member.role==='DIVIDER').length};
   }
 
   createPartMesh(part) {
@@ -1311,6 +1343,7 @@ export default class Editor {
     this.connectionReplacementManager?.cancel();
     this.panelReliefManager?.cancel();
     this.panelFillManager?.cancel();
+    this.drawerPlacementManager?.cancel();
     this.selectedProfileDistanceManager?.clear();
     this.frameParameterManager?.cancel();
     this.quickAlignmentManager?.cancel();
@@ -1454,7 +1487,7 @@ export default class Editor {
     this.updateDimensions();this.emitStats();this.historyManager.capture();this.emitProjectChanged();return true;
   }
 
-  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive()||this.connectionReplacementManager?.isActive()||this.panelReliefManager?.isActive()||this.panelFillManager?.isActive();}
+  isBuilderReviewActive(){return this.quickAlignmentManager?.isActive()||this.connectionBatchManager?.isActive()||this.frameParameterManager?.isActive()||this.connectionReplacementManager?.isActive()||this.panelReliefManager?.isActive()||this.panelFillManager?.isActive()||this.drawerPlacementManager?.isActive();}
 
   isMeshTransformable(mesh) {
     const part = mesh?.userData?.part;

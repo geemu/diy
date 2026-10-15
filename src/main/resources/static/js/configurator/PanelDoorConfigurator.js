@@ -24,8 +24,11 @@ export default class PanelDoorConfigurator {
 
   /** 先派生全部板材和错误信息；不先插入一块板再尝试裁剪，也不因某格失败丢掉其他格的预览。 */
   planPanelsFromSelection(options={}){
-    const {cells}=this.openingResolver.resolvePanelCells(options.sourcePartIds,options);
-    return cells.map(({opening,error},index)=>this.planPanelForOpening(opening,{...options,openingError:error,index}));
+    const {cells,unusedPartIds}=this.openingResolver.resolveSelectedPanelCells(options.sourcePartIds,options);
+    return cells.map(({opening,error,frameIndex},index)=>({
+      ...this.planPanelForOpening(opening,{...options,openingError:error,index}),frameIndex,
+      frameLabel:`框面 ${frameIndex+1} · ${({X:'侧向',Y:'水平',Z:'正背向'})[opening.normalAxis]}`,unusedPartIds
+    }));
   }
 
   planPanelForOpening(opening,options={}){
